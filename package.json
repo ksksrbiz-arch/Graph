@@ -7,9 +7,14 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "ingest:claude-code": "node scripts/ingest-claude-code.mjs",
-    "ingest": "node scripts/ingest-claude-code.mjs"
+    "ingest": "node scripts/ingest-claude-code.mjs",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "wrangler": "^4.85.0"
   }
 }
