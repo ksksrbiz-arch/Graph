@@ -1,0 +1,561 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "createdAt": "2026-04-25T22:57:41.949Z",
+    "updatedAt": "2026-04-25T22:57:41.982Z",
+    "sources": [
+      {
+        "name": "claude_code",
+        "lastRunAt": "2026-04-25T22:57:41.982Z",
+        "projects": 1,
+        "sessions": 1,
+        "messages": 52
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "project_47234cb396dc9686",
+      "label": "Graph",
+      "type": "project",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.979Z",
+      "updatedAt": "2026-04-25T22:57:41.979Z",
+      "metadata": {
+        "cwd": "/home/user/Graph",
+        "folder": "-home-user-Graph",
+        "sessions": 1,
+        "messages": 52
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b",
+      "label": "Audit this repo and then continue to build it out. I’d like to have a visible g…",
+      "type": "conversation",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:53:41.497Z",
+      "updatedAt": "2026-04-25T22:57:41.980Z",
+      "metadata": {
+        "sessionId": "cf0365b4-cc4f-403e-89bf-6bb79f057933",
+        "messages": 52,
+        "firstTimestamp": "2026-04-25T22:53:41.497Z",
+        "lastTimestamp": "2026-04-25T22:57:40.870Z",
+        "gitBranch": "claude/audit-and-graph-setup-arpNc",
+        "cwd": "/home/user/Graph",
+        "path": "~/.claude/projects/-home-user-Graph/cf0365b4-cc4f-403e-89bf-6bb79f057933.jsonl"
+      }
+    },
+    {
+      "id": "model_e55e5383629b3830",
+      "label": "claude-opus-4-7",
+      "type": "model",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.980Z",
+      "updatedAt": "2026-04-25T22:57:41.980Z",
+      "metadata": {
+        "provider": "anthropic"
+      }
+    },
+    {
+      "id": "tool_5ac2b83c9f703b7a",
+      "label": "Bash",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.980Z",
+      "updatedAt": "2026-04-25T22:57:41.980Z",
+      "metadata": {
+        "calls": 6
+      }
+    },
+    {
+      "id": "tool_dc83aed22b8e1830",
+      "label": "Read",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "calls": 3
+      }
+    },
+    {
+      "id": "tool_739aac7dd1b51611",
+      "label": "Write",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "calls": 8
+      }
+    },
+    {
+      "id": "tool_9d68bea4a1a1d65d",
+      "label": "ToolSearch",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "calls": 1
+      }
+    },
+    {
+      "id": "tool_5e62f8ade9c213c9",
+      "label": "TodoWrite",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "calls": 4
+      }
+    },
+    {
+      "id": "file_a4654103cdffae1c",
+      "label": "README.md",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "path": "/home/user/Graph/README.md",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_ad378b0d5cd6a59d",
+      "label": "enhanced-personal-knowledge-graph-prompt.md",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "path": "/home/user/Graph/docs/enhanced-personal-knowledge-graph-prompt.md",
+        "touches": 2
+      }
+    },
+    {
+      "id": "file_b6494d587d02c6ce",
+      "label": "package.json",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "path": "/home/user/Graph/package.json",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_270c94504db59766",
+      "label": "index.html",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/index.html",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_c3379a847a4993e1",
+      "label": "styles.css",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/styles.css",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_ea9cfdf7654da2f4",
+      "label": "app.js",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/app.js",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_80a996c23c65a98e",
+      "label": "serve.mjs",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "path": "/home/user/Graph/scripts/serve.mjs",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_8040e21c8ae1c6a2",
+      "label": "graph-store.mjs",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "path": "/home/user/Graph/scripts/lib/graph-store.mjs",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_6812b15426d44a96",
+      "label": "ingest-claude-code.mjs",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "path": "/home/user/Graph/scripts/ingest-claude-code.mjs",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_eceff1ba3e866df9",
+      "label": ".gitignore",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "path": "/home/user/Graph/.gitignore",
+        "touches": 1
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "project_47234cb396dc9686|CONTAINS|conversation_9ad4817e41592e2b",
+      "source": "project_47234cb396dc9686",
+      "target": "conversation_9ad4817e41592e2b",
+      "relation": "CONTAINS",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.980Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED_MODEL|model_e55e5383629b3830",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "model_e55e5383629b3830",
+      "relation": "USED_MODEL",
+      "weight": 0.8999999999999999,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.980Z",
+      "metadata": {
+        "count": 30
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_5ac2b83c9f703b7a",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_5ac2b83c9f703b7a",
+      "relation": "USED",
+      "weight": 0.44,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 6
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_dc83aed22b8e1830",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_dc83aed22b8e1830",
+      "relation": "USED",
+      "weight": 0.32,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_739aac7dd1b51611",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_739aac7dd1b51611",
+      "relation": "USED",
+      "weight": 0.52,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 8
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_9d68bea4a1a1d65d",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_9d68bea4a1a1d65d",
+      "relation": "USED",
+      "weight": 0.24000000000000002,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_5e62f8ade9c213c9",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_5e62f8ade9c213c9",
+      "relation": "USED",
+      "weight": 0.36,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 4
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_a4654103cdffae1c",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_a4654103cdffae1c",
+      "relation": "TOUCHED",
+      "weight": 0.30000000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_a4654103cdffae1c|PART_OF|project_47234cb396dc9686",
+      "source": "file_a4654103cdffae1c",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_ad378b0d5cd6a59d",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_ad378b0d5cd6a59d",
+      "relation": "TOUCHED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "file_ad378b0d5cd6a59d|PART_OF|project_47234cb396dc9686",
+      "source": "file_ad378b0d5cd6a59d",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_b6494d587d02c6ce",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_b6494d587d02c6ce",
+      "relation": "TOUCHED",
+      "weight": 0.30000000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_b6494d587d02c6ce|PART_OF|project_47234cb396dc9686",
+      "source": "file_b6494d587d02c6ce",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_270c94504db59766",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_270c94504db59766",
+      "relation": "TOUCHED",
+      "weight": 0.30000000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_270c94504db59766|PART_OF|project_47234cb396dc9686",
+      "source": "file_270c94504db59766",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_c3379a847a4993e1",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_c3379a847a4993e1",
+      "relation": "TOUCHED",
+      "weight": 0.30000000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_c3379a847a4993e1|PART_OF|project_47234cb396dc9686",
+      "source": "file_c3379a847a4993e1",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_ea9cfdf7654da2f4",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_ea9cfdf7654da2f4",
+      "relation": "TOUCHED",
+      "weight": 0.30000000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_ea9cfdf7654da2f4|PART_OF|project_47234cb396dc9686",
+      "source": "file_ea9cfdf7654da2f4",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_80a996c23c65a98e",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_80a996c23c65a98e",
+      "relation": "TOUCHED",
+      "weight": 0.30000000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_80a996c23c65a98e|PART_OF|project_47234cb396dc9686",
+      "source": "file_80a996c23c65a98e",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_8040e21c8ae1c6a2",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_8040e21c8ae1c6a2",
+      "relation": "TOUCHED",
+      "weight": 0.30000000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_8040e21c8ae1c6a2|PART_OF|project_47234cb396dc9686",
+      "source": "file_8040e21c8ae1c6a2",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_6812b15426d44a96",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_6812b15426d44a96",
+      "relation": "TOUCHED",
+      "weight": 0.30000000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_6812b15426d44a96|PART_OF|project_47234cb396dc9686",
+      "source": "file_6812b15426d44a96",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_eceff1ba3e866df9",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_eceff1ba3e866df9",
+      "relation": "TOUCHED",
+      "weight": 0.30000000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_eceff1ba3e866df9|PART_OF|project_47234cb396dc9686",
+      "source": "file_eceff1ba3e866df9",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 1
+      }
+    }
+  ]
+}

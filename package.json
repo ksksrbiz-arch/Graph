@@ -1,0 +1,15 @@
+{
+  "name": "graph",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal Knowledge Graph — MVP slice",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "ingest:claude-code": "node scripts/ingest-claude-code.mjs",
+    "ingest": "node scripts/ingest-claude-code.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

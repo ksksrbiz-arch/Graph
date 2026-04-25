@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Graph — Personal Knowledge Graph</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <h1>Graph</h1>
+      <span class="tag" id="stats">loading…</span>
+    </div>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search nodes…" autocomplete="off" />
+      <fieldset id="type-filters" aria-label="Filter by node type"></fieldset>
+      <button id="reload" type="button" title="Reload data from disk">Reload</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="canvas" role="application" aria-label="Knowledge graph canvas"></div>
+    <aside id="panel" class="panel hidden" aria-label="Node details">
+      <button class="panel-close" id="panel-close" aria-label="Close panel">×</button>
+      <h2 id="panel-title">Node</h2>
+      <p class="panel-type" id="panel-type"></p>
+      <dl id="panel-meta"></dl>
+      <h3>Connections</h3>
+      <ul id="panel-edges" class="panel-edges"></ul>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span>Drag to pan · Scroll to zoom · Click a node for details</span>
+    <span id="last-updated"></span>
+  </footer>
+
+  <script src="https://unpkg.com/force-graph@1.43.5/dist/force-graph.min.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
