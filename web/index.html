@@ -13,29 +13,135 @@
       <h1>Graph</h1>
       <span class="tag" id="stats">loading…</span>
     </div>
-    <div class="controls">
-      <input id="search" type="search" placeholder="Search nodes…" autocomplete="off" />
-      <fieldset id="type-filters" aria-label="Filter by node type"></fieldset>
-      <button id="reload" type="button" title="Reload data from disk">Reload</button>
+    <div class="topbar-actions">
+      <input id="global-search" type="search" placeholder="Search nodes…" autocomplete="off" />
+      <button id="ingest-btn" class="primary" type="button" title="Ingest from ~/.claude/projects">
+        Ingest Claude Code
+      </button>
     </div>
   </header>
 
-  <main>
-    <div id="canvas" role="application" aria-label="Knowledge graph canvas"></div>
-    <aside id="panel" class="panel hidden" aria-label="Node details">
-      <button class="panel-close" id="panel-close" aria-label="Close panel">×</button>
-      <h2 id="panel-title">Node</h2>
-      <p class="panel-type" id="panel-type"></p>
-      <dl id="panel-meta"></dl>
-      <h3>Connections</h3>
-      <ul id="panel-edges" class="panel-edges"></ul>
-    </aside>
-  </main>
+  <div class="app">
+    <nav class="sidebar" aria-label="Primary">
+      <a href="#/graph"      data-route="#/graph"      class="nav-item"><span class="nav-glyph" data-g="graph"></span><span>Graph</span></a>
+      <a href="#/timeline"   data-route="#/timeline"   class="nav-item"><span class="nav-glyph" data-g="timeline"></span><span>Timeline</span></a>
+      <a href="#/connectors" data-route="#/connectors" class="nav-item"><span class="nav-glyph" data-g="connectors"></span><span>Connectors</span></a>
+      <a href="#/search"     data-route="#/search"     class="nav-item"><span class="nav-glyph" data-g="search"></span><span>Search</span></a>
+      <a href="#/settings"   data-route="#/settings"   class="nav-item"><span class="nav-glyph" data-g="settings"></span><span>Settings</span></a>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-foot" id="sidebar-foot">—</div>
+    </nav>
 
-  <footer class="footer">
-    <span>Drag to pan · Scroll to zoom · Click a node for details</span>
-    <span id="last-updated"></span>
-  </footer>
+    <main class="views">
+      <!-- Graph view -->
+      <section id="view-graph" class="view active" aria-label="Graph canvas">
+        <div class="graph-toolbar">
+          <fieldset id="type-filters" aria-label="Filter by node type"></fieldset>
+          <div class="graph-toolbar-right">
+            <label class="slider" title="Hide weak edges below this weight">
+              <span>min edge</span>
+              <input id="edge-weight" type="range" min="0" max="1" step="0.05" value="0" />
+              <span id="edge-weight-val">0.00</span>
+            </label>
+            <button id="fit-btn" type="button" title="Fit graph to view">Fit</button>
+            <button id="reset-focus" type="button" title="Clear ego-network focus" disabled>Reset focus</button>
+          </div>
+        </div>
+        <div id="canvas" role="application" aria-label="Knowledge graph canvas"></div>
+        <div class="legend" id="legend" aria-label="Legend"></div>
+        <div class="zoom-controls">
+          <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+          <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+        </div>
+        <div class="focus-banner hidden" id="focus-banner">
+          <span>Ego-network: <b id="focus-banner-label"></b></span>
+          <button id="focus-banner-close" type="button">clear</button>
+        </div>
+        <aside id="panel" class="panel hidden" aria-label="Node details">
+          <button class="panel-close" id="panel-close" aria-label="Close panel">×</button>
+          <h2 id="panel-title">Node</h2>
+          <p class="panel-type" id="panel-type"></p>
+          <div class="panel-actions">
+            <button id="panel-focus" type="button">Focus ego-network</button>
+            <button id="panel-open" type="button">Open source</button>
+          </div>
+          <dl id="panel-meta"></dl>
+          <h3>Connections <span id="panel-edge-count"></span></h3>
+          <ul id="panel-edges" class="panel-edges"></ul>
+        </aside>
+        <div id="context-menu" class="context-menu hidden" role="menu"></div>
+      </section>
+
+      <!-- Timeline view -->
+      <section id="view-timeline" class="view" aria-label="Timeline">
+        <div class="view-header">
+          <h2>Timeline</h2>
+          <p class="view-sub">Recent activity across all connectors. Click any item to view in the graph.</p>
+          <fieldset id="timeline-type-filters" aria-label="Type filter"></fieldset>
+        </div>
+        <div id="timeline-list" class="timeline-list"></div>
+      </section>
+
+      <!-- Connectors view -->
+      <section id="view-connectors" class="view" aria-label="Connectors">
+        <div class="view-header">
+          <h2>Connectors</h2>
+          <p class="view-sub">Sources the graph is built from. Run a connector to refresh the graph.</p>
+        </div>
+        <div id="connectors-list" class="card-grid"></div>
+      </section>
+
+      <!-- Search view -->
+      <section id="view-search" class="view" aria-label="Search">
+        <div class="view-header">
+          <h2>Search</h2>
+          <input id="search-input" type="search" placeholder="Search labels and metadata…" autocomplete="off" />
+          <p class="view-sub" id="search-summary">Type to search across every node and its metadata.</p>
+        </div>
+        <div id="search-results" class="search-results"></div>
+      </section>
+
+      <!-- Settings view -->
+      <section id="view-settings" class="view" aria-label="Settings">
+        <div class="view-header"><h2>Settings</h2></div>
+        <div class="settings-grid">
+          <section class="settings-card">
+            <h3>Layout physics</h3>
+            <p class="hint">Live-tweak the force simulation.</p>
+            <label class="slider">
+              <span>Charge strength</span>
+              <input id="cfg-charge" type="range" min="-400" max="0" step="10" value="-120" />
+              <span id="cfg-charge-val">-120</span>
+            </label>
+            <label class="slider">
+              <span>Link distance</span>
+              <input id="cfg-link" type="range" min="10" max="200" step="5" value="60" />
+              <span id="cfg-link-val">60</span>
+            </label>
+            <label class="slider">
+              <span>Node size</span>
+              <input id="cfg-node-size" type="range" min="2" max="14" step="1" value="4" />
+              <span id="cfg-node-size-val">4</span>
+            </label>
+          </section>
+          <section class="settings-card">
+            <h3>Display</h3>
+            <label class="row"><input id="cfg-labels" type="checkbox" checked /> Show node labels</label>
+            <label class="row"><input id="cfg-particles" type="checkbox" /> Animate edges (directional particles)</label>
+            <label class="row"><input id="cfg-auto-refresh" type="checkbox" /> Auto-refresh data every 30s</label>
+          </section>
+          <section class="settings-card">
+            <h3>Data</h3>
+            <p class="hint">Graph file: <code>data/graph.json</code></p>
+            <p class="hint">Last updated: <span id="cfg-updated">—</span></p>
+            <button id="cfg-reload" type="button">Reload from disk</button>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
 
   <script src="https://unpkg.com/force-graph@1.43.5/dist/force-graph.min.js"></script>
   <script type="module" src="./app.js"></script>

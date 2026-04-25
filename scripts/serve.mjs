@@ -1,9 +1,11 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const PORT = Number(process.env.PORT || 3000);
-const ROOT = resolve(new URL('..', import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -16,6 +18,10 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
+const INGESTERS = {
+  'claude-code': 'scripts/ingest-claude-code.mjs',
+};
+
 function safeJoin(urlPath) {
   const decoded = decodeURIComponent(urlPath.split('?')[0]);
   const rel = normalize(decoded).replace(/^\/+/, '');
@@ -24,12 +30,10 @@ function safeJoin(urlPath) {
   return abs;
 }
 
-async function resolvePath(urlPath) {
+async function resolveStaticPath(urlPath) {
   if (urlPath === '/' || urlPath === '') return join(ROOT, 'web', 'index.html');
-
   const direct = safeJoin(urlPath);
   if (!direct) return null;
-
   try {
     const s = await stat(direct);
     if (s.isFile()) return direct;
@@ -38,20 +42,47 @@ async function resolvePath(urlPath) {
       try { if ((await stat(idx)).isFile()) return idx; } catch {}
     }
   } catch {}
-
   const inWeb = safeJoin(`/web${urlPath}`);
   if (inWeb) {
-    try {
-      const s = await stat(inWeb);
-      if (s.isFile()) return inWeb;
-    } catch {}
+    try { if ((await stat(inWeb)).isFile()) return inWeb; } catch {}
   }
   return null;
 }
 
+function runIngester(slug) {
+  return new Promise((resolveP) => {
+    const script = INGESTERS[slug];
+    if (!script) {
+      resolveP({ code: 404, stdout: '', stderr: `unknown ingester: ${slug}` });
+      return;
+    }
+    const child = spawn(process.execPath, [script], {
+      cwd: ROOT,
+      env: process.env,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d.toString(); });
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+    child.on('error', (err) => resolveP({ code: 500, stdout, stderr: stderr + err.message }));
+    child.on('close', (code) => resolveP({ code: code ?? 0, stdout, stderr }));
+  });
+}
+
 const server = createServer(async (req, res) => {
   try {
-    const path = await resolvePath(req.url || '/');
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+
+    if (url.pathname.startsWith('/api/ingest/') && req.method === 'POST') {
+      const slug = url.pathname.slice('/api/ingest/'.length);
+      const result = await runIngester(slug);
+      const status = result.code === 0 ? 200 : (result.code === 404 ? 404 : 500);
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: result.code === 0, ...result }));
+      return;
+    }
+
+    const path = await resolveStaticPath(url.pathname);
     if (!path) {
       res.writeHead(404, { 'content-type': 'text/plain' });
       res.end('Not found');
