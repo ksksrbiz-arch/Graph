@@ -1,0 +1,918 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "createdAt": "2026-04-25T22:57:41.949Z",
+    "updatedAt": "2026-04-25T23:08:06.367Z",
+    "sources": [
+      {
+        "name": "claude_code",
+        "lastRunAt": "2026-04-25T23:08:06.367Z",
+        "projects": 1,
+        "sessions": 1,
+        "messages": 148
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "project_47234cb396dc9686",
+      "label": "Graph",
+      "type": "project",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.979Z",
+      "updatedAt": "2026-04-25T23:08:06.365Z",
+      "metadata": {
+        "cwd": "/home/user/Graph",
+        "folder": "-home-user-Graph",
+        "sessions": 1,
+        "messages": 148
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b",
+      "label": "Audit this repo and then continue to build it out. I’d like to have a visible g…",
+      "type": "conversation",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:53:41.497Z",
+      "updatedAt": "2026-04-25T23:08:06.366Z",
+      "metadata": {
+        "sessionId": "cf0365b4-cc4f-403e-89bf-6bb79f057933",
+        "messages": 148,
+        "firstTimestamp": "2026-04-25T22:53:41.497Z",
+        "lastTimestamp": "2026-04-25T23:08:04.406Z",
+        "gitBranch": "claude/audit-and-graph-setup-arpNc",
+        "cwd": "/home/user/Graph",
+        "path": "~/.claude/projects/-home-user-Graph/cf0365b4-cc4f-403e-89bf-6bb79f057933.jsonl"
+      }
+    },
+    {
+      "id": "model_e55e5383629b3830",
+      "label": "claude-opus-4-7",
+      "type": "model",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.980Z",
+      "updatedAt": "2026-04-25T23:08:06.366Z",
+      "metadata": {
+        "provider": "anthropic"
+      }
+    },
+    {
+      "id": "tool_5ac2b83c9f703b7a",
+      "label": "Bash",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.980Z",
+      "updatedAt": "2026-04-25T23:08:06.366Z",
+      "metadata": {
+        "calls": 17
+      }
+    },
+    {
+      "id": "tool_dc83aed22b8e1830",
+      "label": "Read",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T23:08:06.366Z",
+      "metadata": {
+        "calls": 3
+      }
+    },
+    {
+      "id": "tool_739aac7dd1b51611",
+      "label": "Write",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T23:08:06.366Z",
+      "metadata": {
+        "calls": 21
+      }
+    },
+    {
+      "id": "tool_9d68bea4a1a1d65d",
+      "label": "ToolSearch",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T23:08:06.366Z",
+      "metadata": {
+        "calls": 3
+      }
+    },
+    {
+      "id": "tool_5e62f8ade9c213c9",
+      "label": "TodoWrite",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T23:08:06.366Z",
+      "metadata": {
+        "calls": 9
+      }
+    },
+    {
+      "id": "file_a4654103cdffae1c",
+      "label": "README.md",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/README.md",
+        "touches": 2
+      }
+    },
+    {
+      "id": "file_ad378b0d5cd6a59d",
+      "label": "enhanced-personal-knowledge-graph-prompt.md",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/docs/enhanced-personal-knowledge-graph-prompt.md",
+        "touches": 2
+      }
+    },
+    {
+      "id": "file_b6494d587d02c6ce",
+      "label": "package.json",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/package.json",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_270c94504db59766",
+      "label": "index.html",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/index.html",
+        "touches": 3
+      }
+    },
+    {
+      "id": "file_c3379a847a4993e1",
+      "label": "styles.css",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/styles.css",
+        "touches": 2
+      }
+    },
+    {
+      "id": "file_ea9cfdf7654da2f4",
+      "label": "app.js",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/app.js",
+        "touches": 2
+      }
+    },
+    {
+      "id": "file_80a996c23c65a98e",
+      "label": "serve.mjs",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/scripts/serve.mjs",
+        "touches": 2
+      }
+    },
+    {
+      "id": "file_8040e21c8ae1c6a2",
+      "label": "graph-store.mjs",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/scripts/lib/graph-store.mjs",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_6812b15426d44a96",
+      "label": "ingest-claude-code.mjs",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/scripts/ingest-claude-code.mjs",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_eceff1ba3e866df9",
+      "label": ".gitignore",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/.gitignore",
+        "touches": 1
+      }
+    },
+    {
+      "id": "tool_807882926302c319",
+      "label": "mcp__github__create_pull_request",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T23:06:40.660Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "calls": 1
+      }
+    },
+    {
+      "id": "tool_f7f3442196a1afdf",
+      "label": "mcp__github__pull_request_read",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T23:06:40.660Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "calls": 2
+      }
+    },
+    {
+      "id": "file_ce3009447fd36f0e",
+      "label": "util.js",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T23:06:40.660Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/util.js",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_b52150c8e3a7ebf7",
+      "label": "state.js",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T23:06:40.660Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/state.js",
+        "touches": 2
+      }
+    },
+    {
+      "id": "file_d9f9abe1f6f0e8c8",
+      "label": "data.js",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/data.js",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_e250a44ca6440302",
+      "label": "graph.js",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/views/graph.js",
+        "touches": 2
+      }
+    },
+    {
+      "id": "file_fbee0e943b40e8bb",
+      "label": "timeline.js",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/views/timeline.js",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_5e642881b032ccd8",
+      "label": "connectors.js",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/views/connectors.js",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_6a80d19028f1dff4",
+      "label": "search.js",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/views/search.js",
+        "touches": 1
+      }
+    },
+    {
+      "id": "file_a2f13a26402d97f2",
+      "label": "settings.js",
+      "type": "file",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "path": "/home/user/Graph/web/views/settings.js",
+        "touches": 3
+      }
+    },
+    {
+      "id": "tool_29d5cb5c88cf7ac2",
+      "label": "Edit",
+      "type": "tool",
+      "sourceId": "claude_code",
+      "createdAt": "2026-04-25T23:08:06.367Z",
+      "updatedAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "calls": 5
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "project_47234cb396dc9686|CONTAINS|conversation_9ad4817e41592e2b",
+      "source": "project_47234cb396dc9686",
+      "target": "conversation_9ad4817e41592e2b",
+      "relation": "CONTAINS",
+      "weight": 0.9,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.980Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED_MODEL|model_e55e5383629b3830",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "model_e55e5383629b3830",
+      "relation": "USED_MODEL",
+      "weight": 1,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.980Z",
+      "metadata": {
+        "count": 87
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_5ac2b83c9f703b7a",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_5ac2b83c9f703b7a",
+      "relation": "USED",
+      "weight": 0.8400000000000001,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 18
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_dc83aed22b8e1830",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_dc83aed22b8e1830",
+      "relation": "USED",
+      "weight": 0.48000000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 4
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_739aac7dd1b51611",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_739aac7dd1b51611",
+      "relation": "USED",
+      "weight": 1,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 22
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_9d68bea4a1a1d65d",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_9d68bea4a1a1d65d",
+      "relation": "USED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 4
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_5e62f8ade9c213c9",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_5e62f8ade9c213c9",
+      "relation": "USED",
+      "weight": 0.64,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 10
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_a4654103cdffae1c",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_a4654103cdffae1c",
+      "relation": "TOUCHED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "file_a4654103cdffae1c|PART_OF|project_47234cb396dc9686",
+      "source": "file_a4654103cdffae1c",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_ad378b0d5cd6a59d",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_ad378b0d5cd6a59d",
+      "relation": "TOUCHED",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "file_ad378b0d5cd6a59d|PART_OF|project_47234cb396dc9686",
+      "source": "file_ad378b0d5cd6a59d",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.981Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_b6494d587d02c6ce",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_b6494d587d02c6ce",
+      "relation": "TOUCHED",
+      "weight": 0.45000000000000007,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "file_b6494d587d02c6ce|PART_OF|project_47234cb396dc9686",
+      "source": "file_b6494d587d02c6ce",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_270c94504db59766",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_270c94504db59766",
+      "relation": "TOUCHED",
+      "weight": 0.525,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 4
+      }
+    },
+    {
+      "id": "file_270c94504db59766|PART_OF|project_47234cb396dc9686",
+      "source": "file_270c94504db59766",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_c3379a847a4993e1",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_c3379a847a4993e1",
+      "relation": "TOUCHED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "file_c3379a847a4993e1|PART_OF|project_47234cb396dc9686",
+      "source": "file_c3379a847a4993e1",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_ea9cfdf7654da2f4",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_ea9cfdf7654da2f4",
+      "relation": "TOUCHED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "file_ea9cfdf7654da2f4|PART_OF|project_47234cb396dc9686",
+      "source": "file_ea9cfdf7654da2f4",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_80a996c23c65a98e",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_80a996c23c65a98e",
+      "relation": "TOUCHED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "file_80a996c23c65a98e|PART_OF|project_47234cb396dc9686",
+      "source": "file_80a996c23c65a98e",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_8040e21c8ae1c6a2",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_8040e21c8ae1c6a2",
+      "relation": "TOUCHED",
+      "weight": 0.45000000000000007,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "file_8040e21c8ae1c6a2|PART_OF|project_47234cb396dc9686",
+      "source": "file_8040e21c8ae1c6a2",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_6812b15426d44a96",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_6812b15426d44a96",
+      "relation": "TOUCHED",
+      "weight": 0.45000000000000007,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "file_6812b15426d44a96|PART_OF|project_47234cb396dc9686",
+      "source": "file_6812b15426d44a96",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_eceff1ba3e866df9",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_eceff1ba3e866df9",
+      "relation": "TOUCHED",
+      "weight": 0.45000000000000007,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "file_eceff1ba3e866df9|PART_OF|project_47234cb396dc9686",
+      "source": "file_eceff1ba3e866df9",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-25T22:57:41.982Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_807882926302c319",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_807882926302c319",
+      "relation": "USED",
+      "weight": 0.30000000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.660Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_f7f3442196a1afdf",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_f7f3442196a1afdf",
+      "relation": "USED",
+      "weight": 0.35000000000000003,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.660Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_ce3009447fd36f0e",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_ce3009447fd36f0e",
+      "relation": "TOUCHED",
+      "weight": 0.37500000000000006,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.660Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "file_ce3009447fd36f0e|PART_OF|project_47234cb396dc9686",
+      "source": "file_ce3009447fd36f0e",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.660Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_b52150c8e3a7ebf7",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_b52150c8e3a7ebf7",
+      "relation": "TOUCHED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.660Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "file_b52150c8e3a7ebf7|PART_OF|project_47234cb396dc9686",
+      "source": "file_b52150c8e3a7ebf7",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.660Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_d9f9abe1f6f0e8c8",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_d9f9abe1f6f0e8c8",
+      "relation": "TOUCHED",
+      "weight": 0.37500000000000006,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "file_d9f9abe1f6f0e8c8|PART_OF|project_47234cb396dc9686",
+      "source": "file_d9f9abe1f6f0e8c8",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_e250a44ca6440302",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_e250a44ca6440302",
+      "relation": "TOUCHED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 3
+      }
+    },
+    {
+      "id": "file_e250a44ca6440302|PART_OF|project_47234cb396dc9686",
+      "source": "file_e250a44ca6440302",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_fbee0e943b40e8bb",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_fbee0e943b40e8bb",
+      "relation": "TOUCHED",
+      "weight": 0.37500000000000006,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "file_fbee0e943b40e8bb|PART_OF|project_47234cb396dc9686",
+      "source": "file_fbee0e943b40e8bb",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_5e642881b032ccd8",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_5e642881b032ccd8",
+      "relation": "TOUCHED",
+      "weight": 0.37500000000000006,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "file_5e642881b032ccd8|PART_OF|project_47234cb396dc9686",
+      "source": "file_5e642881b032ccd8",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_6a80d19028f1dff4",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_6a80d19028f1dff4",
+      "relation": "TOUCHED",
+      "weight": 0.37500000000000006,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "file_6a80d19028f1dff4|PART_OF|project_47234cb396dc9686",
+      "source": "file_6a80d19028f1dff4",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|TOUCHED|file_a2f13a26402d97f2",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "file_a2f13a26402d97f2",
+      "relation": "TOUCHED",
+      "weight": 0.42500000000000004,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 4
+      }
+    },
+    {
+      "id": "file_a2f13a26402d97f2|PART_OF|project_47234cb396dc9686",
+      "source": "file_a2f13a26402d97f2",
+      "target": "project_47234cb396dc9686",
+      "relation": "PART_OF",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:06:40.661Z",
+      "metadata": {
+        "count": 2
+      }
+    },
+    {
+      "id": "conversation_9ad4817e41592e2b|USED|tool_29d5cb5c88cf7ac2",
+      "source": "conversation_9ad4817e41592e2b",
+      "target": "tool_29d5cb5c88cf7ac2",
+      "relation": "USED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-25T23:08:06.367Z",
+      "metadata": {
+        "count": 5
+      }
+    }
+  ]
+}
