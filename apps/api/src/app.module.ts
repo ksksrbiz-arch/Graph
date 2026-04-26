@@ -4,10 +4,12 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { BrainModule } from './brain/brain.module';
+import { ConnectorConfigsModule } from './connectors/connector-configs.module';
 import { ConnectorsModule } from './connectors/connectors.module';
 import { GraphModule } from './graph/graph.module';
 import { HealthModule } from './health/health.module';
 import { MotorModule } from './motor/motor.module';
+import { OAuthModule } from './oauth/oauth.module';
 import { ReasoningModule } from './reasoning/reasoning.module';
 import { Neo4jModule } from './shared/neo4j/neo4j.module';
 import { CryptoModule } from './shared/crypto/crypto.module';
@@ -31,6 +33,8 @@ import { UsersModule } from './users/users.module';
     BrainModule,
     MotorModule,
     ReasoningModule,
+    ConnectorConfigsModule,
+    OAuthModule,
     ConnectorsModule,
     SyncModule,
   ],

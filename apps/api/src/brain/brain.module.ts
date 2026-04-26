@@ -5,11 +5,13 @@ import { BrainGateway } from './brain.gateway';
 import { BrainService } from './brain.service';
 import { ConnectomeLoader } from './connectome.loader';
 import { DreamService } from './dream.service';
+import { InsightsController } from './insights.controller';
+import { InsightsService } from './insights.service';
 import { RecallService } from './recall.service';
 import { SensoryService } from './sensory.service';
 
 @Module({
-  controllers: [BrainController],
+  controllers: [BrainController, InsightsController],
   providers: [
     BrainService,
     BrainGateway,
@@ -18,6 +20,7 @@ import { SensoryService } from './sensory.service';
     AttentionService,
     DreamService,
     RecallService,
+    InsightsService,
   ],
   exports: [
     BrainService,
@@ -25,6 +28,7 @@ import { SensoryService } from './sensory.service';
     AttentionService,
     DreamService,
     RecallService,
+    InsightsService,
   ],
 })
 export class BrainModule {}
