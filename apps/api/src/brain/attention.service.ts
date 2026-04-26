@@ -103,8 +103,16 @@ export class AttentionService {
   current(userId: string): AttentionFocus | null {
     const f = this.active.get(userId);
     if (!f) return null;
-    const { pulseTimer: _t, endTimer: _e, ...rest } = f;
-    return rest;
+    return {
+      userId: f.userId,
+      query: f.query,
+      neuronIds: f.neuronIds,
+      startedAt: f.startedAt,
+      durationMs: f.durationMs,
+      pulseMs: f.pulseMs,
+      pulseCurrent: f.pulseCurrent,
+      endsAt: f.endsAt,
+    };
   }
 
   private async resolve(query: string): Promise<string[]> {
