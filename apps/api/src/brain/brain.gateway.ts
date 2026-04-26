@@ -5,6 +5,7 @@
 // Event shapes (kept terse since spikes can be high-frequency):
 //   spike   → { i: neuronId, t: tMs, r?: region }
 //   weight  → { i: synapseId, p: pre, q: post, w: weight, d: delta, t: tMs }
+//   dream   → { phase, endsAt, replayCount } — wake/sleep transitions
 
 import { Logger, OnModuleInit } from '@nestjs/common';
 import {
@@ -15,6 +16,12 @@ import {
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
 import { BrainService } from './brain.service';
+
+export interface DreamEvt {
+  phase: 'awake' | 'sleeping' | 'rem';
+  endsAt: number;
+  replayCount: number;
+}
 
 @WebSocketGateway({
   namespace: '/brain',
@@ -27,6 +34,10 @@ export class BrainGateway
   @WebSocketServer() server!: Server;
 
   constructor(private readonly brain: BrainService) {}
+
+  emitDream(userId: string, evt: DreamEvt): void {
+    this.server?.to(this.roomFor(userId)).emit('dream', evt);
+  }
 
   onModuleInit(): void {
     this.brain.subscribeSpikes((userId, e) => {

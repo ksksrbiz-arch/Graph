@@ -6,16 +6,21 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AttentionService, type AttentionFocus } from './attention.service';
 import { BrainService } from './brain.service';
+import { DreamService, type DreamStatus } from './dream.service';
+import { RecallService, type MemoryRecord } from './recall.service';
 import { SensoryService } from './sensory.service';
 
 interface AuthedRequest extends Request {
@@ -30,6 +35,9 @@ export class BrainController {
   constructor(
     private readonly brain: BrainService,
     private readonly sensory: SensoryService,
+    private readonly attention: AttentionService,
+    private readonly dream: DreamService,
+    private readonly recall: RecallService,
   ) {}
 
   @Post('start')
@@ -76,5 +84,79 @@ export class BrainController {
       sourceId: 'gmail',
     });
     return { ok: true };
+  }
+
+  @Post('attend')
+  @ApiOperation({ summary: 'Direct the brain to focus on neurons matching a query' })
+  attend(
+    @Req() req: AuthedRequest,
+    @Body() dto: { query: string; durationMs?: number; pulseCurrent?: number },
+  ): Promise<AttentionFocus> {
+    return this.attention.focus(req.user.sub, dto.query, {
+      ...(dto.durationMs ? { durationMs: dto.durationMs } : {}),
+      ...(dto.pulseCurrent ? { pulseCurrent: dto.pulseCurrent } : {}),
+    });
+  }
+
+  @Delete('attend')
+  @ApiOperation({ summary: 'Clear current attention focus' })
+  unattend(@Req() req: AuthedRequest): { cleared: boolean } {
+    return { cleared: this.attention.unfocus(req.user.sub) };
+  }
+
+  @Get('attend')
+  @ApiOperation({ summary: 'Current attention focus, if any' })
+  attentionStatus(
+    @Req() req: AuthedRequest,
+  ): AttentionFocus | { query: null } {
+    return this.attention.current(req.user.sub) ?? { query: null };
+  }
+
+  @Post('dream/start')
+  @ApiOperation({ summary: 'Begin the awake/sleep dream cycle' })
+  dreamStart(
+    @Req() req: AuthedRequest,
+    @Body() dto: { awakeMs?: number; dreamMs?: number },
+  ): DreamStatus {
+    return this.dream.start(req.user.sub, dto ?? {});
+  }
+
+  @Delete('dream/stop')
+  @ApiOperation({ summary: 'Stop the dream cycle' })
+  dreamStop(@Req() req: AuthedRequest): { stopped: boolean } {
+    return { stopped: this.dream.stop(req.user.sub) };
+  }
+
+  @Get('dream/status')
+  @ApiOperation({ summary: 'Current dream phase + cycle timing' })
+  dreamStatus(
+    @Req() req: AuthedRequest,
+  ): DreamStatus | { phase: null } {
+    return this.dream.status(req.user.sub) ?? { phase: null };
+  }
+
+  @Post('dream/trigger')
+  @ApiOperation({ summary: 'Force an immediate sleep phase' })
+  dreamTrigger(
+    @Req() req: AuthedRequest,
+    @Body() dto: { dreamMs?: number },
+  ): { triggered: boolean } {
+    return this.dream.triggerDream(req.user.sub, dto?.dreamMs);
+  }
+
+  @Get('recall')
+  @ApiOperation({
+    summary: 'Top memories — pairs of neurons that consistently fire together',
+  })
+  recallMemories(
+    @Req() req: AuthedRequest,
+    @Query('neuronId') neuronId?: string,
+    @Query('limit') limit = '20',
+  ): MemoryRecord[] {
+    const parsed = parseInt(limit, 10);
+    return this.recall.recall(req.user.sub, {
+      ...(neuronId ? { neuronId } : {}),
+      limit: Number.isFinite(parsed) && parsed > 0 ? parsed : 20,
+    });
   }
 }

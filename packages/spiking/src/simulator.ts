@@ -45,7 +45,7 @@ export class SpikingSimulator {
   private readonly stdp: StdpParams;
   private readonly dtMs: number;
   private readonly bias: number;
-  private readonly noiseRate: number;
+  private noiseRate: number;
   private readonly plasticity: boolean;
   private readonly rng: () => number;
 
@@ -120,6 +120,16 @@ export class SpikingSimulator {
   inject(neuronId: string, currentMv = 12): void {
     const cur = this.pendingInput.get(neuronId) ?? 0;
     this.pendingInput.set(neuronId, cur + currentMv);
+  }
+
+  /** Adjust the spontaneous noise rate at runtime. Used by sleep/dream cycles
+   *  to dial up background activity while the awake stimulus driver is
+   *  dampened. Clamped to [0, 1]. */
+  setNoiseRate(rate: number): void {
+    if (Number.isNaN(rate)) return;
+    if (rate < 0) this.noiseRate = 0;
+    else if (rate > 1) this.noiseRate = 1;
+    else this.noiseRate = rate;
   }
 
   getNeuron(id: string): Neuron | undefined {
