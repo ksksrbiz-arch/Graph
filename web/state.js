@@ -20,7 +20,7 @@ export const state = {
     chargeStrength: -120,
     linkDistance: 60,
     nodeRelSize: 4,
-    showLabels: true,
+    showLabels: false,
     particles: false,
     autoRefresh: false,
   },

@@ -19,9 +19,31 @@ function navigate() {
   document.querySelectorAll('.nav-item').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === hash);
   });
+  closeMobileNav();
+  closeMobileSearch();
   if (hash === '#/graph') {
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   }
+}
+
+function openMobileNav() {
+  document.body.classList.add('nav-open');
+  document.getElementById('nav-toggle')?.setAttribute('aria-expanded', 'true');
+  document.getElementById('nav-scrim')?.classList.remove('hidden');
+}
+function closeMobileNav() {
+  document.body.classList.remove('nav-open');
+  document.getElementById('nav-toggle')?.setAttribute('aria-expanded', 'false');
+  document.getElementById('nav-scrim')?.classList.add('hidden');
+}
+function toggleMobileSearch() {
+  const open = document.body.classList.toggle('search-open');
+  if (open) {
+    requestAnimationFrame(() => document.getElementById('global-search')?.focus());
+  }
+}
+function closeMobileSearch() {
+  document.body.classList.remove('search-open');
 }
 
 async function bootstrap() {
@@ -36,6 +58,18 @@ async function bootstrap() {
 
   document.getElementById('global-search').addEventListener('input', (e) => {
     setSearch(e.target.value);
+  });
+  document.getElementById('nav-toggle').addEventListener('click', () => {
+    if (document.body.classList.contains('nav-open')) closeMobileNav();
+    else openMobileNav();
+  });
+  document.getElementById('nav-scrim').addEventListener('click', closeMobileNav);
+  document.getElementById('search-toggle').addEventListener('click', toggleMobileSearch);
+  document.getElementById('global-search').addEventListener('blur', () => {
+    if (!document.getElementById('global-search').value) closeMobileSearch();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeMobileNav(); closeMobileSearch(); }
   });
 
   document.getElementById('ingest-btn').addEventListener('click', async (e) => {
