@@ -1,7 +1,7 @@
 let _ingestSupported = null;
 
 export async function loadGraph() {
-  const res = await fetch(`./data/graph.json?ts=${Date.now()}`);
+  const res = await fetch(`./data/graph.json?ts=${Date.now()}`, { cache: 'no-store' });
   if (!res.ok) throw new Error(`Failed to load graph (${res.status})`);
   return res.json();
 }
