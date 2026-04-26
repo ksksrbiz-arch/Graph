@@ -6,6 +6,7 @@
 
 import { SpikingSimulator } from './spiking.js';
 import { regionForNode } from './cortex.js';
+import { socketNamespaceUrl } from './util.js';
 
 export function createBrainClient({ getGraph, getUserId, onSpike, onWeight }) {
   let mode = 'idle';
@@ -22,7 +23,7 @@ export function createBrainClient({ getGraph, getUserId, onSpike, onWeight }) {
     return new Promise((resolve) => {
       try {
         const config = window.GRAPH_CONFIG || {};
-        const url = `${config.apiBaseUrl || window.location.origin}/brain`;
+        const url = socketNamespaceUrl(config.apiBaseUrl, '/brain');
         const s = window.io(url, {
           transports: ['websocket'],
           query: { userId },

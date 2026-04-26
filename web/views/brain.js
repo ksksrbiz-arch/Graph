@@ -11,7 +11,7 @@
 // future build step can inject a JWT-aware base URL without touching this
 // file.
 
-import { el, fmtTime, escape } from '../util.js';
+import { el, fmtTime, escape, socketNamespaceUrl } from '../util.js';
 
 const REGION_LABELS = {
   sensory: 'Sensory',
@@ -47,11 +47,11 @@ function maybeConnect() {
 function ensureSocket() {
   if (socket || typeof io === 'undefined') return;
   const config = window.GRAPH_CONFIG || {};
-  const apiBase = config.apiBaseUrl || window.location.origin;
+  const socketUrl = socketNamespaceUrl(config.apiBaseUrl, '/brain');
   const userId = config.brainUserId || FALLBACK_USER_ID;
 
   setStatus('connecting…');
-  socket = io(`${apiBase}/brain`, {
+  socket = io(socketUrl, {
     query: { userId },
     transports: ['websocket'],
     reconnection: true,
