@@ -10,6 +10,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AttentionService, type AttentionFocus } from './attention.service';
 import { BrainService } from './brain.service';
 import { DreamService, type DreamStatus } from './dream.service';
+import { RecallService, type MemoryRecord } from './recall.service';
 import { SensoryService } from './sensory.service';
 
 interface AuthedRequest extends Request {
@@ -35,6 +37,7 @@ export class BrainController {
     private readonly sensory: SensoryService,
     private readonly attention: AttentionService,
     private readonly dream: DreamService,
+    private readonly recall: RecallService,
   ) {}
 
   @Post('start')
@@ -139,5 +142,21 @@ export class BrainController {
     @Body() dto: { dreamMs?: number },
   ): { triggered: boolean } {
     return this.dream.triggerDream(req.user.sub, dto?.dreamMs);
+  }
+
+  @Get('recall')
+  @ApiOperation({
+    summary: 'Top memories — pairs of neurons that consistently fire together',
+  })
+  recallMemories(
+    @Req() req: AuthedRequest,
+    @Query('neuronId') neuronId?: string,
+    @Query('limit') limit = '20',
+  ): MemoryRecord[] {
+    const parsed = parseInt(limit, 10);
+    return this.recall.recall(req.user.sub, {
+      ...(neuronId ? { neuronId } : {}),
+      limit: Number.isFinite(parsed) && parsed > 0 ? parsed : 20,
+    });
   }
 }

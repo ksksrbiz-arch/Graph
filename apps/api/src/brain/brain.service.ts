@@ -3,7 +3,7 @@
 // through `subscribeSpikes` / `subscribeWeights`, which the WebSocket
 // gateway fans out to connected clients.
 
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import {
   SpikingSimulator,
   type SimulatorOptions,
@@ -11,6 +11,7 @@ import {
   type WeightChangeEvent,
 } from '@pkg/spiking';
 import { ConnectomeLoader } from './connectome.loader';
+import { RecallService } from './recall.service';
 
 interface RunningBrain {
   userId: string;
@@ -53,7 +54,11 @@ export class BrainService implements OnModuleDestroy {
   private readonly spikeListeners = new Set<SpikeListener>();
   private readonly weightListeners = new Set<WeightListener>();
 
-  constructor(private readonly loader: ConnectomeLoader) {}
+  constructor(
+    private readonly loader: ConnectomeLoader,
+    @Inject(forwardRef(() => RecallService))
+    private readonly recall: RecallService,
+  ) {}
 
   /** Start (or restart) the simulator for a user. Idempotent. */
   async start(userId: string, options: SimulatorOptions = {}): Promise<{
@@ -109,6 +114,7 @@ export class BrainService implements OnModuleDestroy {
       timer: setInterval(() => this.tick(brain), STEP_INTERVAL_MS),
     };
     this.running.set(userId, brain);
+    this.recall.start(userId);
 
     this.log.log(
       `brain started user=${userId} neurons=${neuronIds.length} synapses=${connectome.synapses.length}`,
@@ -121,6 +127,7 @@ export class BrainService implements OnModuleDestroy {
     if (!b) return false;
     clearInterval(b.timer);
     clearInterval(b.checkpointTimer);
+    this.recall.stop(userId);
     // Final checkpoint on stop — fire-and-forget. checkpoint() reads the brain
     // synchronously before its first await, so deleting from `running` below
     // does not race with the persistence write.

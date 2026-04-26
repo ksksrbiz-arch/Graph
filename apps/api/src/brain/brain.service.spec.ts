@@ -1,6 +1,7 @@
 import type { ConnectomeInput } from '@pkg/spiking';
 import { BrainService } from './brain.service';
 import type { ConnectomeLoader } from './connectome.loader';
+import type { RecallService } from './recall.service';
 
 describe('BrainService', () => {
   function makeLoader(c: ConnectomeInput): ConnectomeLoader {
@@ -8,6 +9,13 @@ describe('BrainService', () => {
       loadForUser: jest.fn().mockResolvedValue(c),
       persistWeights: jest.fn().mockResolvedValue(undefined),
     } as unknown as ConnectomeLoader;
+  }
+
+  function makeRecall(): RecallService {
+    return {
+      start: jest.fn(),
+      stop: jest.fn(),
+    } as unknown as RecallService;
   }
 
   afterEach(() => {
@@ -21,6 +29,7 @@ describe('BrainService', () => {
         neurons: [{ id: 'a', region: 'sensory' }, { id: 'b', region: 'motor' }],
         synapses: [{ id: 'ab', pre: 'a', post: 'b', weight: 0.6 }],
       }),
+      makeRecall(),
     );
     const summary = await svc.start('user-1');
     expect(summary).toEqual({ neurons: 2, synapses: 1 });
@@ -36,6 +45,7 @@ describe('BrainService', () => {
         neurons: [{ id: 'a' }],
         synapses: [],
       }),
+      makeRecall(),
     );
     const captured: string[] = [];
     svc.subscribeSpikes((userId, e) => captured.push(`${userId}:${e.neuronId}`));
@@ -53,7 +63,23 @@ describe('BrainService', () => {
   });
 
   it('stop() is idempotent and reports false when nothing was running', () => {
-    const svc = new BrainService(makeLoader({ neurons: [], synapses: [] }));
+    const svc = new BrainService(
+      makeLoader({ neurons: [], synapses: [] }),
+      makeRecall(),
+    );
     expect(svc.stop('nobody')).toBe(false);
+  });
+
+  it('starts and stops RecallService alongside the brain', async () => {
+    jest.useFakeTimers();
+    const recall = makeRecall();
+    const svc = new BrainService(
+      makeLoader({ neurons: [{ id: 'a' }], synapses: [] }),
+      recall,
+    );
+    await svc.start('user-1');
+    expect(recall.start).toHaveBeenCalledWith('user-1');
+    svc.stop('user-1');
+    expect(recall.stop).toHaveBeenCalledWith('user-1');
   });
 });
