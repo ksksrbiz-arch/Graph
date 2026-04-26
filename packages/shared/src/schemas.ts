@@ -20,6 +20,15 @@ const isoDateString = z
   .string()
   .refine((s) => !Number.isNaN(Date.parse(s)), { message: 'expected ISO-8601 timestamp' });
 
+const envBoolean = z.preprocess((value) => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off', ''].includes(normalized)) return false;
+  }
+  return value;
+}, z.boolean());
+
 export const NodeTypeSchema = z.enum(NODE_TYPES) satisfies z.ZodType<NodeType>;
 export const EdgeRelationSchema = z.enum(EDGE_RELATIONS) satisfies z.ZodType<EdgeRelation>;
 export const ConnectorIdSchema = z.enum(CONNECTOR_IDS) satisfies z.ZodType<ConnectorId>;
@@ -86,6 +95,8 @@ export const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   API_HOST: z.string().default('0.0.0.0'),
+  API_PUBLIC_URL: z.string().url().optional(),
+  CORS_ORIGINS: z.string().optional(),
 
   POSTGRES_URL: z.string().url(),
   NEO4J_URI: z.string().min(1),
@@ -98,6 +109,12 @@ export const EnvSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be ≥32 bytes'),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).default(900),
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().min(3600).default(2_592_000),
+
+  BRAIN_AUTO_START_USER_IDS: z.string().optional(),
+  BRAIN_AUTO_START_DREAM: envBoolean.default(false),
+  BRAIN_DEFAULT_AWAKE_MS: z.coerce.number().int().min(1_000).default(5 * 60_000),
+  BRAIN_DEFAULT_DREAM_MS: z.coerce.number().int().min(1_000).default(30_000),
+  BRAIN_LOCK_TTL_SECONDS: z.coerce.number().int().min(15).max(3_600).default(120),
 
   KEK_BASE64: z
     .string()

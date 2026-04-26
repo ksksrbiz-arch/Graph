@@ -21,7 +21,8 @@ export function createBrainClient({ getGraph, getUserId, onSpike, onWeight }) {
     if (!userId) return false;
     return new Promise((resolve) => {
       try {
-        const url = `${window.location.origin}/brain`;
+        const config = window.GRAPH_CONFIG || {};
+        const url = `${config.apiBaseUrl || window.location.origin}/brain`;
         const s = window.io(url, {
           transports: ['websocket'],
           query: { userId },

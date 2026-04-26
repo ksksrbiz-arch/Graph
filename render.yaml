@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: graph-brain-api
+    runtime: docker
+    dockerContext: .
+    dockerfilePath: ./apps/api/Dockerfile
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /health/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: 3001
+      - key: API_PUBLIC_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: POSTGRES_URL
+        sync: false
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USER
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: MEILI_HOST
+        sync: false
+      - key: MEILI_MASTER_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: KEK_BASE64
+        sync: false
+      - key: BRAIN_AUTO_START_USER_IDS
+        sync: false
+      - key: BRAIN_AUTO_START_DREAM
+        value: "true"
+      - key: BRAIN_DEFAULT_AWAKE_MS
+        value: "300000"
+      - key: BRAIN_DEFAULT_DREAM_MS
+        value: "30000"
+      - key: BRAIN_LOCK_TTL_SECONDS
+        value: "120"

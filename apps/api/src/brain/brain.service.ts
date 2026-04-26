@@ -18,6 +18,8 @@ interface RunningBrain {
   sim: SpikingSimulator;
   timer: NodeJS.Timeout;
   checkpointTimer: NodeJS.Timeout;
+  neurons: number;
+  synapses: number;
   /** Synapse id → weight at the last checkpoint. Lets `checkpoint()` skip
    *  synapses whose strength hasn't drifted enough to be worth a write. */
   lastWeights: Map<string, number>;
@@ -103,6 +105,8 @@ export class BrainService implements OnModuleDestroy {
     const brain: RunningBrain = {
       userId,
       sim,
+      neurons: neuronIds.length,
+      synapses: connectome.synapses.length,
       stimCursor: 0,
       neuronIds,
       lastWeights,
@@ -120,6 +124,12 @@ export class BrainService implements OnModuleDestroy {
       `brain started user=${userId} neurons=${neuronIds.length} synapses=${connectome.synapses.length}`,
     );
     return { neurons: neuronIds.length, synapses: connectome.synapses.length };
+  }
+
+  summary(userId: string): { neurons: number; synapses: number } | null {
+    const running = this.running.get(userId);
+    if (!running) return null;
+    return { neurons: running.neurons, synapses: running.synapses };
   }
 
   stop(userId: string): boolean {

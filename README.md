@@ -39,6 +39,14 @@ pnpm --filter @pkg/api start:dev
 
 Bring everything down with `pnpm stack:down`.
 
+## Always-on deployment
+
+- Deploy `apps/api` as a long-running container service; the repo now includes a production-ready `apps/api/Dockerfile` and a `render.yaml` blueprint.
+- Point `POSTGRES_URL`, `NEO4J_*`, `REDIS_URL`, and `MEILI_*` at hosted services instead of the local `docker-compose.yml` stack.
+- Set `API_PUBLIC_URL` and `CORS_ORIGINS` so OAuth callbacks, browser CORS, and Socket.IO all target the hosted API correctly.
+- Set `BRAIN_AUTO_START_USER_IDS` to the user ids whose brains should resume automatically after deploys/restarts.
+- Keep `wrangler.jsonc`/`web/` for the static frontend and set `web/config.js` during deployment so the SPA connects to the hosted API.
+
 ---
 
 ## Repo layout

@@ -1,0 +1,8 @@
+node_modules
+.git
+.github
+coverage
+dist
+apps/*/dist
+packages/*/dist
+pnpm-store

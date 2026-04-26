@@ -16,6 +16,8 @@ import { CryptoModule } from './shared/crypto/crypto.module';
 import { IdempotencyModule } from './shared/idempotency/idempotency.module';
 import { SyncModule } from './sync/sync.module';
 import { UsersModule } from './users/users.module';
+import { PostgresModule } from './shared/postgres/postgres.module';
+import { RedisModule } from './shared/redis/redis.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { UsersModule } from './users/users.module';
     CryptoModule,
     IdempotencyModule,
     Neo4jModule,
+    PostgresModule,
+    RedisModule,
     HealthModule,
     AuthModule,
     UsersModule,

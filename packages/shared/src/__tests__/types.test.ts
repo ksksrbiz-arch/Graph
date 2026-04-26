@@ -63,6 +63,8 @@ describe('EnvSchema', () => {
   const validEnv = {
     NODE_ENV: 'test',
     API_PORT: '3001',
+    API_PUBLIC_URL: 'https://api.example.com',
+    CORS_ORIGINS: 'https://app.example.com,https://admin.example.com',
     POSTGRES_URL: 'postgresql://pkg:pkg@localhost:5432/pkg',
     NEO4J_URI: 'bolt://localhost:7687',
     NEO4J_USER: 'neo4j',
@@ -71,6 +73,11 @@ describe('EnvSchema', () => {
     MEILI_HOST: 'http://localhost:7700',
     MEILI_MASTER_KEY: 'k',
     JWT_SECRET: 'x'.repeat(32),
+    BRAIN_AUTO_START_USER_IDS: 'user-1,user-2',
+    BRAIN_AUTO_START_DREAM: 'true',
+    BRAIN_DEFAULT_AWAKE_MS: '1000',
+    BRAIN_DEFAULT_DREAM_MS: '2000',
+    BRAIN_LOCK_TTL_SECONDS: '120',
     KEK_BASE64: Buffer.alloc(32).toString('base64'),
   };
 
@@ -86,5 +93,12 @@ describe('EnvSchema', () => {
   it('rejects KEK that does not decode to 32 bytes', () => {
     const result = EnvSchema.safeParse({ ...validEnv, KEK_BASE64: 'aGVsbG8=' });
     expect(result.success).toBe(false);
+  });
+
+  it('coerces the brain auto-start dream flag from strings', () => {
+    expect(EnvSchema.parse(validEnv).BRAIN_AUTO_START_DREAM).toBe(true);
+    expect(
+      EnvSchema.parse({ ...validEnv, BRAIN_AUTO_START_DREAM: 'false' }).BRAIN_AUTO_START_DREAM,
+    ).toBe(false);
   });
 });

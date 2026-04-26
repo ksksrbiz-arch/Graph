@@ -46,9 +46,9 @@ function maybeConnect() {
 
 function ensureSocket() {
   if (socket || typeof io === 'undefined') return;
-  const root = document.getElementById('view-brain');
-  const apiBase = root?.dataset.apiBase || window.location.origin;
-  const userId = root?.dataset.userId || FALLBACK_USER_ID;
+  const config = window.GRAPH_CONFIG || {};
+  const apiBase = config.apiBaseUrl || window.location.origin;
+  const userId = config.brainUserId || FALLBACK_USER_ID;
 
   setStatus('connecting…');
   socket = io(`${apiBase}/brain`, {
@@ -86,6 +86,7 @@ function disposeSocket() {
 // ── DOM scaffolding ──
 
 function renderShell(root) {
+  const config = window.GRAPH_CONFIG || {};
   root.innerHTML = '';
   root.appendChild(
     el('div', { class: 'view-header' },
@@ -97,6 +98,9 @@ function renderShell(root) {
       el('div', { class: 'brain-status', id: 'brain-status' }, 'connecting…'),
     ),
   );
+  if (config.apiBaseUrl) {
+    root.appendChild(el('p', { class: 'view-sub' }, `API endpoint: ${escape(config.apiBaseUrl)}`));
+  }
 
   const grid = el('div', { class: 'brain-grid' });
 
