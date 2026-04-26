@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "metadata": {
     "createdAt": "2026-04-25T22:57:41.949Z",
-    "updatedAt": "2026-04-25T23:08:06.367Z",
+    "updatedAt": "2026-04-26T03:11:21.370Z",
     "sources": [
       {
         "name": "claude_code",
@@ -10,6 +10,13 @@
         "projects": 1,
         "sessions": 1,
         "messages": 148
+      },
+      {
+        "name": "git",
+        "lastRunAt": "2026-04-26T03:11:06.963Z",
+        "repos": 1,
+        "commits": 2,
+        "authors": 2
       }
     ]
   },
@@ -358,6 +365,453 @@
       "updatedAt": "2026-04-25T23:08:06.367Z",
       "metadata": {
         "calls": 5
+      }
+    },
+    {
+      "id": "repo_db23c6e2528f0203",
+      "label": "Graph",
+      "type": "repo",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.950Z",
+      "updatedAt": "2026-04-26T03:11:06.950Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph",
+        "remoteUrl": "https://github.com/ksksrbiz-arch/Graph",
+        "branch": "copilot/audit-codebase-add-data-sources"
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58",
+      "label": "Add Cloudflare Workers configuration",
+      "type": "commit",
+      "sourceId": "git",
+      "createdAt": "2026-04-25T23:54:11Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "hash": "e08edf923df7c3bd76ea7c5fb5b54e52751b57d3",
+        "shortHash": "e08edf92",
+        "date": "2026-04-25T23:54:11Z",
+        "repo": "/home/runner/work/Graph/Graph"
+      }
+    },
+    {
+      "id": "author_fe672d45fbb91dea",
+      "label": "cloudflare-workers-and-pages[bot]",
+      "type": "author",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "email": "73139402+cloudflare-workers-and-pages[bot]@users.noreply.github.com",
+        "name": "cloudflare-workers-and-pages[bot]"
+      }
+    },
+    {
+      "id": "file_0a6a52f061725d2f",
+      "label": ".gitignore",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/.gitignore",
+        "relativePath": ".gitignore"
+      }
+    },
+    {
+      "id": "file_8736a0028ea439e5",
+      "label": "README.md",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/README.md",
+        "relativePath": "README.md"
+      }
+    },
+    {
+      "id": "file_4e0a2b6f37174fff",
+      "label": "graph.json",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/data/graph.json",
+        "relativePath": "data/graph.json"
+      }
+    },
+    {
+      "id": "file_0dd6c41522618623",
+      "label": "enhanced-personal-knowledge-graph-prompt.md",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/docs/enhanced-personal-knowledge-graph-prompt.md",
+        "relativePath": "docs/enhanced-personal-knowledge-graph-prompt.md"
+      }
+    },
+    {
+      "id": "file_16ec76d311babd19",
+      "label": "package-lock.json",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/package-lock.json",
+        "relativePath": "package-lock.json"
+      }
+    },
+    {
+      "id": "file_7eef21c2efd8ff0a",
+      "label": "package.json",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/package.json",
+        "relativePath": "package.json"
+      }
+    },
+    {
+      "id": "file_58ebf462f5c376c7",
+      "label": "ingest-claude-code.mjs",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/scripts/ingest-claude-code.mjs",
+        "relativePath": "scripts/ingest-claude-code.mjs"
+      }
+    },
+    {
+      "id": "file_c8295a58fb753a9b",
+      "label": "graph-store.mjs",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/scripts/lib/graph-store.mjs",
+        "relativePath": "scripts/lib/graph-store.mjs"
+      }
+    },
+    {
+      "id": "file_d7d99dc599b082a3",
+      "label": "serve.mjs",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/scripts/serve.mjs",
+        "relativePath": "scripts/serve.mjs"
+      }
+    },
+    {
+      "id": "file_833874c785daee74",
+      "label": "app.js",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/web/app.js",
+        "relativePath": "web/app.js"
+      }
+    },
+    {
+      "id": "file_ac93e0512d231cae",
+      "label": "data.js",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/web/data.js",
+        "relativePath": "web/data.js"
+      }
+    },
+    {
+      "id": "file_74397e9a7a722512",
+      "label": "index.html",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/web/index.html",
+        "relativePath": "web/index.html"
+      }
+    },
+    {
+      "id": "file_7e17ab70f3d02ea7",
+      "label": "state.js",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/web/state.js",
+        "relativePath": "web/state.js"
+      }
+    },
+    {
+      "id": "file_8b67ac96a4be5bdd",
+      "label": "styles.css",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/web/styles.css",
+        "relativePath": "web/styles.css"
+      }
+    },
+    {
+      "id": "file_5ecff8f3e7e87f18",
+      "label": "util.js",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/web/util.js",
+        "relativePath": "web/util.js"
+      }
+    },
+    {
+      "id": "file_e56b0186d413f19f",
+      "label": "connectors.js",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/web/views/connectors.js",
+        "relativePath": "web/views/connectors.js"
+      }
+    },
+    {
+      "id": "file_ca5a166b556ab72d",
+      "label": "graph.js",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "updatedAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/web/views/graph.js",
+        "relativePath": "web/views/graph.js"
+      }
+    },
+    {
+      "id": "file_1a8e22ad6cf4f2f1",
+      "label": "search.js",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "updatedAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/web/views/search.js",
+        "relativePath": "web/views/search.js"
+      }
+    },
+    {
+      "id": "file_93af5e637ed10f58",
+      "label": "settings.js",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "updatedAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/web/views/settings.js",
+        "relativePath": "web/views/settings.js"
+      }
+    },
+    {
+      "id": "file_6c4309d9150d911b",
+      "label": "timeline.js",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "updatedAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/web/views/timeline.js",
+        "relativePath": "web/views/timeline.js"
+      }
+    },
+    {
+      "id": "file_f7a3524e22ed544b",
+      "label": "wrangler.jsonc",
+      "type": "file",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "updatedAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "path": "/home/runner/work/Graph/Graph/wrangler.jsonc",
+        "relativePath": "wrangler.jsonc"
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca",
+      "label": "Merge pull request #2 from ksksrbiz-arch/claude/audit-and-graph-setup-a…",
+      "type": "commit",
+      "sourceId": "git",
+      "createdAt": "2026-04-25T16:15:20-07:00",
+      "updatedAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "hash": "7b8b8e82363474a74f4b10b1d3d7be9cf59d7918",
+        "shortHash": "7b8b8e82",
+        "date": "2026-04-25T16:15:20-07:00",
+        "repo": "/home/runner/work/Graph/Graph"
+      }
+    },
+    {
+      "id": "author_7ae68bfd5e8f7094",
+      "label": "Keith skaggs",
+      "type": "author",
+      "sourceId": "git",
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "updatedAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "email": "240277128+ksksrbiz-arch@users.noreply.github.com",
+        "name": "Keith skaggs"
+      }
+    },
+    {
+      "id": "note_cde4e2e2c50adca9",
+      "label": "AI tools",
+      "type": "note",
+      "sourceId": "markdown",
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "updatedAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "path": "/tmp/test-notes/AI-tools.md",
+        "wordCount": 10,
+        "tags": [
+          "ai",
+          "claude",
+          "productivity"
+        ],
+        "aliases": [],
+        "outboundLinks": []
+      }
+    },
+    {
+      "id": "tag_a301fa1594753fed",
+      "label": "#ai",
+      "type": "tag",
+      "sourceId": "markdown",
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "updatedAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "tag": "ai"
+      }
+    },
+    {
+      "id": "tag_0214273fcbfd8833",
+      "label": "#claude",
+      "type": "tag",
+      "sourceId": "markdown",
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "updatedAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "tag": "claude"
+      }
+    },
+    {
+      "id": "tag_504f9bae97802f78",
+      "label": "#productivity",
+      "type": "tag",
+      "sourceId": "markdown",
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "updatedAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "tag": "productivity"
+      }
+    },
+    {
+      "id": "note_434a535ed1b57915",
+      "label": "Graph project",
+      "type": "note",
+      "sourceId": "markdown",
+      "createdAt": "2024-01-15",
+      "updatedAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "path": "/tmp/test-notes/Graph.md",
+        "wordCount": 20,
+        "tags": [
+          "knowledge-graph",
+          "visualization",
+          "typescript",
+          "dev",
+          "tools"
+        ],
+        "aliases": [],
+        "outboundLinks": [
+          "https://github.com/vasturiano/force-graph"
+        ]
+      }
+    },
+    {
+      "id": "tag_5494a95573a3f339",
+      "label": "#knowledge-graph",
+      "type": "tag",
+      "sourceId": "markdown",
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "updatedAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "tag": "knowledge-graph"
+      }
+    },
+    {
+      "id": "tag_284f47c2516425e6",
+      "label": "#visualization",
+      "type": "tag",
+      "sourceId": "markdown",
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "updatedAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "tag": "visualization"
+      }
+    },
+    {
+      "id": "tag_f78e031e4d8c6dcc",
+      "label": "#typescript",
+      "type": "tag",
+      "sourceId": "markdown",
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "updatedAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "tag": "typescript"
+      }
+    },
+    {
+      "id": "tag_3e594fdbb88946bf",
+      "label": "#dev",
+      "type": "tag",
+      "sourceId": "markdown",
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "updatedAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "tag": "dev"
+      }
+    },
+    {
+      "id": "tag_d99a816c2e90249d",
+      "label": "#tools",
+      "type": "tag",
+      "sourceId": "markdown",
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "updatedAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "tag": "tools"
       }
     }
   ],
@@ -912,6 +1366,894 @@
       "createdAt": "2026-04-25T23:08:06.367Z",
       "metadata": {
         "count": 5
+      }
+    },
+    {
+      "id": "repo_db23c6e2528f0203|CONTAINS|commit_e6db6bc1a5020c58",
+      "source": "repo_db23c6e2528f0203",
+      "target": "commit_e6db6bc1a5020c58",
+      "relation": "CONTAINS",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|AUTHORED_BY|author_fe672d45fbb91dea",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "author_fe672d45fbb91dea",
+      "relation": "AUTHORED_BY",
+      "weight": 0.7,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_0a6a52f061725d2f",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_0a6a52f061725d2f",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_0a6a52f061725d2f|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_0a6a52f061725d2f",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_8736a0028ea439e5",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_8736a0028ea439e5",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_8736a0028ea439e5|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_8736a0028ea439e5",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_4e0a2b6f37174fff",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_4e0a2b6f37174fff",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_4e0a2b6f37174fff|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_4e0a2b6f37174fff",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_0dd6c41522618623",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_0dd6c41522618623",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_0dd6c41522618623|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_0dd6c41522618623",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_16ec76d311babd19",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_16ec76d311babd19",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_16ec76d311babd19|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_16ec76d311babd19",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_7eef21c2efd8ff0a",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_7eef21c2efd8ff0a",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_7eef21c2efd8ff0a|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_7eef21c2efd8ff0a",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_58ebf462f5c376c7",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_58ebf462f5c376c7",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_58ebf462f5c376c7|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_58ebf462f5c376c7",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_c8295a58fb753a9b",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_c8295a58fb753a9b",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_c8295a58fb753a9b|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_c8295a58fb753a9b",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_d7d99dc599b082a3",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_d7d99dc599b082a3",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_d7d99dc599b082a3|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_d7d99dc599b082a3",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_833874c785daee74",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_833874c785daee74",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_833874c785daee74|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_833874c785daee74",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_ac93e0512d231cae",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_ac93e0512d231cae",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_ac93e0512d231cae|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_ac93e0512d231cae",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_74397e9a7a722512",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_74397e9a7a722512",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_74397e9a7a722512|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_74397e9a7a722512",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_7e17ab70f3d02ea7",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_7e17ab70f3d02ea7",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_7e17ab70f3d02ea7|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_7e17ab70f3d02ea7",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_8b67ac96a4be5bdd",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_8b67ac96a4be5bdd",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_8b67ac96a4be5bdd|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_8b67ac96a4be5bdd",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_5ecff8f3e7e87f18",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_5ecff8f3e7e87f18",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_5ecff8f3e7e87f18|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_5ecff8f3e7e87f18",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_e56b0186d413f19f",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_e56b0186d413f19f",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_e56b0186d413f19f|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_e56b0186d413f19f",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.962Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_ca5a166b556ab72d",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_ca5a166b556ab72d",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_ca5a166b556ab72d|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_ca5a166b556ab72d",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_1a8e22ad6cf4f2f1",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_1a8e22ad6cf4f2f1",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_1a8e22ad6cf4f2f1|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_1a8e22ad6cf4f2f1",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_93af5e637ed10f58",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_93af5e637ed10f58",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_93af5e637ed10f58|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_93af5e637ed10f58",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_6c4309d9150d911b",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_6c4309d9150d911b",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_6c4309d9150d911b|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_6c4309d9150d911b",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_e6db6bc1a5020c58|MODIFIED|file_f7a3524e22ed544b",
+      "source": "commit_e6db6bc1a5020c58",
+      "target": "file_f7a3524e22ed544b",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "file_f7a3524e22ed544b|PART_OF|repo_db23c6e2528f0203",
+      "source": "file_f7a3524e22ed544b",
+      "target": "repo_db23c6e2528f0203",
+      "relation": "PART_OF",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "repo_db23c6e2528f0203|CONTAINS|commit_a8b542aabbc06fca",
+      "source": "repo_db23c6e2528f0203",
+      "target": "commit_a8b542aabbc06fca",
+      "relation": "CONTAINS",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|AUTHORED_BY|author_7ae68bfd5e8f7094",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "author_7ae68bfd5e8f7094",
+      "relation": "AUTHORED_BY",
+      "weight": 0.7,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_0a6a52f061725d2f",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_0a6a52f061725d2f",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_8736a0028ea439e5",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_8736a0028ea439e5",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_4e0a2b6f37174fff",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_4e0a2b6f37174fff",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_0dd6c41522618623",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_0dd6c41522618623",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_7eef21c2efd8ff0a",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_7eef21c2efd8ff0a",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_58ebf462f5c376c7",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_58ebf462f5c376c7",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_c8295a58fb753a9b",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_c8295a58fb753a9b",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_d7d99dc599b082a3",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_d7d99dc599b082a3",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_833874c785daee74",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_833874c785daee74",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_ac93e0512d231cae",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_ac93e0512d231cae",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_74397e9a7a722512",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_74397e9a7a722512",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_7e17ab70f3d02ea7",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_7e17ab70f3d02ea7",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_8b67ac96a4be5bdd",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_8b67ac96a4be5bdd",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_5ecff8f3e7e87f18",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_5ecff8f3e7e87f18",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_e56b0186d413f19f",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_e56b0186d413f19f",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_ca5a166b556ab72d",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_ca5a166b556ab72d",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_1a8e22ad6cf4f2f1",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_1a8e22ad6cf4f2f1",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_93af5e637ed10f58",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_93af5e637ed10f58",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "commit_a8b542aabbc06fca|MODIFIED|file_6c4309d9150d911b",
+      "source": "commit_a8b542aabbc06fca",
+      "target": "file_6c4309d9150d911b",
+      "relation": "MODIFIED",
+      "weight": 0.4,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:06.963Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "note_cde4e2e2c50adca9|TAGGED|tag_a301fa1594753fed",
+      "source": "note_cde4e2e2c50adca9",
+      "target": "tag_a301fa1594753fed",
+      "relation": "TAGGED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "note_cde4e2e2c50adca9|TAGGED|tag_0214273fcbfd8833",
+      "source": "note_cde4e2e2c50adca9",
+      "target": "tag_0214273fcbfd8833",
+      "relation": "TAGGED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "note_cde4e2e2c50adca9|TAGGED|tag_504f9bae97802f78",
+      "source": "note_cde4e2e2c50adca9",
+      "target": "tag_504f9bae97802f78",
+      "relation": "TAGGED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "note_cde4e2e2c50adca9|LINKS_TO|note_434a535ed1b57915",
+      "source": "note_cde4e2e2c50adca9",
+      "target": "note_434a535ed1b57915",
+      "relation": "LINKS_TO",
+      "weight": 0.6,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "note_434a535ed1b57915|TAGGED|tag_5494a95573a3f339",
+      "source": "note_434a535ed1b57915",
+      "target": "tag_5494a95573a3f339",
+      "relation": "TAGGED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "note_434a535ed1b57915|TAGGED|tag_284f47c2516425e6",
+      "source": "note_434a535ed1b57915",
+      "target": "tag_284f47c2516425e6",
+      "relation": "TAGGED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "note_434a535ed1b57915|TAGGED|tag_f78e031e4d8c6dcc",
+      "source": "note_434a535ed1b57915",
+      "target": "tag_f78e031e4d8c6dcc",
+      "relation": "TAGGED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "note_434a535ed1b57915|TAGGED|tag_3e594fdbb88946bf",
+      "source": "note_434a535ed1b57915",
+      "target": "tag_3e594fdbb88946bf",
+      "relation": "TAGGED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "count": 1
+      }
+    },
+    {
+      "id": "note_434a535ed1b57915|TAGGED|tag_d99a816c2e90249d",
+      "source": "note_434a535ed1b57915",
+      "target": "tag_d99a816c2e90249d",
+      "relation": "TAGGED",
+      "weight": 0.5,
+      "inferred": false,
+      "createdAt": "2026-04-26T03:11:21.370Z",
+      "metadata": {
+        "count": 1
       }
     }
   ]

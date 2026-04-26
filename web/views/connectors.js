@@ -12,6 +12,24 @@ const KNOWN_CONNECTORS = [
     ingestSlug: 'claude-code',
   },
   {
+    id: 'git',
+    name: 'Git repositories',
+    description:
+      'Recent commits, authors, and file changes from local git repos. ' +
+      'Set GIT_SCAN_DIRS (colon-separated paths) to control which directories are scanned.',
+    enabled: true,
+    ingestSlug: 'git',
+  },
+  {
+    id: 'markdown',
+    name: 'Markdown notes',
+    description:
+      'Notes from an Obsidian vault or any local Markdown directory. ' +
+      'Set NOTES_DIR to your notes folder (default: ~/notes, ~/Documents/notes, ~/Obsidian).',
+    enabled: true,
+    ingestSlug: 'markdown',
+  },
+  {
     id: 'claude_export',
     name: 'Claude.ai export',
     description: 'Upload a conversations.json export from Claude.ai. Coming soon.',
@@ -54,12 +72,16 @@ function buildCard(connector, source) {
   card.appendChild(el('p', { class: 'meta' }, connector.description));
   if (source) {
     const stats = el('div', { class: 'stats' });
-    stats.innerHTML = `
-      <div><div class="num">${source.projects ?? '—'}</div><div class="lbl">projects</div></div>
-      <div><div class="num">${source.sessions ?? '—'}</div><div class="lbl">sessions</div></div>
-      <div><div class="num">${source.messages ?? '—'}</div><div class="lbl">messages</div></div>
-    `;
-    card.appendChild(stats);
+    const SKIP_KEYS = new Set(['name', 'lastRunAt']);
+    const statEntries = Object.entries(source).filter(
+      ([k, v]) => !SKIP_KEYS.has(k) && typeof v === 'number',
+    );
+    if (statEntries.length > 0) {
+      stats.innerHTML = statEntries
+        .map(([k, v]) => `<div><div class="num">${v}</div><div class="lbl">${k}</div></div>`)
+        .join('');
+      card.appendChild(stats);
+    }
     card.appendChild(el('div', { class: 'meta' }, `Last run: ${fmtDate(source.lastRunAt)}`));
   } else if (connector.enabled) {
     card.appendChild(el('div', { class: 'meta' }, 'Not yet ingested. Click Run to populate.'));

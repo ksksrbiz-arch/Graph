@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "ingest:claude-code": "node scripts/ingest-claude-code.mjs",
+    "ingest:git": "node scripts/ingest-git.mjs",
+    "ingest:markdown": "node scripts/ingest-markdown.mjs",
     "ingest": "node scripts/ingest-claude-code.mjs",
     "deploy": "wrangler deploy",
     "preview": "wrangler dev"
