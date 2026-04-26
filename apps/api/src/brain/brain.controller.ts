@@ -6,6 +6,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   Param,
   Post,
@@ -15,6 +16,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AttentionService, type AttentionFocus } from './attention.service';
 import { BrainService } from './brain.service';
 import { SensoryService } from './sensory.service';
 
@@ -30,6 +32,7 @@ export class BrainController {
   constructor(
     private readonly brain: BrainService,
     private readonly sensory: SensoryService,
+    private readonly attention: AttentionService,
   ) {}
 
   @Post('start')
@@ -76,5 +79,31 @@ export class BrainController {
       sourceId: 'gmail',
     });
     return { ok: true };
+  }
+
+  @Post('attend')
+  @ApiOperation({ summary: 'Direct the brain to focus on neurons matching a query' })
+  attend(
+    @Req() req: AuthedRequest,
+    @Body() dto: { query: string; durationMs?: number; pulseCurrent?: number },
+  ): Promise<AttentionFocus> {
+    return this.attention.focus(req.user.sub, dto.query, {
+      ...(dto.durationMs ? { durationMs: dto.durationMs } : {}),
+      ...(dto.pulseCurrent ? { pulseCurrent: dto.pulseCurrent } : {}),
+    });
+  }
+
+  @Delete('attend')
+  @ApiOperation({ summary: 'Clear current attention focus' })
+  unattend(@Req() req: AuthedRequest): { cleared: boolean } {
+    return { cleared: this.attention.unfocus(req.user.sub) };
+  }
+
+  @Get('attend')
+  @ApiOperation({ summary: 'Current attention focus, if any' })
+  attentionStatus(
+    @Req() req: AuthedRequest,
+  ): AttentionFocus | { query: null } {
+    return this.attention.current(req.user.sub) ?? { query: null };
   }
 }
