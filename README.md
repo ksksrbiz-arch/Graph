@@ -33,7 +33,7 @@ Keyboard: `Esc` closes panel / clears focus, `f` fits the graph to the viewport.
 
 ## What gets ingested today
 
-`scripts/ingest-claude-code.mjs` reads `~/.claude/projects/<encoded-cwd>/<session>.jsonl` (override with `CLAUDE_HOME=...`) and produces nodes and edges in `data/graph.json`:
+`scripts/ingest-claude-code.mjs` reads `~/.claude/projects/<encoded-cwd>/<session>.jsonl` (override with `CLAUDE_HOME=...`) and produces nodes and edges in `web/data/graph.json`:
 
 | Node type       | Source                                                         |
 | --------------- | -------------------------------------------------------------- |
@@ -50,7 +50,7 @@ Re-running is idempotent and merge-safe — node metadata is updated, edge `weig
 ## Layout
 
 ```
-data/graph.json               # Generated graph (single source of truth)
+web/data/graph.json           # Generated graph (single source of truth)
 web/
   index.html                  # App shell
   app.js                      # Bootstrap + hash router
@@ -81,7 +81,7 @@ When the spec's NestJS API arrives, the front-end will move to `/api/v1/graph/..
 
 1. **More connectors:** Claude.ai web export (`conversations.json`), GitHub issues/PRs, browser bookmarks (OPML).
 2. **Concept extraction:** lightweight TF-IDF / embedding-based concept nodes linked to conversations.
-3. **Backend:** swap `data/graph.json` for the Neo4j + NestJS API in §6 of the spec, behind the `data.js` boundary.
+3. **Backend:** swap `web/data/graph.json` for the Neo4j + NestJS API in §6 of the spec, behind the `data.js` boundary.
 4. **Multi-user + auth:** Phase 1+ of the spec.
 
 ## Architecture (target)

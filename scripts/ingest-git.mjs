@@ -25,7 +25,7 @@ import { GraphBuilder, loadGraph, saveGraph, stableId } from './lib/graph-store.
 const execFileP = promisify(execFile);
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const GRAPH_PATH = join(REPO_ROOT, 'data', 'graph.json');
+const GRAPH_PATH = join(REPO_ROOT, 'web', 'data', 'graph.json');
 
 const SOURCE_ID = 'git';
 

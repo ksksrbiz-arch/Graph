@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { GraphBuilder, loadGraph, saveGraph, stableId } from './lib/graph-store.mjs';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const GRAPH_PATH = join(REPO_ROOT, 'data', 'graph.json');
+const GRAPH_PATH = join(REPO_ROOT, 'web', 'data', 'graph.json');
 const CLAUDE_HOME = process.env.CLAUDE_HOME || join(homedir(), '.claude');
 const PROJECTS_DIR = join(CLAUDE_HOME, 'projects');
 

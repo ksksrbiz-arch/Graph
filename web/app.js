@@ -108,7 +108,7 @@ async function refresh() {
     if (data.nodes.length === 0) renderEmpty();
   } catch (err) {
     document.getElementById('stats').textContent = '0 nodes · 0 edges';
-    renderEmpty(`Could not load <code>data/graph.json</code> — ${escape(err.message)}`);
+    renderEmpty(`Could not load <code>web/data/graph.json</code> — ${escape(err.message)}`);
   }
 }
 
