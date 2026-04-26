@@ -31,6 +31,15 @@ pnpm --filter @pkg/api start:dev
 
 Swagger UI: http://localhost:3001/api/docs
 
+## Hosted runtime
+
+- Use `apps/api/Dockerfile` for production container builds.
+- `/health` is liveness-only; `/health/ready` now checks Neo4j, Postgres, Redis, and Meilisearch connectivity.
+- `BRAIN_AUTO_START_USER_IDS` lets the API resume selected user brains on boot.
+- `BRAIN_AUTO_START_DREAM`, `BRAIN_DEFAULT_AWAKE_MS`, and `BRAIN_DEFAULT_DREAM_MS` control the always-on wake/sleep cycle.
+- Redis owns the singleton runtime lock so only one API instance runs a given brain at a time.
+- `API_PUBLIC_URL` is used for OAuth callback generation, and `CORS_ORIGINS` gates browser + Socket.IO access from the separately hosted web app.
+
 ## Tests
 
 ```bash

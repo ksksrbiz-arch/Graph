@@ -4,6 +4,7 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
+import { splitCsvEnv } from './config/env-utils';
 import {
   IdempotencyInterceptor,
   IdempotencyService,
@@ -11,11 +12,21 @@ import {
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
+  const allowedOrigins = splitCsvEnv(env.CORS_ORIGINS);
 
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.setGlobalPrefix('api/v1', { exclude: ['health', 'health/ready', 'metrics'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
-  app.enableCors({ origin: true, credentials: true });
+  app.enableCors({
+    origin:
+      allowedOrigins.length === 0
+        ? true
+        : (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+            else callback(new Error('origin not allowed by CORS'));
+          },
+    credentials: true,
+  });
 
   // Apply the idempotency interceptor globally — it is a no-op for handlers
   // that aren't decorated with `@Idempotent()`, so this is free for endpoints

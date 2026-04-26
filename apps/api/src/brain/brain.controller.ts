@@ -4,6 +4,7 @@
 
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -19,6 +20,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Idempotent } from '../shared/idempotency/idempotency.interceptor';
 import { AttentionService, type AttentionFocus } from './attention.service';
+import { BrainRuntimeService, type BrainRuntimeStatus } from './brain-runtime.service';
 import { BrainService } from './brain.service';
 import { DreamService, type DreamStatus } from './dream.service';
 import { RecallService, type MemoryRecord } from './recall.service';
@@ -34,6 +36,7 @@ interface AuthedRequest extends Request {
 @Controller('brain')
 export class BrainController {
   constructor(
+    private readonly runtime: BrainRuntimeService,
     private readonly brain: BrainService,
     private readonly sensory: SensoryService,
     private readonly attention: AttentionService,
@@ -48,14 +51,18 @@ export class BrainController {
     required: false,
     description: 'Optional client token to dedupe rapid retries of brain start.',
   })
-  start(@Req() req: AuthedRequest): Promise<{ neurons: number; synapses: number }> {
-    return this.brain.start(req.user.sub);
+  async start(@Req() req: AuthedRequest): Promise<{ neurons: number; synapses: number }> {
+    const summary = await this.runtime.start(req.user.sub);
+    if (!summary) {
+      throw new ConflictException(`brain is already running on another instance for user=${req.user.sub}`);
+    }
+    return summary;
   }
 
   @Delete('stop')
   @HttpCode(204)
-  stop(@Req() req: AuthedRequest): void {
-    this.brain.stop(req.user.sub);
+  async stop(@Req() req: AuthedRequest): Promise<void> {
+    await this.runtime.stop(req.user.sub);
   }
 
   @Post('stimulate/:neuronId')
@@ -74,7 +81,13 @@ export class BrainController {
   checkpoint(
     @Req() req: AuthedRequest,
   ): Promise<{ persisted: number; skipped: number }> {
-    return this.brain.checkpoint(req.user.sub);
+    return this.runtime.checkpoint(req.user.sub);
+  }
+
+  @Get('runtime')
+  @ApiOperation({ summary: 'Hosted runtime status for the current user brain' })
+  runtimeStatus(@Req() req: AuthedRequest): Promise<BrainRuntimeStatus> {
+    return this.runtime.status(req.user.sub);
   }
 
   @Post('perceive/:neuronId')

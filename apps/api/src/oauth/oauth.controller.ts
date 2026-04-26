@@ -15,6 +15,8 @@ import type { Request, Response } from 'express';
 import type { ConnectorId } from '@pkg/shared';
 import { CONNECTOR_IDS } from '@pkg/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { loadEnv } from '../config/env';
+import { stripTrailingSlash } from '../config/env-utils';
 import { OAuthService } from './oauth.service';
 
 interface AuthedRequest extends Request {
@@ -108,6 +110,10 @@ export class OAuthController {
   }
 
   private callbackUri(req: Request, connectorId: ConnectorId): string {
+    const env = loadEnv();
+    if (env.API_PUBLIC_URL) {
+      return `${stripTrailingSlash(env.API_PUBLIC_URL)}/api/v1/oauth/callback/${connectorId}`;
+    }
     const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
     const host = req.headers.host;
     return `${proto}://${host}/api/v1/oauth/callback/${connectorId}`;

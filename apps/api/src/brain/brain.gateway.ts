@@ -17,6 +17,8 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
+import { loadEnv } from '../config/env';
+import { splitCsvEnv } from '../config/env-utils';
 import { BrainService } from './brain.service';
 import { InsightsService } from './insights.service';
 
@@ -36,6 +38,7 @@ export class BrainGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
 {
   private readonly log = new Logger(BrainGateway.name);
+  private readonly allowedOrigins = splitCsvEnv(loadEnv().CORS_ORIGINS);
   @WebSocketServer() server!: Server;
   private insightTimer?: NodeJS.Timeout;
   /** Set of userIds with at least one connected client — drives the insight
@@ -98,6 +101,16 @@ export class BrainGateway
   }
 
   handleConnection(client: Socket): void {
+    const origin = client.handshake.headers.origin;
+    if (
+      typeof origin === 'string' &&
+      this.allowedOrigins.length > 0 &&
+      !this.allowedOrigins.includes(origin)
+    ) {
+      client.emit('error', { message: 'origin not allowed' });
+      client.disconnect(true);
+      return;
+    }
     const userId = this.extractUserId(client);
     if (!userId) {
       client.emit('error', { message: 'missing userId query parameter' });
