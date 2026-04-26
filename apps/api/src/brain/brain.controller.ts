@@ -12,7 +12,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { BrainService } from './brain.service';
@@ -47,5 +47,13 @@ export class BrainController {
     @Body('currentMv') currentMv?: number,
   ): void {
     this.brain.stimulate(req.user.sub, neuronId, currentMv);
+  }
+
+  @Post('checkpoint')
+  @ApiOperation({ summary: 'Force-flush learned synaptic weights to Neo4j' })
+  checkpoint(
+    @Req() req: AuthedRequest,
+  ): Promise<{ persisted: number; skipped: number }> {
+    return this.brain.checkpoint(req.user.sub);
   }
 }
