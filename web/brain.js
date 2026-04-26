@@ -6,6 +6,22 @@
 
 import { SpikingSimulator } from './spiking.js';
 import { regionForNode } from './cortex.js';
+
+/** True when the page is hosted somewhere the v2 brain api isn't reachable
+ *  (Cloudflare Workers/Pages, *.workers.dev, *.pages.dev, github.io, etc.).
+ *  In that case we skip the websocket attempt and go straight to the local
+ *  in-browser simulator — this avoids a noisy WebSocket error in DevTools. */
+function looksLikeStaticHost() {
+  if (typeof window === 'undefined') return true;
+  const h = window.location.hostname || '';
+  if (h === 'localhost' || h === '127.0.0.1' || h.endsWith('.local')) return false;
+  // Any *.workers.dev / *.pages.dev / *.github.io host has no api co-located
+  if (h.endsWith('.workers.dev')) return true;
+  if (h.endsWith('.pages.dev')) return true;
+  if (h.endsWith('.github.io')) return true;
+  // Default: assume there might be an api; let the timeout sort it out
+  return false;
+}
 import { socketNamespaceUrl } from './util.js';
 
 export function createBrainClient({ getGraph, getUserId, onSpike, onWeight }) {
@@ -17,6 +33,10 @@ export function createBrainClient({ getGraph, getUserId, onSpike, onWeight }) {
 
   async function tryConnectSocket() {
     if (typeof window === 'undefined') return false;
+    if (looksLikeStaticHost()) {
+      console.info('[brain] static host — skipping websocket, using local in-browser simulator');
+      return false;
+    }
     if (!window.io) return false;
     const userId = getUserId?.();
     if (!userId) return false;
