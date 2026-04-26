@@ -18,8 +18,8 @@ export function initSettingsView() {
     setConfig({ showLabels: e.target.checked });
     savePrefs();
   });
-  document.getElementById('cfg-particles').addEventListener('change', (e) => {
-    setConfig({ particles: e.target.checked });
+  document.getElementById('cfg-spikes').addEventListener('change', (e) => {
+    setConfig({ spikes: e.target.checked });
     savePrefs();
   });
   document.getElementById('cfg-auto-refresh').addEventListener('change', (e) => {
@@ -61,7 +61,7 @@ function reflectConfigInUI() {
   setVal('cfg-link', c.linkDistance, 'cfg-link-val');
   setVal('cfg-node-size', c.nodeRelSize, 'cfg-node-size-val');
   document.getElementById('cfg-labels').checked = c.showLabels;
-  document.getElementById('cfg-particles').checked = c.particles;
+  document.getElementById('cfg-spikes').checked = c.spikes !== false;
   document.getElementById('cfg-auto-refresh').checked = c.autoRefresh;
 }
 

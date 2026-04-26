@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { BrainModule } from './brain/brain.module';
 import { ConnectorsModule } from './connectors/connectors.module';
 import { GraphModule } from './graph/graph.module';
 import { HealthModule } from './health/health.module';
@@ -23,6 +24,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     AuditModule,
     GraphModule,
+    BrainModule,
     ConnectorsModule,
     SyncModule,
   ],

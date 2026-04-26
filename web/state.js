@@ -6,6 +6,8 @@ export const state = {
   graph: { nodes: [], edges: [], metadata: {} },
   byId: new Map(),
   adjacency: new Map(),
+  /** sourceId -> array of outgoing edge objects (used by the spike renderer). */
+  outgoing: new Map(),
   filters: {
     types: new Set(),
     minEdgeWeight: 0,
@@ -21,7 +23,7 @@ export const state = {
     linkDistance: 60,
     nodeRelSize: 4,
     showLabels: false,
-    particles: false,
+    spikes: true,
     autoRefresh: false,
   },
   loading: false,
@@ -40,6 +42,7 @@ export function setGraph(graph) {
   state.graph = graph;
   state.byId = new Map(graph.nodes.map((n) => [n.id, n]));
   state.adjacency = buildAdjacency(graph.edges);
+  state.outgoing = buildOutgoing(graph.edges);
   for (const n of graph.nodes) {
     n.__degree = (state.adjacency.get(n.id)?.size) || 0;
   }
@@ -63,6 +66,16 @@ function buildAdjacency(edges) {
     adj.get(t).add(s);
   }
   return adj;
+}
+
+function buildOutgoing(edges) {
+  const out = new Map();
+  for (const e of edges) {
+    const s = srcId(e);
+    if (!out.has(s)) out.set(s, []);
+    out.get(s).push(e);
+  }
+  return out;
 }
 
 export function neighborsWithin(rootId, depth) {
