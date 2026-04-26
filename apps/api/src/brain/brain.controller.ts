@@ -14,9 +14,10 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Idempotent } from '../shared/idempotency/idempotency.interceptor';
 import { AttentionService, type AttentionFocus } from './attention.service';
 import { BrainService } from './brain.service';
 import { DreamService, type DreamStatus } from './dream.service';
@@ -41,6 +42,12 @@ export class BrainController {
   ) {}
 
   @Post('start')
+  @Idempotent()
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description: 'Optional client token to dedupe rapid retries of brain start.',
+  })
   start(@Req() req: AuthedRequest): Promise<{ neurons: number; synapses: number }> {
     return this.brain.start(req.user.sub);
   }
@@ -63,6 +70,7 @@ export class BrainController {
 
   @Post('checkpoint')
   @ApiOperation({ summary: 'Force-flush learned synaptic weights to Neo4j' })
+  @Idempotent()
   checkpoint(
     @Req() req: AuthedRequest,
   ): Promise<{ persisted: number; skipped: number }> {
@@ -71,6 +79,7 @@ export class BrainController {
 
   @Post('perceive/:neuronId')
   @ApiOperation({ summary: 'Fire a node as if a connector just observed it' })
+  @Idempotent()
   perceive(
     @Req() req: AuthedRequest,
     @Param('neuronId') neuronId: string,
@@ -88,6 +97,7 @@ export class BrainController {
 
   @Post('attend')
   @ApiOperation({ summary: 'Direct the brain to focus on neurons matching a query' })
+  @Idempotent()
   attend(
     @Req() req: AuthedRequest,
     @Body() dto: { query: string; durationMs?: number; pulseCurrent?: number },
@@ -114,6 +124,7 @@ export class BrainController {
 
   @Post('dream/start')
   @ApiOperation({ summary: 'Begin the awake/sleep dream cycle' })
+  @Idempotent()
   dreamStart(
     @Req() req: AuthedRequest,
     @Body() dto: { awakeMs?: number; dreamMs?: number },

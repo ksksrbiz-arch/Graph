@@ -11,9 +11,10 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Idempotent } from '../shared/idempotency/idempotency.interceptor';
 import { GraphService } from './graph.service';
 
 interface AuthedRequest extends Request {
@@ -38,6 +39,13 @@ export class GraphController {
 
   @Delete('nodes/:id')
   @HttpCode(204)
+  @Idempotent()
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description:
+      'Optional client token; repeating the same key returns the cached response.',
+  })
   async deleteNode(@Req() req: AuthedRequest, @Param('id') id: string): Promise<void> {
     await this.graph.deleteNode(req.user.sub, id);
   }
