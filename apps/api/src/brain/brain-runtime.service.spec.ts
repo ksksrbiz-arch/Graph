@@ -61,7 +61,9 @@ describe('BrainRuntimeService', () => {
         return 'OK';
       }),
       get: jest.fn().mockImplementation(async (key: string) => store.get(key) ?? null),
-      eval: jest.fn().mockImplementation(async (script: string, _keys: number, key: string, value: string) => {
+      eval: jest.fn().mockImplementation(
+        async (script: string, keyCount: number, key: string, value: string, ttlSeconds?: string) => {
+        expect(keyCount).toBe(1);
         if (script.includes('DEL')) {
           if (store.get(key) === value) {
             store.delete(key);
@@ -69,6 +71,7 @@ describe('BrainRuntimeService', () => {
           }
           return 0;
         }
+        expect(ttlSeconds).toBeDefined();
         if (store.get(key) === value) return 1;
         return 0;
       }),

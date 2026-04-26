@@ -4,6 +4,7 @@
 
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -50,8 +51,12 @@ export class BrainController {
     required: false,
     description: 'Optional client token to dedupe rapid retries of brain start.',
   })
-  start(@Req() req: AuthedRequest): Promise<{ neurons: number; synapses: number }> {
-    return this.runtime.start(req.user.sub).then((summary) => summary ?? { neurons: 0, synapses: 0 });
+  async start(@Req() req: AuthedRequest): Promise<{ neurons: number; synapses: number }> {
+    const summary = await this.runtime.start(req.user.sub);
+    if (!summary) {
+      throw new ConflictException(`brain is already running on another instance for user=${req.user.sub}`);
+    }
+    return summary;
   }
 
   @Delete('stop')

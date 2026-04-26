@@ -99,7 +99,7 @@ function renderShell(root) {
     ),
   );
   if (config.apiBaseUrl) {
-    root.appendChild(el('p', { class: 'view-sub' }, `API endpoint: ${escape(config.apiBaseUrl)}`));
+    root.appendChild(el('p', { class: 'view-sub' }, `API endpoint: ${config.apiBaseUrl}`));
   }
 
   const grid = el('div', { class: 'brain-grid' });

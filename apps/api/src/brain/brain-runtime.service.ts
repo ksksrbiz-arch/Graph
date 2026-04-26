@@ -44,6 +44,8 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then
 end
 return 0
 `;
+const LOCK_RENEWAL_DIVISOR = 3;
+const MIN_RENEWAL_DELAY_MS = 5_000;
 
 @Injectable()
 export class BrainRuntimeService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -150,11 +152,16 @@ export class BrainRuntimeService implements OnApplicationBootstrap, OnModuleDest
 
   private startRenewTimer(userId: string): void {
     this.stopRenewTimer(userId);
-    const delayMs = Math.max(5_000, Math.floor((this.env.BRAIN_LOCK_TTL_SECONDS * 1_000) / 3));
+    // Renew after one-third of the TTL so each lock gets multiple chances to
+    // refresh before expiry, even if Redis or the network hiccups briefly.
+    const delayMs = Math.max(
+      // Avoid hammering Redis when operators choose a short lock TTL.
+      MIN_RENEWAL_DELAY_MS,
+      Math.floor((this.env.BRAIN_LOCK_TTL_SECONDS * 1_000) / LOCK_RENEWAL_DIVISOR),
+    );
     const timer = setInterval(() => {
       void this.renewLock(userId);
     }, delayMs);
-    if (typeof timer.unref === 'function') timer.unref();
     this.ownedLocks.set(userId, timer);
   }
 
@@ -196,6 +203,6 @@ export class BrainRuntimeService implements OnApplicationBootstrap, OnModuleDest
   }
 
   private lockKey(userId: string): string {
-    return `brain:owner:${userId}`;
+    return `brain:owner:${encodeURIComponent(userId)}`;
   }
 }

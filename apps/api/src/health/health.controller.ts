@@ -73,8 +73,12 @@ export class HealthController {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return { meilisearch: { status: 'up' } };
         } catch (err) {
+          const message =
+            err instanceof TypeError
+              ? `network failure reaching ${this.env.MEILI_HOST}: ${err.message}`
+              : (err as Error).message;
           return {
-            meilisearch: { status: 'down', message: (err as Error).message },
+            meilisearch: { status: 'down', message },
           };
         }
       },
