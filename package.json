@@ -22,13 +22,15 @@
     "build": "pnpm -r --if-present run build",
     "stack:up": "docker compose up -d",
     "stack:down": "docker compose down",
-    "stack:logs": "docker compose logs -f"
+    "stack:logs": "docker compose logs -f",
+    "sniff:brain": "node --no-warnings tools/sniff-brain.mjs"
   },
   "engines": {
     "node": ">=18",
     "pnpm": ">=8"
   },
   "devDependencies": {
-    "wrangler": "^4.85.0"
+    "wrangler": "^4.85.0",
+    "socket.io-client": "^4.8.0"
   }
 }
