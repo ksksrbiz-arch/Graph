@@ -6,6 +6,7 @@
 
 import { SpikingSimulator } from './spiking.js';
 import { regionForNode } from './cortex.js';
+import { socketNamespaceUrl } from './util.js';
 
 export function createBrainClient({ getGraph, getUserId, onSpike, onWeight }) {
   let mode = 'idle';
@@ -125,16 +126,3 @@ export function createBrainClient({ getGraph, getUserId, onSpike, onWeight }) {
 function clamp01(x) { return Math.max(0, Math.min(1, Number(x) || 0)); }
 function srcId(e) { return typeof e.source === 'object' ? e.source.id : e.source; }
 function tgtId(e) { return typeof e.target === 'object' ? e.target.id : e.target; }
-
-function socketNamespaceUrl(apiBaseUrl, namespace) {
-  return `${originFromApiBase(apiBaseUrl)}${namespace}`;
-}
-
-function originFromApiBase(apiBaseUrl) {
-  try {
-    if (typeof apiBaseUrl === 'string' && apiBaseUrl.length > 0) {
-      return new URL(apiBaseUrl, window.location.origin).origin;
-    }
-  } catch {}
-  return window.location.origin;
-}

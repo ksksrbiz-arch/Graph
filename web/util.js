@@ -58,6 +58,19 @@ export function fmtTime(s) {
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
+export function socketNamespaceUrl(apiBaseUrl, namespace) {
+  return `${originFromApiBase(apiBaseUrl)}${namespace}`;
+}
+
+function originFromApiBase(apiBaseUrl) {
+  try {
+    if (typeof apiBaseUrl === 'string' && apiBaseUrl.length > 0) {
+      return new URL(apiBaseUrl, window.location.origin).origin;
+    }
+  } catch {}
+  return window.location.origin;
+}
+
 export function showToast(msg, kind = '') {
   const el = document.getElementById('toast');
   el.textContent = msg;

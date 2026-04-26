@@ -11,7 +11,7 @@
 // future build step can inject a JWT-aware base URL without touching this
 // file.
 
-import { el, fmtTime, escape } from '../util.js';
+import { el, fmtTime, escape, socketNamespaceUrl } from '../util.js';
 
 const REGION_LABELS = {
   sensory: 'Sensory',
@@ -75,19 +75,6 @@ function ensureSocket() {
   socket.on('spike', () => {
     bumpHeartbeat();
   });
-}
-
-function socketNamespaceUrl(apiBaseUrl, namespace) {
-  return `${originFromApiBase(apiBaseUrl)}${namespace}`;
-}
-
-function originFromApiBase(apiBaseUrl) {
-  try {
-    if (typeof apiBaseUrl === 'string' && apiBaseUrl.length > 0) {
-      return new URL(apiBaseUrl, window.location.origin).origin;
-    }
-  } catch {}
-  return window.location.origin;
 }
 
 function disposeSocket() {
