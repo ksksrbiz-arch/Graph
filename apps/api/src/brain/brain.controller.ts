@@ -18,6 +18,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AttentionService, type AttentionFocus } from './attention.service';
 import { BrainService } from './brain.service';
+import { DreamService, type DreamStatus } from './dream.service';
 import { SensoryService } from './sensory.service';
 
 interface AuthedRequest extends Request {
@@ -33,6 +34,7 @@ export class BrainController {
     private readonly brain: BrainService,
     private readonly sensory: SensoryService,
     private readonly attention: AttentionService,
+    private readonly dream: DreamService,
   ) {}
 
   @Post('start')
@@ -105,5 +107,37 @@ export class BrainController {
     @Req() req: AuthedRequest,
   ): AttentionFocus | { query: null } {
     return this.attention.current(req.user.sub) ?? { query: null };
+  }
+
+  @Post('dream/start')
+  @ApiOperation({ summary: 'Begin the awake/sleep dream cycle' })
+  dreamStart(
+    @Req() req: AuthedRequest,
+    @Body() dto: { awakeMs?: number; dreamMs?: number },
+  ): DreamStatus {
+    return this.dream.start(req.user.sub, dto ?? {});
+  }
+
+  @Delete('dream/stop')
+  @ApiOperation({ summary: 'Stop the dream cycle' })
+  dreamStop(@Req() req: AuthedRequest): { stopped: boolean } {
+    return { stopped: this.dream.stop(req.user.sub) };
+  }
+
+  @Get('dream/status')
+  @ApiOperation({ summary: 'Current dream phase + cycle timing' })
+  dreamStatus(
+    @Req() req: AuthedRequest,
+  ): DreamStatus | { phase: null } {
+    return this.dream.status(req.user.sub) ?? { phase: null };
+  }
+
+  @Post('dream/trigger')
+  @ApiOperation({ summary: 'Force an immediate sleep phase' })
+  dreamTrigger(
+    @Req() req: AuthedRequest,
+    @Body() dto: { dreamMs?: number },
+  ): { triggered: boolean } {
+    return this.dream.triggerDream(req.user.sub, dto?.dreamMs);
   }
 }

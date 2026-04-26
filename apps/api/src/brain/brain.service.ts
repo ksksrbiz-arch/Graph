@@ -24,6 +24,14 @@ interface RunningBrain {
   stimCursor: number;
   /** Sorted neuron ids — for cycling stimuli through the population. */
   neuronIds: string[];
+  /** Per-user spike listeners — DreamService / RecallService subscribe here. */
+  spikeListeners: Set<PerUserSpikeListener>;
+  /** Awake-stimulus multiplier; DreamService dampens this during sleep. */
+  stimGain: number;
+  /** Noise multiplier relative to the configured baseline. */
+  noiseGain: number;
+  /** Baseline noise rate captured at start(); setNoiseGain scales this. */
+  baseNoiseRate: number;
 }
 
 const STEP_INTERVAL_MS = 50;
@@ -32,9 +40,11 @@ const STIMULUS_NEURONS_PER_TICK = 3;
 const STIMULUS_CURRENT_MV = 14;
 const CHECKPOINT_INTERVAL_MS = 5 * 60 * 1000; // 5 min
 const CHECKPOINT_MIN_DELTA = 0.02;            // skip if no synapse moved more than 2%
+const DEFAULT_NOISE_RATE = 0.002;
 
 type SpikeListener = (userId: string, e: SpikeEvent) => void;
 type WeightListener = (userId: string, e: WeightChangeEvent) => void;
+type PerUserSpikeListener = (e: SpikeEvent) => void;
 
 @Injectable()
 export class BrainService implements OnModuleDestroy {
@@ -53,17 +63,20 @@ export class BrainService implements OnModuleDestroy {
     this.stop(userId);
 
     const connectome = await this.loader.loadForUser(userId);
+    const baseNoiseRate = options.noiseRate ?? DEFAULT_NOISE_RATE;
     const sim = new SpikingSimulator({
       dtMs: 1,
-      noiseRate: 0.002,
+      noiseRate: baseNoiseRate,
       bias: 0.05,
       plasticity: true,
       ...options,
     });
     sim.loadConnectome(connectome);
 
+    const spikeListeners = new Set<PerUserSpikeListener>();
     sim.onSpike((e) => {
       for (const fn of this.spikeListeners) fn(userId, e);
+      for (const fn of spikeListeners) fn(e);
     });
     sim.onWeightChange((e) => {
       for (const fn of this.weightListeners) fn(userId, e);
@@ -89,6 +102,10 @@ export class BrainService implements OnModuleDestroy {
       neuronIds,
       lastWeights,
       checkpointTimer,
+      spikeListeners,
+      stimGain: 1.0,
+      noiseGain: 1.0,
+      baseNoiseRate,
       timer: setInterval(() => this.tick(brain), STEP_INTERVAL_MS),
     };
     this.running.set(userId, brain);
@@ -134,6 +151,40 @@ export class BrainService implements OnModuleDestroy {
     return () => this.weightListeners.delete(fn);
   }
 
+  /** Subscribe to spike events from a single user's brain. Used by DreamService
+   *  / RecallService so they don't have to pay the global-fan-out cost just to
+   *  filter to one userId. No-op if the brain isn't currently running. */
+  onSpike(userId: string, fn: PerUserSpikeListener): void {
+    this.running.get(userId)?.spikeListeners.add(fn);
+  }
+
+  /** Detach a per-user listener. Without `fn`, clears all listeners for the
+   *  user. */
+  offSpike(userId: string, fn?: PerUserSpikeListener): void {
+    const b = this.running.get(userId);
+    if (!b) return;
+    if (fn) b.spikeListeners.delete(fn);
+    else b.spikeListeners.clear();
+  }
+
+  /** Multiplier on the awake stimulus driver. DreamService drops this to ~0.1
+   *  during sleep so the cycling pulse barely fires. Clamped to >= 0. */
+  setStimulationGain(userId: string, gain: number): void {
+    const b = this.running.get(userId);
+    if (!b) return;
+    b.stimGain = Math.max(0, gain);
+  }
+
+  /** Multiplier on the spontaneous noise rate (relative to the rate at start).
+   *  DreamService raises this during sleep so the network has something to
+   *  replay. Propagated to the simulator immediately. */
+  setNoiseGain(userId: string, gain: number): void {
+    const b = this.running.get(userId);
+    if (!b) return;
+    b.noiseGain = Math.max(0, gain);
+    b.sim.setNoiseRate(b.baseNoiseRate * b.noiseGain);
+  }
+
   /**
    * Persist any synapse whose weight has drifted by at least
    * `CHECKPOINT_MIN_DELTA` from its last persisted value. Returns counts so
@@ -172,13 +223,14 @@ export class BrainService implements OnModuleDestroy {
   }
 
   private tick(brain: RunningBrain): void {
-    if (brain.neuronIds.length > 0) {
+    if (brain.neuronIds.length > 0 && brain.stimGain > 0) {
       // Cycle a stimulus pulse through the population so the network breathes
       // even without external traffic. New ingest events override this via
-      // `stimulate(...)`.
+      // `stimulate(...)`. DreamService dampens stimGain to ~0.1 during sleep.
+      const current = STIMULUS_CURRENT_MV * brain.stimGain;
       for (let i = 0; i < STIMULUS_NEURONS_PER_TICK; i++) {
         const id = brain.neuronIds[brain.stimCursor % brain.neuronIds.length];
-        if (id) brain.sim.inject(id, STIMULUS_CURRENT_MV);
+        if (id) brain.sim.inject(id, current);
         brain.stimCursor += 1;
       }
     }

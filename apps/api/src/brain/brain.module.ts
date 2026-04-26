@@ -4,6 +4,7 @@ import { BrainController } from './brain.controller';
 import { BrainGateway } from './brain.gateway';
 import { BrainService } from './brain.service';
 import { ConnectomeLoader } from './connectome.loader';
+import { DreamService } from './dream.service';
 import { SensoryService } from './sensory.service';
 
 @Module({
@@ -14,7 +15,8 @@ import { SensoryService } from './sensory.service';
     ConnectomeLoader,
     SensoryService,
     AttentionService,
+    DreamService,
   ],
-  exports: [BrainService, SensoryService, AttentionService],
+  exports: [BrainService, SensoryService, AttentionService, DreamService],
 })
 export class BrainModule {}
