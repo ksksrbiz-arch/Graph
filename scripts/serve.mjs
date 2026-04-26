@@ -20,6 +20,8 @@ const MIME = {
 
 const INGESTERS = {
   'claude-code': 'scripts/ingest-claude-code.mjs',
+  'git': 'scripts/ingest-git.mjs',
+  'markdown': 'scripts/ingest-markdown.mjs',
 };
 
 function safeJoin(urlPath) {

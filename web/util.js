@@ -9,6 +9,11 @@ function readTypeColors() {
     file: cssVar('--t-file'),
     model: cssVar('--t-model'),
     concept: cssVar('--t-concept'),
+    repo: cssVar('--t-repo'),
+    commit: cssVar('--t-commit'),
+    author: cssVar('--t-author'),
+    note: cssVar('--t-note'),
+    tag: cssVar('--t-tag'),
   };
 }
 
