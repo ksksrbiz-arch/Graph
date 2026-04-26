@@ -87,6 +87,7 @@ function initForceGraph() {
   container.innerHTML = '';
   fg = ForceGraph()(container)
     .backgroundColor('rgba(0,0,0,0)')
+    .autoPauseRedraw(false)
     .nodeId('id')
     .nodeLabel((n) => `${escape(n.label || n.id)} — ${n.type}`)
     .nodeVal((n) => Math.max(1, Math.sqrt(n.__degree || 1) * 3))
@@ -295,7 +296,6 @@ function applyConfig() {
   if (link) link.distance(state.config.linkDistance);
   fg.nodeRelSize(state.config.nodeRelSize);
   fg.d3ReheatSimulation();
-  fg.refresh();
 
   if (state.config.spikes === false) {
     spikes?.stop();
@@ -308,7 +308,7 @@ function applyConfig() {
 }
 
 function refreshOverlay() {
-  if (fg) fg.refresh();
+  if (!fg) return;
 }
 
 function buildTypeFilters() {
