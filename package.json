@@ -10,10 +10,10 @@
   ],
   "scripts": {
     "start": "node scripts/serve.mjs",
-    "ingest:claude-code": "node scripts/ingest-claude-code.mjs",
-    "ingest:git": "node scripts/ingest-git.mjs",
-    "ingest:markdown": "node scripts/ingest-markdown.mjs",
-    "ingest": "node scripts/ingest-claude-code.mjs",
+    "ingest:claude-code": "node scripts/ingest-claude-code.mjs && cp data/graph.json web/data/graph.json",
+    "ingest:git": "node scripts/ingest-git.mjs && cp data/graph.json web/data/graph.json",
+    "ingest:markdown": "node scripts/ingest-markdown.mjs && cp data/graph.json web/data/graph.json",
+    "ingest": "node scripts/ingest-claude-code.mjs && cp data/graph.json web/data/graph.json",
     "deploy": "wrangler deploy",
     "preview": "wrangler dev",
     "lint": "pnpm -r --if-present run lint",
@@ -24,7 +24,8 @@
     "stack:down": "docker compose down",
     "stack:logs": "docker compose logs -f",
     "import:neo4j": "node scripts/import-to-neo4j.mjs",
-    "sniff:brain": "node --no-warnings tools/sniff-brain.mjs"
+    "sniff:brain": "node --no-warnings tools/sniff-brain.mjs",
+    "data:sync": "cp data/graph.json web/data/graph.json"
   },
   "engines": {
     "node": ">=18",
