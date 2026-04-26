@@ -26,10 +26,10 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Build the shared package first so workspace consumers can resolve it
-      # via its compiled `dist/`. Source-mode resolution would require TS path
-      # mapping in every consumer; build-once is simpler.
-      - run: pnpm --filter @pkg/shared run build
+      # Build every workspace package first so consumers can resolve them
+      # via their compiled `dist/`. Source-mode resolution would require TS
+      # path mapping in every consumer; build-once is simpler.
+      - run: pnpm -r --filter "./packages/*" run build
       - run: pnpm run lint
       - run: pnpm run type-check
 
@@ -85,7 +85,7 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @pkg/shared run build
+      - run: pnpm -r --filter "./packages/*" run build
       - run: pnpm test
       - uses: actions/upload-artifact@v4
         if: always()
