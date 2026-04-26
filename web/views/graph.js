@@ -47,7 +47,7 @@ export function initGraphView() {
   subscribe((reason) => {
     if (reason === 'graph-loaded') buildOrUpdate();
     else if (reason === 'filters-changed' || reason === 'search-changed' || reason === 'focus-changed') applyFilters();
-    else if (reason === 'selection-changed') renderPanel();
+    else if (reason === 'selection-changed') { renderPanel(); refreshOverlay(); }
     else if (reason === 'hover-changed') refreshOverlay();
     else if (reason === 'config-changed') applyConfig();
   });
@@ -105,6 +105,56 @@ function initForceGraph() {
   });
   ro.observe(container);
   fg.width(container.clientWidth).height(container.clientHeight);
+
+  attachLongPress(container);
+}
+
+function attachLongPress(container) {
+  let timer = null;
+  let startX = 0, startY = 0;
+  let triggered = false;
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+
+  container.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1 || !fg) return;
+    triggered = false;
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY;
+    timer = setTimeout(() => {
+      timer = null;
+      const rect = container.getBoundingClientRect();
+      const coords = fg.screen2GraphCoords(startX - rect.left, startY - rect.top);
+      const node = pickNodeAt(coords.x, coords.y);
+      if (node) {
+        triggered = true;
+        if (navigator.vibrate) navigator.vibrate(20);
+        openContextMenu(node, { clientX: startX, clientY: startY });
+      }
+    }, 500);
+  }, { passive: true });
+
+  container.addEventListener('touchmove', (e) => {
+    if (!timer) return;
+    const t = e.touches[0];
+    if (Math.hypot(t.clientX - startX, t.clientY - startY) > 10) cancel();
+  }, { passive: true });
+
+  container.addEventListener('touchend', () => {
+    cancel();
+    if (triggered) triggered = false;
+  });
+  container.addEventListener('touchcancel', cancel);
+}
+
+function pickNodeAt(x, y) {
+  let best = null, bestDist = Infinity;
+  for (const n of state.graph.nodes) {
+    if (n.x == null || n.y == null) continue;
+    const r = nodeRadius(n) + 6;
+    const d = Math.hypot(n.x - x, n.y - y);
+    if (d <= r && d < bestDist) { best = n; bestDist = d; }
+  }
+  return best;
 }
 
 function drawNode(node, ctx, scale) {
@@ -124,16 +174,46 @@ function drawNode(node, ctx, scale) {
     ctx.strokeStyle = 'rgba(255,255,255,0.7)';
     ctx.stroke();
   }
-  if (!state.config.showLabels) return;
-  const showAlways = (node.__degree || 0) >= 4 || node.id === state.selectedId || node.id === state.hoveredId;
-  if (scale < 1.5 && !showAlways) return;
+  const isFocal =
+    node.id === state.selectedId ||
+    node.id === state.hoveredId ||
+    node.id === state.focusRootId;
+  const focalAnchor = state.hoveredId || state.selectedId;
+  const isFocalNeighbor = focalAnchor && focalAnchor !== node.id &&
+    state.adjacency.get(focalAnchor)?.has(node.id);
+
+  let drawLabel = false;
+  if (isFocal || isFocalNeighbor) {
+    drawLabel = true;
+  } else if (state.config.showLabels) {
+    const isHub = (node.__degree || 0) >= 4;
+    if (isHub || scale >= 1.5) drawLabel = true;
+  }
+  if (!drawLabel) return;
+
   const label = node.label || node.id;
-  const fontSize = Math.max(9, 12 / scale);
+  const fontSize = Math.max(10, 12 / scale);
   ctx.font = `${fontSize}px -apple-system, system-ui, sans-serif`;
-  ctx.fillStyle = dim ? 'rgba(230,232,238,0.35)' : '#e6e8ee';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(truncate(label, 40), node.x + r + 3, node.y);
+  const textX = node.x + r + 4;
+  const textY = node.y;
+  if (isFocal) {
+    ctx.font = `600 ${fontSize}px -apple-system, system-ui, sans-serif`;
+    const text = truncate(label, 40);
+    const padX = 4 / scale;
+    const padY = 2 / scale;
+    const w = ctx.measureText(text).width;
+    ctx.fillStyle = 'rgba(11,13,18,0.78)';
+    ctx.fillRect(textX - padX, textY - fontSize / 2 - padY, w + padX * 2, fontSize + padY * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, textX, textY);
+  } else {
+    ctx.fillStyle = dim ? 'rgba(230,232,238,0.35)' : '#e6e8ee';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(truncate(label, 40), textX, textY);
+  }
 }
 
 function nodeRadius(n) {
