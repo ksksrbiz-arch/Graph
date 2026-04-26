@@ -16,17 +16,17 @@ export function createBrainClient({ getGraph, getUserId, onSpike, onWeight }) {
 
   async function tryConnectSocket() {
     if (typeof window === 'undefined') return false;
-        if (!window.io) return false;
-        const userId = getUserId?.();
-        if (!userId) return false;
-        return new Promise((resolve) => {
-          try {
-            const config = window.GRAPH_CONFIG || {};
-            const url = socketNamespaceUrl(config.apiBaseUrl, '/brain');
-            const s = window.io(url, {
-              transports: ['websocket'],
-              query: { userId },
-              timeout: 2000,
+    if (!window.io) return false;
+    const userId = getUserId?.();
+    if (!userId) return false;
+    return new Promise((resolve) => {
+      try {
+        const config = window.GRAPH_CONFIG || {};
+        const url = socketNamespaceUrl(config.apiBaseUrl, '/brain');
+        const s = window.io(url, {
+          transports: ['websocket'],
+          query: { userId },
+          timeout: 2000,
           reconnection: false,
         });
         const settle = (ok) => {
