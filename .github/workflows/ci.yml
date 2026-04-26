@@ -26,6 +26,10 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Build the shared package first so workspace consumers can resolve it
+      # via its compiled `dist/`. Source-mode resolution would require TS path
+      # mapping in every consumer; build-once is simpler.
+      - run: pnpm --filter @pkg/shared run build
       - run: pnpm run lint
       - run: pnpm run type-check
 
@@ -81,7 +85,8 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test -- --coverage
+      - run: pnpm --filter @pkg/shared run build
+      - run: pnpm test
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -91,10 +96,29 @@ jobs:
             packages/*/coverage
           if-no-files-found: ignore
 
+  # The e2e, lighthouse, and mutation jobs are intentionally gated by the
+  # presence of `apps/web/package.json` (e2e + lighthouse) or `apps/api/stryker.conf`
+  # (mutation). Phase 0 ships neither, so the jobs short-circuit cleanly.
+  # Each phase that adds the required artifact also flips the corresponding
+  # `if:` predicate by virtue of the file existing.
+  detect-targets:
+    name: Detect optional CI targets
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.check.outputs.web }}
+      stryker: ${{ steps.check.outputs.stryker }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if [ -f apps/web/package.json ]; then echo "web=true" >> $GITHUB_OUTPUT; else echo "web=false" >> $GITHUB_OUTPUT; fi
+          if [ -f apps/api/stryker.conf.json ] || [ -f apps/api/stryker.conf.mjs ]; then echo "stryker=true" >> $GITHUB_OUTPUT; else echo "stryker=false" >> $GITHUB_OUTPUT; fi
+
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: [detect-targets]
+    if: github.event_name == 'pull_request' && needs.detect-targets.outputs.web == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
@@ -122,8 +146,8 @@ jobs:
   lighthouse:
     name: Lighthouse CI
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    needs: [lint-and-type-check]
+    needs: [lint-and-type-check, detect-targets]
+    if: github.event_name == 'pull_request' && needs.detect-targets.outputs.web == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
@@ -140,7 +164,8 @@ jobs:
   mutation:
     name: Mutation testing (Stryker)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: [detect-targets]
+    if: github.event_name == 'pull_request' && needs.detect-targets.outputs.stryker == 'true'
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4

@@ -18,7 +18,7 @@ export class AuthService {
     return this.jwt.signAsync(payload);
   }
 
-  async login(email: string, _password: string): Promise<{ accessToken: string }> {
+  async login(_email: string, _password: string): Promise<{ accessToken: string }> {
     // TODO(phase-1): replace with real user lookup + bcrypt.compare.
     // Returning a 401 is intentional — until Phase 1 lands, login is disabled.
     throw new UnauthorizedException('login is implemented in Phase 1');

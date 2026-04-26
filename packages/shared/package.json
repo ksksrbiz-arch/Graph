@@ -2,7 +2,6 @@
   "name": "@pkg/shared",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "description": "Shared TypeScript types, zod schemas, and mock generators for PKG-VS. The single source of truth for §5 (Data Schemas) of the spec.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -10,17 +9,21 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./mocks": {
       "types": "./dist/mocks/index.d.ts",
-      "import": "./dist/mocks/index.js"
+      "import": "./dist/mocks/index.js",
+      "require": "./dist/mocks/index.js",
+      "default": "./dist/mocks/index.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "type-check": "tsc --noEmit",
-    "lint": "eslint src --max-warnings=0",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
     "test": "vitest run --coverage"
   },
   "dependencies": {
@@ -29,6 +32,8 @@
   "devDependencies": {
     "@faker-js/faker": "^8.4.1",
     "@types/node": "^20.11.30",
+    "@typescript-eslint/eslint-plugin": "^7.7.0",
+    "@typescript-eslint/parser": "^7.7.0",
     "@vitest/coverage-v8": "^1.6.0",
     "eslint": "^8.57.0",
     "typescript": "^5.4.5",

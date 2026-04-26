@@ -4,8 +4,8 @@ import {
   EnvSchema,
   KGEdgeSchema,
   KGNodeSchema,
-  generateGraph,
 } from '../index.js';
+import { generateGraph } from '../mocks/index.js';
 
 describe('shared schemas', () => {
   it('round-trips a generated node through KGNodeSchema', () => {
