@@ -23,6 +23,7 @@
     "stack:up": "docker compose up -d",
     "stack:down": "docker compose down",
     "stack:logs": "docker compose logs -f",
+    "import:neo4j": "node scripts/import-to-neo4j.mjs",
     "sniff:brain": "node --no-warnings tools/sniff-brain.mjs"
   },
   "engines": {
@@ -30,6 +31,7 @@
     "pnpm": ">=8"
   },
   "devDependencies": {
+    "neo4j-driver": "^5.28.3",
     "wrangler": "^4.85.0",
     "socket.io-client": "^4.8.0"
   }
