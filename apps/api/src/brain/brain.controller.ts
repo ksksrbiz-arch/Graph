@@ -12,10 +12,11 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { BrainService } from './brain.service';
+import { SensoryService } from './sensory.service';
 
 interface AuthedRequest extends Request {
   user: { sub: string };
@@ -26,7 +27,10 @@ interface AuthedRequest extends Request {
 @UseGuards(JwtAuthGuard)
 @Controller('brain')
 export class BrainController {
-  constructor(private readonly brain: BrainService) {}
+  constructor(
+    private readonly brain: BrainService,
+    private readonly sensory: SensoryService,
+  ) {}
 
   @Post('start')
   start(@Req() req: AuthedRequest): Promise<{ neurons: number; synapses: number }> {
@@ -47,5 +51,30 @@ export class BrainController {
     @Body('currentMv') currentMv?: number,
   ): void {
     this.brain.stimulate(req.user.sub, neuronId, currentMv);
+  }
+
+  @Post('checkpoint')
+  @ApiOperation({ summary: 'Force-flush learned synaptic weights to Neo4j' })
+  checkpoint(
+    @Req() req: AuthedRequest,
+  ): Promise<{ persisted: number; skipped: number }> {
+    return this.brain.checkpoint(req.user.sub);
+  }
+
+  @Post('perceive/:neuronId')
+  @ApiOperation({ summary: 'Fire a node as if a connector just observed it' })
+  perceive(
+    @Req() req: AuthedRequest,
+    @Param('neuronId') neuronId: string,
+  ): { ok: true } {
+    // Phase 0: synthesise a sensory pulse for an arbitrary node id. Phase 4+
+    // connectors will call SensoryService.perceive() directly with the real
+    // KGNode they just ingested.
+    this.sensory.perceive(req.user.sub, {
+      id: neuronId,
+      type: 'email',
+      sourceId: 'gmail',
+    });
+    return { ok: true };
   }
 }

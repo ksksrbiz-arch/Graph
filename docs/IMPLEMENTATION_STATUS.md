@@ -35,6 +35,17 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 | WebSocket gateway (Socket.IO) for `graph:delta` events  | ⬜ | |
 | Unit + integration tests for graph repository           | 🟡 | Service-level mock tests; integration tests pending |
 
+## Brain layer follow-ups (post-LIF/STDP merge)
+
+| Item                                                                                  | Status | Notes |
+| ------------------------------------------------------------------------------------- | ------ | ----- |
+| Periodic + on-shutdown weight checkpoints (5 min interval, Δ ≥ 0.02)                  | ✅ | `BrainService.checkpoint()` + `setInterval` per running brain + `onModuleDestroy` flush |
+| `POST /brain/checkpoint` to force-flush from a client                                 | ✅ | JWT-guarded |
+| `SensoryService.perceive(userId, node)` — connectors fire neurons on new node sync    | ✅ | Region-weighted current (sensory 30 mV, executive 22, limbic 18, motor 14, association/memory 12) |
+| `POST /brain/perceive/:neuronId` smoke endpoint                                       | ✅ | JWT-guarded; synthesises a sensory pulse |
+| Motor cortex safety supervisor — denylist + rate-limit + low-confidence + approval    | ✅ | `SafetySupervisor.evaluate()`, ring-buffered recent decisions |
+| `POST /motor/evaluate`, `GET /motor/recent`                                           | ✅ | JWT-guarded |
+
 ## Phases 3–8
 
 ⬜ Not started. Tracked here for visibility; do not rush these — each phase has its own DoD in §12 of the spec.

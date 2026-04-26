@@ -67,6 +67,28 @@ export class ConnectomeLoader {
       await session.close();
     }
   }
+
+  /**
+   * Write the latest synaptic weights back to Neo4j so STDP learning survives
+   * a service restart. Matches edges by their stable `r.id`, so the caller
+   * does not need to know the user that owns them.
+   */
+  async persistWeights(
+    updates: Array<{ id: string; weight: number }>,
+  ): Promise<void> {
+    if (updates.length === 0) return;
+    const session = this.driver.session();
+    try {
+      await session.run(
+        `UNWIND $updates AS u
+         MATCH ()-[r:REL {id: u.id}]->()
+         SET r.weight = u.weight`,
+        { updates },
+      );
+    } finally {
+      await session.close();
+    }
+  }
 }
 
 function clampUnit(x: number): number {

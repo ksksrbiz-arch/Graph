@@ -16,6 +16,10 @@ interface RunningBrain {
   userId: string;
   sim: SpikingSimulator;
   timer: NodeJS.Timeout;
+  checkpointTimer: NodeJS.Timeout;
+  /** Synapse id → weight at the last checkpoint. Lets `checkpoint()` skip
+   *  synapses whose strength hasn't drifted enough to be worth a write. */
+  lastWeights: Map<string, number>;
   /** Index of the next neuron to receive a stimulus pulse. */
   stimCursor: number;
   /** Sorted neuron ids — for cycling stimuli through the population. */
@@ -26,6 +30,8 @@ const STEP_INTERVAL_MS = 50;
 const STEPS_PER_TICK = 10;
 const STIMULUS_NEURONS_PER_TICK = 3;
 const STIMULUS_CURRENT_MV = 14;
+const CHECKPOINT_INTERVAL_MS = 5 * 60 * 1000; // 5 min
+const CHECKPOINT_MIN_DELTA = 0.02;            // skip if no synapse moved more than 2%
 
 type SpikeListener = (userId: string, e: SpikeEvent) => void;
 type WeightListener = (userId: string, e: WeightChangeEvent) => void;
@@ -64,11 +70,25 @@ export class BrainService implements OnModuleDestroy {
     });
 
     const neuronIds = connectome.neurons.map((n) => n.id);
+
+    // Snapshot weights now so the first checkpoint only writes synapses that
+    // have actually drifted from their loaded baseline.
+    const lastWeights = new Map<string, number>();
+    for (const w of sim.weights()) lastWeights.set(w.id, w.weight);
+
+    const checkpointTimer = setInterval(() => {
+      void this.checkpoint(userId).catch((e) =>
+        this.log.warn(`checkpoint failed: ${(e as Error).message}`),
+      );
+    }, CHECKPOINT_INTERVAL_MS);
+
     const brain: RunningBrain = {
       userId,
       sim,
       stimCursor: 0,
       neuronIds,
+      lastWeights,
+      checkpointTimer,
       timer: setInterval(() => this.tick(brain), STEP_INTERVAL_MS),
     };
     this.running.set(userId, brain);
@@ -83,6 +103,13 @@ export class BrainService implements OnModuleDestroy {
     const b = this.running.get(userId);
     if (!b) return false;
     clearInterval(b.timer);
+    clearInterval(b.checkpointTimer);
+    // Final checkpoint on stop — fire-and-forget. checkpoint() reads the brain
+    // synchronously before its first await, so deleting from `running` below
+    // does not race with the persistence write.
+    void this.checkpoint(userId).catch((e) =>
+      this.log.warn(`final checkpoint failed: ${(e as Error).message}`),
+    );
     this.running.delete(userId);
     this.log.log(`brain stopped user=${userId}`);
     return true;
@@ -107,8 +134,41 @@ export class BrainService implements OnModuleDestroy {
     return () => this.weightListeners.delete(fn);
   }
 
-  onModuleDestroy(): void {
-    for (const userId of [...this.running.keys()]) this.stop(userId);
+  /**
+   * Persist any synapse whose weight has drifted by at least
+   * `CHECKPOINT_MIN_DELTA` from its last persisted value. Returns counts so
+   * callers (timer, controller, shutdown hook) can log progress.
+   */
+  async checkpoint(userId: string): Promise<{ persisted: number; skipped: number }> {
+    const b = this.running.get(userId);
+    if (!b) return { persisted: 0, skipped: 0 };
+    const current = b.sim.weights();
+    const dirty: Array<{ id: string; weight: number }> = [];
+    for (const w of current) {
+      const prev = b.lastWeights.get(w.id);
+      if (prev === undefined || Math.abs(w.weight - prev) >= CHECKPOINT_MIN_DELTA) {
+        dirty.push({ id: w.id, weight: w.weight });
+        b.lastWeights.set(w.id, w.weight);
+      }
+    }
+    if (dirty.length > 0) {
+      await this.loader.persistWeights(dirty);
+      this.log.log(
+        `checkpoint user=${userId}: persisted ${dirty.length}/${current.length} synapses`,
+      );
+    }
+    return { persisted: dirty.length, skipped: current.length - dirty.length };
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    for (const userId of [...this.running.keys()]) {
+      try {
+        await this.checkpoint(userId);
+      } catch {
+        // swallow — shutdown should never throw
+      }
+      this.stop(userId);
+    }
   }
 
   private tick(brain: RunningBrain): void {

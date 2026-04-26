@@ -130,6 +130,16 @@ export class SpikingSimulator {
     return this.synapses.get(id);
   }
 
+  /** Snapshot of every synapse's current strength. Used by the persistence
+   *  layer to checkpoint learned weights back to the knowledge graph. */
+  weights(): Array<{ id: string; source: string; target: string; weight: number }> {
+    const out: Array<{ id: string; source: string; target: string; weight: number }> = [];
+    for (const s of this.synapses.values()) {
+      out.push({ id: s.id, source: s.pre, target: s.post, weight: s.weight });
+    }
+    return out;
+  }
+
   get clockMs(): number {
     return this.tMs;
   }

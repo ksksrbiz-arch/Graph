@@ -4,7 +4,10 @@ import type { ConnectomeLoader } from './connectome.loader';
 
 describe('BrainService', () => {
   function makeLoader(c: ConnectomeInput): ConnectomeLoader {
-    return { loadForUser: jest.fn().mockResolvedValue(c) } as unknown as ConnectomeLoader;
+    return {
+      loadForUser: jest.fn().mockResolvedValue(c),
+      persistWeights: jest.fn().mockResolvedValue(undefined),
+    } as unknown as ConnectomeLoader;
   }
 
   afterEach(() => {
