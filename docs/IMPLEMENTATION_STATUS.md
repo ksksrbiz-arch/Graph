@@ -46,6 +46,16 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 | Motor cortex safety supervisor — denylist + rate-limit + low-confidence + approval    | ✅ | `SafetySupervisor.evaluate()`, ring-buffered recent decisions |
 | `POST /motor/evaluate`, `GET /motor/recent`                                           | ✅ | JWT-guarded |
 
+## Brain layer phase 2 (Attention + Dreams + Recall)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| AttentionService — POST /brain/attend with label-or-neuron-id query | ✅ | Single focus per user, 30s default, auto-clear; resolves via Cypher `COUNT { (n)--() }` (Neo4j 5+) |
+| DreamService — 5min awake / 30s sleep cycle, replay during sleep | ✅ | Skips sleep when attention active; emits `dream` events on /brain |
+| RecallService — co-firing pair memories with half-life decay | ✅ | GET /brain/recall returns top-N; pruned at 2× cap |
+| BrainService runtime levers — onSpike, setStimulationGain, setNoiseGain | ✅ | Per-user listeners on RunningBrain; stim gain applied in tick(), noise gain via SpikingSimulator.setNoiseRate() |
+| BrainGateway emitDream broadcast | ✅ | clients can show wake/sleep state |
+
 ## Phases 3–8
 
 ⬜ Not started. Tracked here for visibility; do not rush these — each phase has its own DoD in §12 of the spec.
