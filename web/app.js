@@ -1,5 +1,5 @@
 import { state, setGraph, setSearch, emit } from './state.js';
-import { loadGraph, runIngest } from './data.js';
+import { loadGraph, runIngest, ingestSupported } from './data.js';
 import { fmtDate, showToast, escape } from './util.js';
 import { initGraphView } from './views/graph.js';
 import { initTimelineView } from './views/timeline.js';
@@ -74,6 +74,10 @@ async function bootstrap() {
 
   document.getElementById('ingest-btn').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
+    if (!(await ingestSupported())) {
+      showToast('Ingest is local-only. Run: npm run ingest:claude-code  →  git push  (auto-deploys)', 'info');
+      return;
+    }
     btn.disabled = true;
     const orig = btn.textContent;
     btn.textContent = 'Ingesting…';
@@ -94,6 +98,16 @@ async function bootstrap() {
   });
 
   await refresh();
+
+  // label-degrade: relabel ingest button on static deploys
+  if (!(await ingestSupported())) {
+    const btn = document.getElementById('ingest-btn');
+    if (btn) {
+      btn.title = 'Ingest is local-only. Run: npm run ingest:claude-code (then git push to deploy)';
+      const txt = btn.querySelector('.btn-text');
+      if (txt) txt.textContent = 'Ingest (local)';
+    }
+  }
 }
 
 async function refresh() {

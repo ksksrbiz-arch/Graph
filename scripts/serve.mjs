@@ -75,6 +75,11 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
+    if (url.pathname === '/api/ingest/health' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ingesters: Object.keys(INGESTERS) }));
+      return;
+    }
     if (url.pathname.startsWith('/api/ingest/') && req.method === 'POST') {
       const slug = url.pathname.slice('/api/ingest/'.length);
       const result = await runIngester(slug);
