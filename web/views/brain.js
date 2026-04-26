@@ -47,11 +47,11 @@ function maybeConnect() {
 function ensureSocket() {
   if (socket || typeof io === 'undefined') return;
   const config = window.GRAPH_CONFIG || {};
-  const apiBase = config.apiBaseUrl || window.location.origin;
+  const socketUrl = socketNamespaceUrl(config.apiBaseUrl, '/brain');
   const userId = config.brainUserId || FALLBACK_USER_ID;
 
   setStatus('connecting…');
-  socket = io(`${apiBase}/brain`, {
+  socket = io(socketUrl, {
     query: { userId },
     transports: ['websocket'],
     reconnection: true,
@@ -75,6 +75,19 @@ function ensureSocket() {
   socket.on('spike', () => {
     bumpHeartbeat();
   });
+}
+
+function socketNamespaceUrl(apiBaseUrl, namespace) {
+  return `${originFromApiBase(apiBaseUrl)}${namespace}`;
+}
+
+function originFromApiBase(apiBaseUrl) {
+  try {
+    if (typeof apiBaseUrl === 'string' && apiBaseUrl.length > 0) {
+      return new URL(apiBaseUrl, window.location.origin).origin;
+    }
+  } catch {}
+  return window.location.origin;
 }
 
 function disposeSocket() {

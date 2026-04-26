@@ -16,17 +16,17 @@ export function createBrainClient({ getGraph, getUserId, onSpike, onWeight }) {
 
   async function tryConnectSocket() {
     if (typeof window === 'undefined') return false;
-    if (!window.io) return false;
-    const userId = getUserId?.();
-    if (!userId) return false;
-    return new Promise((resolve) => {
-      try {
-        const config = window.GRAPH_CONFIG || {};
-        const url = `${config.apiBaseUrl || window.location.origin}/brain`;
-        const s = window.io(url, {
-          transports: ['websocket'],
-          query: { userId },
-          timeout: 2000,
+        if (!window.io) return false;
+        const userId = getUserId?.();
+        if (!userId) return false;
+        return new Promise((resolve) => {
+          try {
+            const config = window.GRAPH_CONFIG || {};
+            const url = socketNamespaceUrl(config.apiBaseUrl, '/brain');
+            const s = window.io(url, {
+              transports: ['websocket'],
+              query: { userId },
+              timeout: 2000,
           reconnection: false,
         });
         const settle = (ok) => {
@@ -125,3 +125,16 @@ export function createBrainClient({ getGraph, getUserId, onSpike, onWeight }) {
 function clamp01(x) { return Math.max(0, Math.min(1, Number(x) || 0)); }
 function srcId(e) { return typeof e.source === 'object' ? e.source.id : e.source; }
 function tgtId(e) { return typeof e.target === 'object' ? e.target.id : e.target; }
+
+function socketNamespaceUrl(apiBaseUrl, namespace) {
+  return `${originFromApiBase(apiBaseUrl)}${namespace}`;
+}
+
+function originFromApiBase(apiBaseUrl) {
+  try {
+    if (typeof apiBaseUrl === 'string' && apiBaseUrl.length > 0) {
+      return new URL(apiBaseUrl, window.location.origin).origin;
+    }
+  } catch {}
+  return window.location.origin;
+}
