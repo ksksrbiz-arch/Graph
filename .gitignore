@@ -6,3 +6,8 @@ node_modules/
 !.env.example
 .idea/
 .vscode/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
