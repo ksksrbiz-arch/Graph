@@ -2,8 +2,9 @@
 // recent decisions for testing / dashboards; Phase 1+ will add the
 // human-approval queue and async dispatch endpoints.
 
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   SafetySupervisor,
   type MotorIntent,
@@ -12,6 +13,8 @@ import {
 } from './safety-supervisor';
 
 @ApiTags('motor')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('motor')
 export class MotorController {
   constructor(private readonly supervisor: SafetySupervisor) {}
