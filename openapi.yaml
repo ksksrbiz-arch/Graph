@@ -1,0 +1,327 @@
+openapi: 3.1.0
+info:
+  title: PKG-VS API
+  version: 1.0.0
+  summary: Personal Knowledge Graph Visualization System — REST contract
+  description: |
+    Generated alongside spec §6.1. Phase 0 ships the contract; many endpoints
+    are stubs in the API until later phases land. The OpenAPI document is the
+    source of truth for client-side TypeScript types (Rule 7).
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:3001/api/v1
+    description: local dev
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: auth
+  - name: graph
+  - name: connectors
+  - name: users
+  - name: audit
+  - name: health
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: Email/password login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TokenPair' } } } }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      security: []
+      summary: Exchange refresh token for new access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AccessToken' } } } }
+
+  /graph/nodes:
+    get:
+      tags: [graph]
+      summary: Paginated node list
+      parameters:
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 100, maximum: 500 }
+        - in: query
+          name: type
+          schema: { $ref: '#/components/schemas/NodeType' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/NodePage' } } } }
+
+  /graph/nodes/{id}:
+    get:
+      tags: [graph]
+      summary: Single node detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/KGNode' } } } }
+        '404': { description: not found }
+    delete:
+      tags: [graph]
+      summary: Soft-delete node
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: deleted }
+
+  /graph/subgraph:
+    get:
+      tags: [graph]
+      summary: Ego-network subgraph
+      parameters:
+        - in: query
+          name: rootId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: depth
+          schema: { type: integer, default: 2, minimum: 1, maximum: 4 }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Subgraph' } } } }
+
+  /graph/search:
+    get:
+      tags: [graph]
+      summary: Full-text node search (Meilisearch-backed)
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 500 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/SearchResult' } } } }
+
+  /connectors:
+    get:
+      tags: [connectors]
+      summary: List connector configs for the authed user
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ConnectorConfig' } } } } }
+
+  /connectors/{id}/sync:
+    post:
+      tags: [connectors]
+      summary: Trigger manual sync
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/ConnectorId' }
+      responses:
+        '202': { description: queued, content: { application/json: { schema: { $ref: '#/components/schemas/SyncJob' } } } }
+
+  /users/me:
+    get:
+      tags: [users]
+      summary: Current user profile
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/UserProfile' } } } }
+    delete:
+      tags: [users]
+      summary: GDPR delete — purges all user data within 30 days (§10.3)
+      responses:
+        '202': { description: scheduled }
+
+  /audit-log:
+    get:
+      tags: [audit]
+      summary: Paginated audit log
+      parameters:
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50, maximum: 200 }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AuditPage' } } } }
+
+  /health:
+    get:
+      tags: [health]
+      security: []
+      summary: Liveness probe
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { type: object, properties: { status: { type: string, enum: [ok] } } } } } }
+
+  /health/ready:
+    get:
+      tags: [health]
+      security: []
+      summary: Readiness probe (checks dependencies)
+      responses:
+        '200': { description: ok }
+        '503': { description: dependency unavailable }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    NodeType:
+      type: string
+      enum: [person, document, email, event, task, repository, commit, issue, pull_request, bookmark, note, concept]
+
+    EdgeRelation:
+      type: string
+      enum: [MENTIONS, AUTHORED_BY, ASSIGNED_TO, RELATED_TO, PART_OF, LINKS_TO, REPLIED_TO, TAGGED_WITH, SCHEDULED_WITH, COMMITS_TO, CLOSES, REFERENCES]
+
+    ConnectorId:
+      type: string
+      enum: [gmail, outlook_mail, notion, obsidian, roam, github, gitlab, google_calendar, outlook_calendar, todoist, linear, bookmarks]
+
+    KGNode:
+      type: object
+      required: [id, label, type, createdAt, updatedAt, metadata, sourceId]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        type: { $ref: '#/components/schemas/NodeType' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        metadata: { type: object, additionalProperties: true }
+        sourceId: { $ref: '#/components/schemas/ConnectorId' }
+        sourceUrl: { type: string, format: uri }
+        embedding: { type: array, items: { type: number }, minItems: 384, maxItems: 384 }
+        deletedAt: { type: string, format: date-time }
+
+    KGEdge:
+      type: object
+      required: [id, source, target, relation, weight, inferred, createdAt, metadata]
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string }
+        target: { type: string }
+        relation: { $ref: '#/components/schemas/EdgeRelation' }
+        weight: { type: number, minimum: 0, maximum: 1 }
+        inferred: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        metadata: { type: object, additionalProperties: true }
+
+    Subgraph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes: { type: array, items: { $ref: '#/components/schemas/KGNode' } }
+        edges: { type: array, items: { $ref: '#/components/schemas/KGEdge' } }
+
+    NodePage:
+      type: object
+      required: [nodes, nextCursor]
+      properties:
+        nodes: { type: array, items: { $ref: '#/components/schemas/KGNode' } }
+        nextCursor: { type: string, nullable: true }
+
+    AuditPage:
+      type: object
+      required: [events, nextCursor]
+      properties:
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              userId: { type: string, format: uuid }
+              action: { type: string }
+              resource: { type: string }
+              resourceId: { type: string }
+              metadata: { type: object, additionalProperties: true }
+              createdAt: { type: string, format: date-time }
+        nextCursor: { type: string, nullable: true }
+
+    SearchResult:
+      type: object
+      required: [hits, query]
+      properties:
+        query: { type: string }
+        hits: { type: array, items: { $ref: '#/components/schemas/KGNode' } }
+
+    ConnectorConfig:
+      type: object
+      required: [id, userId, enabled, syncIntervalMinutes]
+      properties:
+        id: { $ref: '#/components/schemas/ConnectorId' }
+        userId: { type: string, format: uuid }
+        enabled: { type: boolean }
+        syncIntervalMinutes: { type: integer, minimum: 1 }
+        lastSyncAt: { type: string, format: date-time }
+        lastSyncStatus: { type: string, enum: [success, partial, failed] }
+        rateLimitRemaining: { type: integer }
+        rateLimitResetsAt: { type: string, format: date-time }
+
+    SyncJob:
+      type: object
+      required: [jobId]
+      properties:
+        jobId: { type: string }
+
+    UserProfile:
+      type: object
+      required: [id, email, locale, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        locale: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+
+    AccessToken:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken: { type: string }
