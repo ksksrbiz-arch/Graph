@@ -22,7 +22,7 @@ describe('BrainRuntimeService', () => {
     process.env.BRAIN_AUTO_START_USER_IDS = 'user-auto';
     process.env.BRAIN_AUTO_START_DREAM = 'true';
     process.env.BRAIN_DEFAULT_AWAKE_MS = '1000';
-    process.env.BRAIN_DEFAULT_DREAM_MS = '500';
+    process.env.BRAIN_DEFAULT_DREAM_MS = '1000';
     process.env.BRAIN_LOCK_TTL_SECONDS = '60';
   }
 
@@ -44,7 +44,7 @@ describe('BrainRuntimeService', () => {
         cycleStartedAt: 0,
         cycleEndsAt: 1,
         awakeMs: 1000,
-        dreamMs: 500,
+        dreamMs: 1000,
         recentSpikes: 0,
       }),
       stop: jest.fn().mockReturnValue(true),
@@ -100,7 +100,7 @@ describe('BrainRuntimeService', () => {
     await service.onApplicationBootstrap();
 
     expect(brain.start).toHaveBeenCalledWith('user-auto');
-    expect(dream.start).toHaveBeenCalledWith('user-auto', { awakeMs: 1000, dreamMs: 500 });
+    expect(dream.start).toHaveBeenCalledWith('user-auto', { awakeMs: 1000, dreamMs: 1000 });
     await service.onModuleDestroy();
   });
 
