@@ -45,6 +45,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 | `POST /brain/perceive/:neuronId` smoke endpoint                                       | ✅ | JWT-guarded; synthesises a sensory pulse |
 | Motor cortex safety supervisor — denylist + rate-limit + low-confidence + approval    | ✅ | `SafetySupervisor.evaluate()`, ring-buffered recent decisions |
 | `POST /motor/evaluate`, `GET /motor/recent`                                           | ✅ | JWT-guarded |
+| `tools/sniff-brain.mjs` reusable Socket.IO tap, `npm run sniff:brain`            | ✅ | Reports spikes/sec + region histogram + weight-change rate from a live brain |
 
 ## Brain layer phase 2 (Attention + Dreams + Recall)
 
