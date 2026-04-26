@@ -3,8 +3,12 @@ import {
   setMinEdgeWeight, toggleFilterType, visibleNodeIds,
 } from '../state.js';
 import { colorForType, escape, fmtDate, srcId, tgtId, truncate, el } from '../util.js';
+import { createSpikeRenderer } from '../spike-render.js';
+import { createBrainClient } from '../brain.js';
 
 let fg = null;
+let spikes = null;
+let brain = null;
 
 export function initGraphView() {
   const canvas = document.getElementById('canvas');
@@ -45,9 +49,12 @@ export function initGraphView() {
   });
 
   subscribe((reason) => {
-    if (reason === 'graph-loaded') buildOrUpdate();
-    else if (reason === 'filters-changed' || reason === 'search-changed' || reason === 'focus-changed') applyFilters();
-    else if (reason === 'selection-changed') { renderPanel(); refreshOverlay(); }
+    if (reason === 'graph-loaded') {
+      buildOrUpdate();
+      brain?.reloadLocal();
+    } else if (reason === 'filters-changed' || reason === 'search-changed' || reason === 'focus-changed') {
+      applyFilters();
+    } else if (reason === 'selection-changed') { renderPanel(); refreshOverlay(); }
     else if (reason === 'hover-changed') refreshOverlay();
     else if (reason === 'config-changed') applyConfig();
   });
@@ -86,9 +93,6 @@ function initForceGraph() {
     .nodeRelSize(4)
     .linkColor((l) => edgeColor(l))
     .linkWidth((l) => 0.4 + (l.weight || 0.3) * 1.6)
-    .linkDirectionalParticles(() => state.config.particles ? 2 : 0)
-    .linkDirectionalParticleWidth(2)
-    .linkDirectionalParticleSpeed(() => 0.005)
     .onNodeHover((n) => {
       document.getElementById('canvas').style.cursor = n ? 'pointer' : 'default';
       setHovered(n ? n.id : null);
@@ -107,6 +111,22 @@ function initForceGraph() {
   fg.width(container.clientWidth).height(container.clientHeight);
 
   attachLongPress(container);
+  initSpikes();
+}
+
+function initSpikes() {
+  if (!fg) return;
+  spikes = createSpikeRenderer(fg, state);
+  brain = createBrainClient({
+    getGraph: () => state.graph,
+    getUserId: () => 'local-demo',
+    onSpike: (e) => spikes?.onSpike(e.neuronId),
+    onWeight: (_e) => { /* reserved: visualise plasticity later */ },
+  });
+  if (state.config.spikes !== false) {
+    spikes.start();
+    brain.start();
+  }
 }
 
 function attachLongPress(container) {
@@ -274,9 +294,17 @@ function applyConfig() {
   const link = fg.d3Force('link');
   if (link) link.distance(state.config.linkDistance);
   fg.nodeRelSize(state.config.nodeRelSize);
-  fg.linkDirectionalParticles(() => state.config.particles ? 2 : 0);
   fg.d3ReheatSimulation();
   fg.refresh();
+
+  if (state.config.spikes === false) {
+    spikes?.stop();
+    spikes?.clear();
+    brain?.stop();
+  } else if (spikes && brain && !spikes.isActive()) {
+    spikes.start();
+    brain.start();
+  }
 }
 
 function refreshOverlay() {

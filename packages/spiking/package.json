@@ -1,0 +1,31 @@
+{
+  "name": "@pkg/spiking",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Leaky integrate-and-fire (LIF) neurons + spike-timing-dependent plasticity (STDP) simulator. Pure TypeScript — no runtime dependencies.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@typescript-eslint/eslint-plugin": "^7.7.0",
+    "@typescript-eslint/parser": "^7.7.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
