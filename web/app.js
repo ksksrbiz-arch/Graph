@@ -6,8 +6,9 @@ import { initTimelineView } from './views/timeline.js';
 import { initConnectorsView } from './views/connectors.js';
 import { initSearchView } from './views/search.js';
 import { initSettingsView } from './views/settings.js';
+import { initBrainView } from './views/brain.js';
 
-const ROUTES = ['#/graph', '#/timeline', '#/connectors', '#/search', '#/settings'];
+const ROUTES = ['#/graph', '#/timeline', '#/connectors', '#/brain', '#/search', '#/settings'];
 
 function navigate() {
   let hash = location.hash;
@@ -52,6 +53,7 @@ async function bootstrap() {
   initConnectorsView();
   initSearchView();
   initSettingsView();
+  initBrainView();
 
   window.addEventListener('hashchange', navigate);
   navigate();

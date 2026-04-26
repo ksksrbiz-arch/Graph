@@ -19,8 +19,10 @@ security:
 
 tags:
   - name: auth
+  - name: oauth
   - name: graph
   - name: connectors
+  - name: brain-insights
   - name: users
   - name: audit
   - name: health
@@ -127,12 +129,43 @@ paths:
       tags: [connectors]
       summary: List connector configs for the authed user
       responses:
-        '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ConnectorConfig' } } } } }
+        '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ConnectorSummary' } } } } }
+
+  /connectors/{id}:
+    patch:
+      tags: [connectors]
+      summary: Toggle enabled / change syncIntervalMinutes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/ConnectorId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                syncIntervalMinutes: { type: integer, minimum: 1, maximum: 1440 }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ConnectorSummary' } } } }
+    delete:
+      tags: [connectors]
+      summary: Remove the connector config (revokes locally)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/ConnectorId' }
+      responses:
+        '204': { description: removed }
 
   /connectors/{id}/sync:
     post:
       tags: [connectors]
-      summary: Trigger manual sync
+      summary: Trigger manual sync (runs in the background)
       parameters:
         - in: path
           name: id
@@ -140,6 +173,109 @@ paths:
           schema: { $ref: '#/components/schemas/ConnectorId' }
       responses:
         '202': { description: queued, content: { application/json: { schema: { $ref: '#/components/schemas/SyncJob' } } } }
+
+  /oauth/connect/{connectorId}:
+    post:
+      tags: [oauth]
+      summary: Begin an OAuth handshake — returns the URL to open in a popup
+      parameters:
+        - in: path
+          name: connectorId
+          required: true
+          schema: { $ref: '#/components/schemas/ConnectorId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [redirectUri]
+              properties:
+                redirectUri: { type: string, format: uri }
+                scopes:
+                  type: array
+                  items: { type: string }
+                returnTo: { type: string }
+      responses:
+        '201':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorizeUrl, state]
+                properties:
+                  authorizeUrl: { type: string, format: uri }
+                  state: { type: string }
+
+  /oauth/callback/{connectorId}:
+    get:
+      tags: [oauth]
+      security: []
+      summary: OAuth provider redirect target — exchanges code for tokens
+      parameters:
+        - in: path
+          name: connectorId
+          required: true
+          schema: { $ref: '#/components/schemas/ConnectorId' }
+        - in: query
+          name: code
+          schema: { type: string }
+        - in: query
+          name: state
+          schema: { type: string }
+        - in: query
+          name: error
+          schema: { type: string }
+      responses:
+        '200': { description: handshake complete (HTML self-closing window) }
+        '400': { description: invalid state, code, or provider error }
+
+  /brain/insights/summary:
+    get:
+      tags: [brain-insights]
+      summary: Combined dashboard payload — regions, top pathways, formations, growth
+      parameters:
+        - in: query
+          name: topN
+          schema: { type: integer, default: 10, minimum: 1, maximum: 50 }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/BrainInsightsSummary' } } } }
+
+  /brain/insights/regions:
+    get:
+      tags: [brain-insights]
+      summary: Per-region spike-rate histogram (last 30s)
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/RegionActivity' } } } } }
+
+  /brain/insights/pathways:
+    get:
+      tags: [brain-insights]
+      summary: Top pathways — sort by strongest|growing|decaying
+      parameters:
+        - in: query
+          name: sort
+          schema: { type: string, enum: [strongest, growing, decaying], default: strongest }
+        - in: query
+          name: topN
+          schema: { type: integer, default: 10 }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PathwaySummary' } } } } }
+
+  /brain/insights/formations:
+    get:
+      tags: [brain-insights]
+      summary: Synapses that recently crossed the pathway-formation threshold
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PathwayFormation' } } } } }
+
+  /brain/insights/growth:
+    get:
+      tags: [brain-insights]
+      summary: Per-minute connectome size + mean weight
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ConnectomeSnapshot' } } } } }
 
   /users/me:
     get:
@@ -283,6 +419,74 @@ components:
         lastSyncStatus: { type: string, enum: [success, partial, failed] }
         rateLimitRemaining: { type: integer }
         rateLimitResetsAt: { type: string, format: date-time }
+
+    ConnectorSummary:
+      type: object
+      required: [id, enabled, syncIntervalMinutes, configured]
+      properties:
+        id: { $ref: '#/components/schemas/ConnectorId' }
+        enabled: { type: boolean }
+        syncIntervalMinutes: { type: integer, minimum: 1 }
+        lastSyncAt: { type: string, format: date-time, nullable: true }
+        lastSyncStatus: { type: string, enum: [success, partial, failed], nullable: true }
+        rateLimitRemaining: { type: integer, nullable: true }
+        rateLimitResetsAt: { type: string, format: date-time, nullable: true }
+        configured: { type: boolean, description: 'true once OAuth has issued credentials for this connector' }
+
+    RegionActivity:
+      type: object
+      required: [region, rate, count, color, label]
+      properties:
+        region:
+          type: string
+          enum: [sensory, memory, association, executive, motor, limbic]
+        rate: { type: number, description: 'spikes per second over the last 30s' }
+        count: { type: integer }
+        color: { type: string }
+        label: { type: string }
+
+    PathwaySummary:
+      type: object
+      required: [synapseId, pre, post, weight, delta]
+      properties:
+        synapseId: { type: string }
+        pre: { type: string }
+        post: { type: string }
+        weight: { type: number, minimum: 0, maximum: 1 }
+        delta: { type: number, description: 'weight change since the insight service first observed this synapse' }
+        lastChangeAt: { type: string, format: date-time }
+
+    PathwayFormation:
+      type: object
+      required: [synapseId, pre, post, weight, formedAt]
+      properties:
+        synapseId: { type: string }
+        pre: { type: string }
+        post: { type: string }
+        weight: { type: number, minimum: 0, maximum: 1 }
+        formedAt: { type: string, format: date-time }
+
+    ConnectomeSnapshot:
+      type: object
+      required: [at, neurons, synapses, meanWeight]
+      properties:
+        at: { type: string, format: date-time }
+        neurons: { type: integer }
+        synapses: { type: integer }
+        meanWeight: { type: number, minimum: 0, maximum: 1 }
+
+    BrainInsightsSummary:
+      type: object
+      required: [running, windowMs, regions, strongestPathways, growingPathways, decayingPathways, recentFormations, growth]
+      properties:
+        running: { type: boolean }
+        windowMs: { type: integer }
+        regions: { type: array, items: { $ref: '#/components/schemas/RegionActivity' } }
+        strongestPathways: { type: array, items: { $ref: '#/components/schemas/PathwaySummary' } }
+        growingPathways: { type: array, items: { $ref: '#/components/schemas/PathwaySummary' } }
+        decayingPathways: { type: array, items: { $ref: '#/components/schemas/PathwaySummary' } }
+        recentFormations: { type: array, items: { $ref: '#/components/schemas/PathwayFormation' } }
+        growth: { type: array, items: { $ref: '#/components/schemas/ConnectomeSnapshot' } }
 
     SyncJob:
       type: object

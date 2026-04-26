@@ -104,6 +104,21 @@ export const EnvSchema = z.object({
     .refine((s) => Buffer.from(s, 'base64').length === 32, {
       message: 'KEK_BASE64 must decode to exactly 32 bytes (AES-256)',
     }),
+
+  // ── OAuth provider credentials (optional; required only when the connector
+  // ── is enabled and a user starts the connect flow). ─────────────────────
+  GITHUB_OAUTH_CLIENT_ID: z.string().optional(),
+  GITHUB_OAUTH_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  MICROSOFT_OAUTH_CLIENT_ID: z.string().optional(),
+  MICROSOFT_OAUTH_CLIENT_SECRET: z.string().optional(),
+  NOTION_OAUTH_CLIENT_ID: z.string().optional(),
+  NOTION_OAUTH_CLIENT_SECRET: z.string().optional(),
+  TODOIST_OAUTH_CLIENT_ID: z.string().optional(),
+  TODOIST_OAUTH_CLIENT_SECRET: z.string().optional(),
+  LINEAR_OAUTH_CLIENT_ID: z.string().optional(),
+  LINEAR_OAUTH_CLIENT_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -3,11 +3,13 @@
 // joined to that user's brain room; events for other users never reach them.
 //
 // Event shapes (kept terse since spikes can be high-frequency):
-//   spike   → { i: neuronId, t: tMs, r?: region }
-//   weight  → { i: synapseId, p: pre, q: post, w: weight, d: delta, t: tMs }
-//   dream   → { phase, endsAt, replayCount } — wake/sleep transitions
+//   spike       → { i: neuronId, t: tMs, r?: region }
+//   weight      → { i: synapseId, p: pre, q: post, w: weight, d: delta, t: tMs }
+//   dream       → { phase, endsAt, replayCount } — wake/sleep transitions
+//   pathway     → { i, p, q, w, formedAt } — synapse crossed the formation threshold
+//   insight     → BrainInsightsSummary — periodic dashboard heartbeat (every 5s)
 
-import { Logger, OnModuleInit } from '@nestjs/common';
+import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
@@ -16,6 +18,7 @@ import {
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
 import { BrainService } from './brain.service';
+import { InsightsService } from './insights.service';
 
 export interface DreamEvt {
   phase: 'awake' | 'sleeping' | 'rem';
@@ -23,17 +26,26 @@ export interface DreamEvt {
   replayCount: number;
 }
 
+const INSIGHT_PUSH_INTERVAL_MS = 5_000;
+
 @WebSocketGateway({
   namespace: '/brain',
   cors: { origin: true, credentials: true },
 })
 export class BrainGateway
-  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit
+  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
 {
   private readonly log = new Logger(BrainGateway.name);
   @WebSocketServer() server!: Server;
+  private insightTimer?: NodeJS.Timeout;
+  /** Set of userIds with at least one connected client — drives the insight
+   *  push loop, so we don't compute summaries for users nobody is watching. */
+  private readonly watchedUsers = new Map<string, number>();
 
-  constructor(private readonly brain: BrainService) {}
+  constructor(
+    private readonly brain: BrainService,
+    private readonly insights: InsightsService,
+  ) {}
 
   emitDream(userId: string, evt: DreamEvt): void {
     this.server?.to(this.roomFor(userId)).emit('dream', evt);
@@ -57,6 +69,32 @@ export class BrainGateway
         t: e.tMs,
       });
     });
+    this.insights.onFormation((userId, e) => {
+      this.server?.to(this.roomFor(userId)).emit('pathway', {
+        i: e.synapseId,
+        p: e.pre,
+        q: e.post,
+        w: e.weight,
+        formedAt: e.formedAt,
+      });
+    });
+
+    this.insightTimer = setInterval(() => this.pushInsights(), INSIGHT_PUSH_INTERVAL_MS);
+    if (typeof this.insightTimer.unref === 'function') {
+      this.insightTimer.unref();
+    }
+  }
+
+  onModuleDestroy(): void {
+    if (this.insightTimer) clearInterval(this.insightTimer);
+  }
+
+  private pushInsights(): void {
+    if (!this.server) return;
+    for (const userId of this.watchedUsers.keys()) {
+      const summary = this.insights.summary(userId);
+      this.server.to(this.roomFor(userId)).emit('insight', summary);
+    }
   }
 
   handleConnection(client: Socket): void {
@@ -68,14 +106,24 @@ export class BrainGateway
     }
     client.join(this.roomFor(userId));
     client.data.userId = userId;
+    this.watchedUsers.set(userId, (this.watchedUsers.get(userId) ?? 0) + 1);
     client.emit('hello', {
       userId,
       running: this.brain.isRunning(userId),
     });
+    // Send the current insights summary right away so the SPA can hydrate
+    // its dashboard without waiting up to INSIGHT_PUSH_INTERVAL_MS.
+    client.emit('insight', this.insights.summary(userId));
     this.log.debug(`client connected user=${userId} sid=${client.id}`);
   }
 
   handleDisconnect(client: Socket): void {
+    const userId = client.data.userId as string | undefined;
+    if (userId) {
+      const next = (this.watchedUsers.get(userId) ?? 1) - 1;
+      if (next <= 0) this.watchedUsers.delete(userId);
+      else this.watchedUsers.set(userId, next);
+    }
     this.log.debug(`client disconnected sid=${client.id}`);
   }
 

@@ -1,10 +1,27 @@
-// Phases 4–7 (per §12) implement individual connectors. The module shell exists
-// in Phase 0 so config endpoints + the BaseConnector contract can be wired up.
+// Concrete connectors (GitHub, Google Calendar, Notion) plus the registry
+// the sync orchestrator uses to look them up by id. The shared
+// ConnectorConfigStore is provided globally by ConnectorConfigsModule so we
+// don't have to import OAuthModule here (avoids a circular dep — OAuth needs
+// to write configs, connectors need OAuthService to refresh tokens).
 
-import { Module } from '@nestjs/common';
-import { BaseConnector } from './base.connector';
+import { Module, forwardRef } from '@nestjs/common';
+import { OAuthModule } from '../oauth/oauth.module';
+import { SyncModule } from '../sync/sync.module';
+import { ConnectorRegistry } from './connector-registry';
+import { ConnectorsController } from './connectors.controller';
+import { GitHubConnector } from './github.connector';
+import { GoogleCalendarConnector } from './google-calendar.connector';
+import { NotionConnector } from './notion.connector';
 
 @Module({
-  providers: [{ provide: BaseConnector, useValue: null }],
+  imports: [OAuthModule, forwardRef(() => SyncModule)],
+  controllers: [ConnectorsController],
+  providers: [
+    GitHubConnector,
+    GoogleCalendarConnector,
+    NotionConnector,
+    ConnectorRegistry,
+  ],
+  exports: [ConnectorRegistry],
 })
 export class ConnectorsModule {}
