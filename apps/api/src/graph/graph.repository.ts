@@ -1,31 +1,65 @@
 // Neo4j repository — implements the Cypher patterns documented in spec §8.2.
 //
 // Idempotency (Rule 12): every write uses MERGE; re-running the same source
-// item must not duplicate nodes/edges.
+// item must not duplicate nodes/edges. Two layers cooperate to make this safe:
+//
+//  1. MERGE keys by (id, userId) for nodes and (id) for edges, so duplicate
+//     payloads are coalesced even if they slip past layer 2.
+//  2. An in-memory fingerprint cache short-circuits identical writes that
+//     arrive in quick succession (e.g. when a connector reruns mid-batch).
+//     The cache is bounded; eviction is FIFO.
 
 import { Inject, Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { Driver, Record as Neo4jRecord } from 'neo4j-driver';
 import type { KGEdge, KGNode, Subgraph } from '@pkg/shared';
 import { NEO4J_DRIVER } from '../shared/neo4j/neo4j.module';
 
+const FINGERPRINT_CACHE_MAX = 4_096;
+
 @Injectable()
 export class GraphRepository {
+  /** (userId|kind|id) → sha256 of the last-persisted payload. Matches mean we
+   *  can skip the Cypher round-trip; mismatches fall through to MERGE. */
+  private readonly fingerprintCache = new Map<string, string>();
+
   constructor(@Inject(NEO4J_DRIVER) private readonly driver: Driver) {}
 
-  async upsertNode(userId: string, node: KGNode): Promise<void> {
+  /** Returns true if the write actually hit Neo4j; false when deduped by the
+   *  in-memory fingerprint cache. */
+  async upsertNode(userId: string, node: KGNode): Promise<boolean> {
+    const props = this.nodeProps(node);
+    const fp = fingerprint({ kind: 'node', id: node.id, userId, props });
+    const cacheKey = `${userId}|node|${node.id}`;
+    if (this.fingerprintCache.get(cacheKey) === fp) return false;
+
     const session = this.driver.session();
     try {
       await session.run(
         `MERGE (n:KGNode {id: $id, userId: $userId})
          SET n += $props, n.updatedAt = datetime()`,
-        { id: node.id, userId, props: this.nodeProps(node) },
+        { id: node.id, userId, props },
       );
     } finally {
       await session.close();
     }
+    this.rememberFingerprint(cacheKey, fp);
+    return true;
   }
 
-  async upsertEdge(userId: string, edge: KGEdge): Promise<void> {
+  async upsertEdge(userId: string, edge: KGEdge): Promise<boolean> {
+    const props = this.edgeProps(edge);
+    const fp = fingerprint({
+      kind: 'edge',
+      id: edge.id,
+      userId,
+      source: edge.source,
+      target: edge.target,
+      props,
+    });
+    const cacheKey = `${userId}|edge|${edge.id}`;
+    if (this.fingerprintCache.get(cacheKey) === fp) return false;
+
     const session = this.driver.session();
     try {
       await session.run(
@@ -38,12 +72,14 @@ export class GraphRepository {
           target: edge.target,
           userId,
           id: edge.id,
-          props: this.edgeProps(edge),
+          props,
         },
       );
     } finally {
       await session.close();
     }
+    this.rememberFingerprint(cacheKey, fp);
+    return true;
   }
 
   /** Ego-network of `rootId` up to `depth` hops. Spec §8.2 query 2.
@@ -79,6 +115,9 @@ export class GraphRepository {
          RETURN n`,
         { nodeId, userId },
       );
+      // Drop any cached fingerprint for this node so a subsequent recreate-
+      // with-the-same-id is treated as a fresh write rather than a no-op.
+      this.fingerprintCache.delete(`${userId}|node|${nodeId}`);
       return result.records.length > 0;
     } finally {
       await session.close();
@@ -95,6 +134,11 @@ export class GraphRepository {
       );
     } finally {
       await session.close();
+    }
+    // Purge cached fingerprints so a re-import after delete is not skipped.
+    const prefix = `${userId}|`;
+    for (const k of this.fingerprintCache.keys()) {
+      if (k.startsWith(prefix)) this.fingerprintCache.delete(k);
     }
   }
 
@@ -130,4 +174,28 @@ export class GraphRepository {
       edges: (record.get('edges') ?? []) as KGEdge[],
     };
   }
+
+  private rememberFingerprint(key: string, fp: string): void {
+    this.fingerprintCache.set(key, fp);
+    if (this.fingerprintCache.size > FINGERPRINT_CACHE_MAX) {
+      // FIFO eviction — the first inserted key is the oldest because Map
+      // preserves insertion order.
+      const oldest = this.fingerprintCache.keys().next().value;
+      if (oldest !== undefined) this.fingerprintCache.delete(oldest);
+    }
+  }
+}
+
+function fingerprint(value: unknown): string {
+  return createHash('sha256').update(stableStringify(value)).digest('hex');
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`;
 }

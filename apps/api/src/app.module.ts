@@ -8,8 +8,10 @@ import { ConnectorsModule } from './connectors/connectors.module';
 import { GraphModule } from './graph/graph.module';
 import { HealthModule } from './health/health.module';
 import { MotorModule } from './motor/motor.module';
+import { ReasoningModule } from './reasoning/reasoning.module';
 import { Neo4jModule } from './shared/neo4j/neo4j.module';
 import { CryptoModule } from './shared/crypto/crypto.module';
+import { IdempotencyModule } from './shared/idempotency/idempotency.module';
 import { SyncModule } from './sync/sync.module';
 import { UsersModule } from './users/users.module';
 
@@ -19,6 +21,7 @@ import { UsersModule } from './users/users.module';
     // Spec §10.1: 100 req/min/user.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     CryptoModule,
+    IdempotencyModule,
     Neo4jModule,
     HealthModule,
     AuthModule,
@@ -27,6 +30,7 @@ import { UsersModule } from './users/users.module';
     GraphModule,
     BrainModule,
     MotorModule,
+    ReasoningModule,
     ConnectorsModule,
     SyncModule,
   ],
