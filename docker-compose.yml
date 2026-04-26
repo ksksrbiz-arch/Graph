@@ -1,0 +1,111 @@
+# PKG-VS local development stack — spec §13.1
+# Bring up: `docker compose up -d`  (or `pnpm stack:up`)
+# Brings down: `docker compose down`
+#
+# Service ports are exposed on localhost for `apps/api` (running on host) to consume.
+# The api/web services are commented out by default so contributors can run them
+# in watch-mode on the host; uncomment to run the full containerised stack.
+
+services:
+  neo4j:
+    image: neo4j:5
+    container_name: pkg-neo4j
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+      NEO4J_server_memory_heap_max__size: 1G
+    ports:
+      - "7474:7474"   # HTTP browser
+      - "7687:7687"   # Bolt
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  postgres:
+    image: postgres:15
+    container_name: pkg-postgres
+    environment:
+      POSTGRES_USER: pkg
+      POSTGRES_PASSWORD: pkg
+      POSTGRES_DB: pkg
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pkg -d pkg"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: pkg-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: pkg-meilisearch
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-dev-master-key-change-me}
+      MEILI_ENV: development
+    ports:
+      - "7700:7700"
+    volumes:
+      - meili_data:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Uncomment to run the API in-container (defaults to host-side watch mode for DX).
+  # api:
+  #   build: ./apps/api
+  #   container_name: pkg-api
+  #   env_file: .env
+  #   environment:
+  #     NEO4J_URI: bolt://neo4j:7687
+  #     POSTGRES_URL: postgresql://pkg:pkg@postgres:5432/pkg
+  #     REDIS_URL: redis://redis:6379
+  #     MEILI_HOST: http://meilisearch:7700
+  #   ports:
+  #     - "3001:3001"
+  #   depends_on:
+  #     neo4j: { condition: service_healthy }
+  #     postgres: { condition: service_healthy }
+  #     redis: { condition: service_healthy }
+  #     meilisearch: { condition: service_healthy }
+  #
+  # web:
+  #   build: ./apps/web
+  #   container_name: pkg-web
+  #   environment:
+  #     NEXT_PUBLIC_API_URL: http://localhost:3001
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - api
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  postgres_data:
+  redis_data:
+  meili_data:

@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-type-check:
+    name: Lint + Type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Build the shared package first so workspace consumers can resolve it
+      # via its compiled `dist/`. Source-mode resolution would require TS path
+      # mapping in every consumer; build-once is simpler.
+      - run: pnpm --filter @pkg/shared run build
+      - run: pnpm run lint
+      - run: pnpm run type-check
+
+  test:
+    name: Unit + Integration tests
+    runs-on: ubuntu-latest
+    services:
+      neo4j:
+        image: neo4j:5
+        env:
+          NEO4J_AUTH: neo4j/password
+        ports: ["7687:7687", "7474:7474"]
+        options: >-
+          --health-cmd "wget -qO- http://localhost:7474 || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: pkg
+          POSTGRES_PASSWORD: pkg
+          POSTGRES_DB: pkg
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pkg"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      NEO4J_URI: bolt://localhost:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: password
+      POSTGRES_URL: postgresql://pkg:pkg@localhost:5432/pkg
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: test-jwt-secret-32-bytes-minimum-xx
+      KEK_BASE64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @pkg/shared run build
+      - run: pnpm test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: |
+            apps/*/coverage
+            packages/*/coverage
+          if-no-files-found: ignore
+
+  # The e2e, lighthouse, and mutation jobs are intentionally gated by the
+  # presence of `apps/web/package.json` (e2e + lighthouse) or `apps/api/stryker.conf`
+  # (mutation). Phase 0 ships neither, so the jobs short-circuit cleanly.
+  # Each phase that adds the required artifact also flips the corresponding
+  # `if:` predicate by virtue of the file existing.
+  detect-targets:
+    name: Detect optional CI targets
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.check.outputs.web }}
+      stryker: ${{ steps.check.outputs.stryker }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if [ -f apps/web/package.json ]; then echo "web=true" >> $GITHUB_OUTPUT; else echo "web=false" >> $GITHUB_OUTPUT; fi
+          if [ -f apps/api/stryker.conf.json ] || [ -f apps/api/stryker.conf.mjs ]; then echo "stryker=true" >> $GITHUB_OUTPUT; else echo "stryker=false" >> $GITHUB_OUTPUT; fi
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: [detect-targets]
+    if: github.event_name == 'pull_request' && needs.detect-targets.outputs.web == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: docker compose up -d --wait
+      - run: pnpm --filter @pkg/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @pkg/web run test:e2e
+      - if: always()
+        run: docker compose logs > docker-logs.txt
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            apps/web/playwright-report
+            docker-logs.txt
+          if-no-files-found: ignore
+
+  lighthouse:
+    name: Lighthouse CI
+    runs-on: ubuntu-latest
+    needs: [lint-and-type-check, detect-targets]
+    if: github.event_name == 'pull_request' && needs.detect-targets.outputs.web == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @pkg/web run build
+      - run: pnpm dlx @lhci/cli@0.13.x autorun --config=apps/web/lighthouserc.json || true
+
+  mutation:
+    name: Mutation testing (Stryker)
+    runs-on: ubuntu-latest
+    needs: [detect-targets]
+    if: github.event_name == 'pull_request' && needs.detect-targets.outputs.stryker == 'true'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @pkg/api run test:mutation

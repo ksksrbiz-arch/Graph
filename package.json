@@ -1,9 +1,13 @@
 {
-  "name": "graph",
-  "version": "0.1.0",
+  "name": "pkg-vs",
+  "version": "0.2.0-phase0",
   "private": true,
   "type": "module",
-  "description": "Personal Knowledge Graph — MVP slice",
+  "description": "Personal Knowledge Graph Visualization System (PKG-VS) — monorepo. Root retains the v1 static MVP; apps/api is the v2 NestJS service.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "start": "node scripts/serve.mjs",
     "ingest:claude-code": "node scripts/ingest-claude-code.mjs",
@@ -11,10 +15,18 @@
     "ingest:markdown": "node scripts/ingest-markdown.mjs",
     "ingest": "node scripts/ingest-claude-code.mjs",
     "deploy": "wrangler deploy",
-    "preview": "wrangler dev"
+    "preview": "wrangler dev",
+    "lint": "pnpm -r --if-present run lint",
+    "type-check": "pnpm -r --if-present run type-check",
+    "test": "pnpm -r --if-present run test",
+    "build": "pnpm -r --if-present run build",
+    "stack:up": "docker compose up -d",
+    "stack:down": "docker compose down",
+    "stack:logs": "docker compose logs -f"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18",
+    "pnpm": ">=8"
   },
   "devDependencies": {
     "wrangler": "^4.85.0"

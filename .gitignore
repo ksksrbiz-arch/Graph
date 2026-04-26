@@ -7,7 +7,26 @@ node_modules/
 .idea/
 .vscode/
 
+# build outputs
+dist/
+build/
+coverage/
+.turbo/
+.next/
+.nest/
+
+# pnpm
+.pnpm-store/
+.pnpm-debug.log*
+
 # wrangler files
 .wrangler
 .dev.vars*
 !.dev.vars.example
+
+# stack data
+docker/data/
+
+# generated types from openapi
+apps/web/src/generated/
+packages/shared/dist/
