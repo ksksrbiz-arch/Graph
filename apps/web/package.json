@@ -1,0 +1,30 @@
+{
+  "name": "@pkg/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PKG-VS web client (React 18 + Vite). Phase 0 ships the scaffold; the v1 static MVP under /web continues to serve the live demo until the canvas migration in Phase 3.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pkg/shared": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "socket.io-client": "^4.8.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^7.7.0",
+    "@typescript-eslint/parser": "^7.7.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.4.0"
+  }
+}

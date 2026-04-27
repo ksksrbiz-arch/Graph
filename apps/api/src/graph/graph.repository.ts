@@ -106,6 +106,51 @@ export class GraphRepository {
     }
   }
 
+  /** Full snapshot of a user's graph — used by the public/demo ingest path
+   *  so the SPA can render Neo4j-backed nodes without a full GraphQL setup.
+   *  Capped by `limit` (defaults to 5k). */
+  async snapshotForUser(
+    userId: string,
+    limit = 5_000,
+  ): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
+    const session = this.driver.session();
+    try {
+      const nodesRes = await session.run(
+        `MATCH (n:KGNode {userId: $userId})
+         WHERE n.deletedAt IS NULL
+         RETURN n
+         LIMIT $limit`,
+        { userId, limit },
+      );
+      const nodes = nodesRes.records.map((r) => this.mapNode(r.get('n')));
+
+      const edgesRes = await session.run(
+        `MATCH (a:KGNode {userId: $userId})-[r:REL]->(b:KGNode {userId: $userId})
+         WHERE a.deletedAt IS NULL AND b.deletedAt IS NULL
+         RETURN r.id AS id, a.id AS source, b.id AS target,
+                r.relation AS relation, r.weight AS weight,
+                r.inferred AS inferred, r.createdAt AS createdAt,
+                r.metadataJson AS metadataJson
+         LIMIT $limit`,
+        { userId, limit: limit * 4 },
+      );
+      const edges = edgesRes.records.map((r) => ({
+        id: r.get('id') as string,
+        source: r.get('source') as string,
+        target: r.get('target') as string,
+        relation: r.get('relation') as KGEdge['relation'],
+        weight: Number(r.get('weight') ?? 0.4),
+        inferred: r.get('inferred') === true,
+        createdAt: (r.get('createdAt') as string) ?? new Date().toISOString(),
+        metadata: parseMetadata(r.get('metadataJson')),
+      }));
+
+      return { nodes, edges };
+    } finally {
+      await session.close();
+    }
+  }
+
   async deleteNode(userId: string, nodeId: string): Promise<boolean> {
     const session = this.driver.session();
     try {
@@ -175,6 +220,22 @@ export class GraphRepository {
     };
   }
 
+  /** Reshape a raw Neo4j node record into a KGNode. The metadata column is
+   *  stored as JSON-encoded string to keep the schema flexible. */
+  private mapNode(raw: { properties: Record<string, unknown> }): KGNode {
+    const p = raw.properties;
+    return {
+      id: String(p.id),
+      label: String(p.label ?? p.id),
+      type: p.type as KGNode['type'],
+      sourceId: p.sourceId as KGNode['sourceId'],
+      sourceUrl: typeof p.sourceUrl === 'string' ? p.sourceUrl : undefined,
+      createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
+      updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : new Date().toISOString(),
+      metadata: parseMetadata(p.metadataJson),
+    };
+  }
+
   private rememberFingerprint(key: string, fp: string): void {
     this.fingerprintCache.set(key, fp);
     if (this.fingerprintCache.size > FINGERPRINT_CACHE_MAX) {
@@ -183,6 +244,18 @@ export class GraphRepository {
       const oldest = this.fingerprintCache.keys().next().value;
       if (oldest !== undefined) this.fingerprintCache.delete(oldest);
     }
+  }
+}
+
+function parseMetadata(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'string' || value.length === 0) return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
   }
 }
 

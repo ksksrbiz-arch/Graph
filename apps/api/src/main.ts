@@ -1,7 +1,9 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
 import { splitCsvEnv } from './config/env-utils';
@@ -14,8 +16,14 @@ async function bootstrap(): Promise<void> {
   const env = loadEnv();
   const allowedOrigins = splitCsvEnv(env.CORS_ORIGINS);
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
   app.setGlobalPrefix('api/v1', { exclude: ['health', 'health/ready', 'metrics'] });
+  // Raise the default body limit so the public/ingest endpoints can accept
+  // a pasted text/markdown blob up to PUBLIC_INGEST_MAX_BYTES. The service
+  // layer enforces the per-request cap; this is a guard rail one notch above.
+  const bodyLimit = Math.max(env.PUBLIC_INGEST_MAX_BYTES * 2, 1024 * 1024);
+  app.use(json({ limit: bodyLimit }));
+  app.use(urlencoded({ extended: true, limit: bodyLimit }));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
   app.enableCors({
     origin:

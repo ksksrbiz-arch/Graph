@@ -1,6 +1,13 @@
 import { state, setGraph, setSearch, emit } from './state.js';
-import { loadGraph, runIngest, ingestSupported } from './data.js';
+import {
+  loadGraph,
+  runIngest,
+  ingestSupported,
+  publicIngestAvailable,
+  localIngestSupported,
+} from './data.js';
 import { fmtDate, showToast, escape } from './util.js';
+import { openIngestDialog } from './ingest-dialog.js';
 import { initGraphView } from './views/graph.js';
 import { initTimelineView } from './views/timeline.js';
 import { initConnectorsView } from './views/connectors.js';
@@ -76,40 +83,69 @@ async function bootstrap() {
 
   document.getElementById('ingest-btn').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
-    if (!(await ingestSupported())) {
-      showToast('Ingest is local-only. Run: npm run ingest:claude-code  →  git push  (auto-deploys)', 'info');
+    const [hasLocal, hasPublic] = await Promise.all([
+      localIngestSupported(),
+      publicIngestAvailable(),
+    ]);
+
+    // Prefer the local filesystem ingester when running under scripts/serve.mjs
+    // — that exercises the production v1 ingestion pipeline end-to-end.
+    if (hasLocal) {
+      btn.disabled = true;
+      const orig = btn.querySelector('.btn-text')?.textContent;
+      const txt = btn.querySelector('.btn-text');
+      if (txt) txt.textContent = 'Ingesting…';
+      try {
+        const result = await runIngest('claude-code');
+        if (result.ok) {
+          showToast('Ingest complete', 'success');
+          await refresh();
+        } else {
+          showToast(`Ingest failed (${result.status})`, 'error');
+        }
+      } catch (err) {
+        showToast(`Ingest error: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        if (txt && orig) txt.textContent = orig;
+      }
       return;
     }
-    btn.disabled = true;
-    const orig = btn.textContent;
-    btn.textContent = 'Ingesting…';
-    try {
-      const result = await runIngest('claude-code');
-      if (result.ok) {
-        showToast('Ingest complete', 'success');
-        await refresh();
-      } else {
-        showToast(`Ingest failed (${result.status})`, 'error');
-      }
-    } catch (err) {
-      showToast(`Ingest error: ${err.message}`, 'error');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = orig;
+
+    if (hasPublic) {
+      openIngestDialog({ onSuccess: () => refresh() });
+      return;
     }
+
+    showToast('Ingest unavailable — start the local dev server or set GRAPH_CONFIG.apiBaseUrl', 'info');
   });
 
   await refresh();
 
-  // label-degrade: relabel ingest button on static deploys
-  if (!(await ingestSupported())) {
-    const btn = document.getElementById('ingest-btn');
-    if (btn) {
-      btn.title = 'Ingest is local-only. Run: npm run ingest:claude-code (then git push to deploy)';
-      const txt = btn.querySelector('.btn-text');
-      if (txt) txt.textContent = 'Ingest (local)';
-    }
+  // label-degrade: relabel ingest button on static deploys without a public api
+  await relabelIngestButton();
+}
+
+async function relabelIngestButton() {
+  const btn = document.getElementById('ingest-btn');
+  if (!btn) return;
+  const txt = btn.querySelector('.btn-text');
+  const [hasLocal, hasPublic] = await Promise.all([
+    localIngestSupported(),
+    publicIngestAvailable(),
+  ]);
+  if (hasLocal) {
+    if (txt) txt.textContent = 'Ingest Claude Code';
+    btn.title = 'Run the claude-code ingester via the local dev server';
+    return;
   }
+  if (hasPublic) {
+    if (txt) txt.textContent = 'Live ingest';
+    btn.title = 'Paste text or markdown — the brain will perceive new nodes within seconds';
+    return;
+  }
+  if (txt) txt.textContent = 'Ingest (local)';
+  btn.title = 'Ingest is local-only. Run: npm run ingest:claude-code (then git push to deploy)';
 }
 
 async function refresh() {

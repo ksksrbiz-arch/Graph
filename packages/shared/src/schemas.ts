@@ -116,6 +116,11 @@ export const EnvSchema = z.object({
   BRAIN_DEFAULT_DREAM_MS: z.coerce.number().int().min(1_000).default(30_000),
   BRAIN_LOCK_TTL_SECONDS: z.coerce.number().int().min(15).max(3_600).default(120),
 
+  // Comma-separated allowlist of demo user ids that may write through the
+  // anonymous /api/v1/public/ingest/* endpoints. Empty = public ingest is off.
+  PUBLIC_INGEST_USER_IDS: z.string().optional().default(''),
+  PUBLIC_INGEST_MAX_BYTES: z.coerce.number().int().min(1_024).max(2 * 1024 * 1024).default(256 * 1024),
+
   KEK_BASE64: z
     .string()
     .refine((s) => Buffer.from(s, 'base64').length === 32, {
