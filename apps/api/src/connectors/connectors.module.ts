@@ -12,6 +12,7 @@ import { ConnectorsController } from './connectors.controller';
 import { GitHubConnector } from './github.connector';
 import { GoogleCalendarConnector } from './google-calendar.connector';
 import { NotionConnector } from './notion.connector';
+import { ZoteroConnector } from './zotero.connector';
 
 @Module({
   imports: [OAuthModule, forwardRef(() => SyncModule)],
@@ -20,6 +21,7 @@ import { NotionConnector } from './notion.connector';
     GitHubConnector,
     GoogleCalendarConnector,
     NotionConnector,
+    ZoteroConnector,
     ConnectorRegistry,
   ],
   exports: [ConnectorRegistry],

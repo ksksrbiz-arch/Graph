@@ -11,7 +11,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Idempotent } from '../shared/idempotency/idempotency.interceptor';
@@ -35,6 +35,28 @@ export class GraphController {
     @Query('depth') depth = '2',
   ): Promise<unknown> {
     return this.graph.subgraph(req.user.sub, rootId, Number(depth));
+  }
+
+  @Get('similar/:nodeId')
+  @ApiOperation({
+    summary: 'Smart Connections — find semantically similar nodes',
+    description:
+      'Returns the top-N most similar nodes to the given node, ranked by ' +
+      'cosine similarity on stored embedding vectors (fallback: label-token Jaccard). ' +
+      'Use this to automatically surface related notes, documents, or concepts.',
+  })
+  @ApiQuery({
+    name: 'topN',
+    required: false,
+    description: 'Maximum number of similar nodes to return (1–50, default 10)',
+    type: Number,
+  })
+  findSimilar(
+    @Req() req: AuthedRequest,
+    @Param('nodeId') nodeId: string,
+    @Query('topN') topN = '10',
+  ): Promise<unknown> {
+    return this.graph.findSimilar(req.user.sub, nodeId, Number(topN));
   }
 
   @Delete('nodes/:id')
