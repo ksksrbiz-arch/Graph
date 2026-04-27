@@ -14,6 +14,7 @@ import { initConnectorsView } from './views/connectors.js';
 import { initSearchView } from './views/search.js';
 import { initSettingsView } from './views/settings.js';
 import { initBrainView } from './views/brain.js';
+import { mount as mountCortex } from './views/cortex.js';
 import { showBootScreen, reportBootProgress } from './hud/boot-screen.js';
 
 // Visual Spec Part 3 §13 — show the boot splash as early as possible, before
@@ -21,7 +22,7 @@ import { showBootScreen, reportBootProgress } from './hud/boot-screen.js';
 // boots in the background.
 showBootScreen();
 
-const ROUTES = ['#/graph', '#/timeline', '#/connectors', '#/brain', '#/search', '#/settings'];
+const ROUTES = ['#/graph', '#/timeline', '#/connectors', '#/brain', '#/cortex', '#/search', '#/settings'];
 
 function navigate() {
   let hash = location.hash;
@@ -67,6 +68,8 @@ async function bootstrap() {
   initSearchView();
   initSettingsView();
   initBrainView();
+  const cortexRoot = document.getElementById('view-cortex');
+  if (cortexRoot) mountCortex(cortexRoot);
 
   window.addEventListener('hashchange', navigate);
   navigate();

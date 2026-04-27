@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="build-id" content="1777313089137772398" />
+  <meta name="build-id" content="1777314441506202070" />
   <title>Graph — Personal Knowledge Graph</title>
   <link rel="stylesheet" href="/src/styles/design-tokens.scss" />
   <link rel="stylesheet" href="/src/styles/hud-panel.scss" />
@@ -44,6 +44,7 @@
       <a href="#/timeline"   data-route="#/timeline"   class="nav-item"><span class="nav-glyph" data-g="timeline"></span><span>Timeline</span></a>
       <a href="#/connectors" data-route="#/connectors" class="nav-item"><span class="nav-glyph" data-g="connectors"></span><span>Connectors</span></a>
       <a href="#/brain"      data-route="#/brain"      class="nav-item"><span class="nav-glyph" data-g="brain"></span><span>Brain</span></a>
+      <a href="#/cortex"     data-route="#/cortex"     class="nav-item"><span class="nav-glyph" data-g="brain"></span><span>Cortex</span></a>
       <a href="#/search"     data-route="#/search"     class="nav-item"><span class="nav-glyph" data-g="search"></span><span>Search</span></a>
       <a href="#/settings"   data-route="#/settings"   class="nav-item"><span class="nav-glyph" data-g="settings"></span><span>Settings</span></a>
       <div class="sidebar-spacer"></div>
@@ -165,6 +166,9 @@
 
       <!-- Brain view -->
       <section id="view-brain" class="view" aria-label="Brain insights"></section>
+
+      <!-- Cortex view (JARVIS-style ReAct loop) -->
+      <section id="view-cortex" class="view" aria-label="Cortex"></section>
 
       <!-- Search view -->
       <section id="view-search" class="view" aria-label="Search">

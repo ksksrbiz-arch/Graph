@@ -24,6 +24,7 @@
 
 import { parseMarkdown, parseText } from './worker/text-parser.js';
 import { handleIngressApi } from './worker/ingress.js';
+import { handleCortexApi } from './worker/cortex/router.js';
 import { recordEvent, upsertNodesAndEdges } from './worker/d1-store.js';
 
 const TEXT_MAX_LENGTH = 200_000;
@@ -70,6 +71,9 @@ async function handleApi(request, env, url) {
   // New routes (batch / url / webhook / events / sources / stats) handled
   // first; falls through to the existing health/text/markdown/graph router
   // when null.
+  const cortex = await handleCortexApi(request, env, url);
+  if (cortex) return cortex;
+
   const ingress = await handleIngressApi(request, env, url);
   if (ingress) return ingress;
 

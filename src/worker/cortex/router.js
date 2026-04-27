@@ -1,0 +1,190 @@
+// Cortex compositor router. Mounted from src/worker.js → handleApi.
+// Owns:
+//   POST /api/v1/cortex/perceive
+//   POST /api/v1/cortex/think
+//   GET  /api/v1/cortex/state?userId=…
+//   POST /api/v1/cortex/act/:tool
+//   GET  /api/v1/cortex/tools
+//
+// Returns null when path doesn't match — caller falls through to ingress
+// router and then static assets.
+
+import { recordEvent, upsertNodesAndEdges } from '../d1-store.js';
+import { parseMarkdown, parseText } from '../text-parser.js';
+import { readAttention, writeAttention } from './attention.js';
+import { stamp, isPerceive, isThink, isAct } from './protocol.js';
+import { describeTools, dispatch } from './tools.js';
+import { think } from './reason.js';
+
+export async function handleCortexApi(request, env, url) {
+  const { pathname } = url;
+  const method = request.method;
+
+  if (pathname === '/api/v1/cortex/tools' && method === 'GET') {
+    return jsonResponse({ tools: describeTools() });
+  }
+
+  if (pathname === '/api/v1/cortex/state' && method === 'GET') {
+    const userId = need(url, 'userId');
+    if (!userId) return jsonResponse({ error: 'userId required' }, 400);
+    if (!checkUser(userId, env)) return forbidden(userId);
+    const att = await readAttention(env.GRAPH_KV, userId);
+    return jsonResponse({ attention: att });
+  }
+
+  if (pathname === '/api/v1/cortex/perceive' && method === 'POST') {
+    const dto = await safeJson(request);
+    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
+    const msg = stamp(dto, { clientFallback: 'unknown' });
+    if (!isPerceive(msg)) return jsonResponse({ error: 'not a perceive message (missing kind/modality)' }, 400);
+    const userId = (msg.userId || msg.payload?.userId || 'local').toString().trim();
+    if (!checkUser(userId, env)) return forbidden(userId);
+    const result = await perceive(env, userId, msg);
+    return jsonResponse(result, result.ok === false ? 400 : 200);
+  }
+
+  if (pathname === '/api/v1/cortex/think' && method === 'POST') {
+    const dto = await safeJson(request);
+    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
+    const msg = stamp(dto, { clientFallback: 'unknown' });
+    if (!isThink(msg)) return jsonResponse({ error: 'not a think message' }, 400);
+    const userId = (msg.userId || 'local').toString().trim();
+    if (!checkUser(userId, env)) return forbidden(userId);
+    const out = await think(env, {
+      userId,
+      question: msg.question,
+      budgetMs: msg.budgetMs,
+      budgetSteps: msg.budgetSteps,
+      model: msg.model,
+    });
+    // Mirror the think into the event log so the timeline shows it
+    if (env.GRAPH_DB) {
+      await recordEvent(env.GRAPH_DB, {
+        userId, sourceKind: 'cortex', kind: 'think',
+        payload: { question: msg.question, finalAnswer: out.finalAnswer, steps: out.trace?.length },
+        nodeCount: 0, edgeCount: 0,
+        status: out.ok ? 'applied' : 'error',
+        error: out.ok ? null : out.error,
+      });
+    }
+    return jsonResponse(out);
+  }
+
+  const actMatch = pathname.match(/^\/api\/v1\/cortex\/act\/([a-z0-9_-]+)$/);
+  if (actMatch && method === 'POST') {
+    const intent = actMatch[1];
+    const dto = await safeJson(request);
+    const userId = (dto?.userId || 'local').toString().trim();
+    if (!checkUser(userId, env)) return forbidden(userId);
+    const result = await dispatch(env, intent, dto?.args || {}, { userId });
+    return jsonResponse(result);
+  }
+
+  return null;
+}
+
+// ── perceive dispatcher ──────────────────────────────────────────────
+//
+// Routes a generic perceive message to the matching ingest path. Mirrors
+// the result into the event log + attention focus so the next /think
+// picks up the new perception.
+
+async function perceive(env, userId, msg) {
+  const merge = env.__mergeAndPersist;
+  if (typeof merge !== 'function' || !env.GRAPH_KV) {
+    return { ok: false, error: 'KV merge not wired' };
+  }
+  let parsed;
+  let payload = msg.payload || {};
+  let kind = msg.modality;
+
+  if (msg.modality === 'text') {
+    const text = (payload.text || '').toString();
+    if (!text.trim()) return { ok: false, error: 'text required' };
+    parsed = await parseText(text, {
+      userId, sourceId: msg.source || 'perceive',
+      title: payload.title || `Perceived text — ${new Date().toISOString().slice(0, 19)}`,
+    });
+  } else if (msg.modality === 'url') {
+    // We just record the URL as a single bookmark node; full server-side
+    // fetching lives in the existing /api/v1/public/ingest/url path. Clients
+    // that want fetch-and-parse should call that route directly.
+    const url = (payload.url || '').toString();
+    if (!/^https?:\/\//.test(url)) return { ok: false, error: 'url must be http(s)://' };
+    parsed = await parseText(`${payload.title || url}\n\n${payload.selection || ''}\n\n${url}`, {
+      userId, sourceId: 'webclip',
+      title: payload.title || url,
+    });
+  } else if (msg.modality === 'graph') {
+    if (!Array.isArray(payload.nodes)) return { ok: false, error: 'graph payload must have nodes[]' };
+    parsed = { nodes: payload.nodes, edges: payload.edges || [] };
+  } else if (msg.modality === 'webhook' || msg.modality === 'event') {
+    // Treat as a structured event — record it but don't graph-mutate unless
+    // the payload contains nodes.
+    parsed = { nodes: payload.nodes || [], edges: payload.edges || [] };
+  } else {
+    return { ok: false, error: `modality not yet supported in compositor: ${msg.modality}` };
+  }
+
+  const snap = await merge(env.GRAPH_KV, userId, parsed, msg.source || msg.modality);
+
+  let evtRow = null;
+  if (env.GRAPH_DB) {
+    const [e] = await Promise.all([
+      recordEvent(env.GRAPH_DB, {
+        userId, sourceKind: msg.modality, kind,
+        payload: { source: msg.source, ...payload },
+        nodeCount: parsed.nodes?.length ?? 0,
+        edgeCount: parsed.edges?.length ?? 0,
+        status: 'applied',
+      }),
+      upsertNodesAndEdges(env.GRAPH_DB, {
+        userId, sourceKind: msg.modality,
+        nodes: parsed.nodes, edges: parsed.edges,
+      }),
+    ]);
+    evtRow = e;
+  }
+
+  // Update attention: focus on whatever this perception added.
+  const focusIds = (parsed.nodes || []).slice(0, 8).map((n) => n.id).filter(Boolean);
+  await writeAttention(env.GRAPH_KV, userId, {
+    focus: focusIds,
+    recentEvents: evtRow ? [evtRow.id] : [],
+  });
+
+  return {
+    ok: true,
+    modality: msg.modality,
+    eventId: evtRow?.id ?? null,
+    deduped: evtRow?.deduped ?? false,
+    nodes: parsed.nodes?.length ?? 0,
+    edges: parsed.edges?.length ?? 0,
+    totalNodes: snap.nodes.length,
+    totalEdges: snap.edges.length,
+  };
+}
+
+// ── helpers ───────────────────────────────────────────────────────────
+
+async function safeJson(request) {
+  try { return await request.json(); } catch { return null; }
+}
+function need(url, key) {
+  const v = (url.searchParams.get(key) || '').trim();
+  return v || null;
+}
+function checkUser(userId, env) {
+  if (!userId) return false;
+  const csv = (env.PUBLIC_INGEST_USER_IDS || 'local').toString();
+  return csv.split(',').map((s) => s.trim()).filter(Boolean).includes(userId);
+}
+function forbidden(userId) {
+  return jsonResponse({ error: `userId=${userId ?? '(empty)'} not on allowlist` }, 403);
+}
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+  });
+}

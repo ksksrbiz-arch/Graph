@@ -41,4 +41,8 @@
       "database_id": "50cf79c6-37a6-4d83-9990-f601ef0e59da"
     }
   ]
+,
+  // Workers AI — Llama 3.x for the Cortex ReAct loop. Free tier,
+  // billed against the account; no API keys required.
+  "ai": { "binding": "AI" }
 }
