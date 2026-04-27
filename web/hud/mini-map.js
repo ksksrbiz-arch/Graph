@@ -117,9 +117,47 @@ export function initMiniMap({ getRenderer } = {}) {
   });
 
   // Continuous redraw while the simulation is settling — d3-force keeps
-  // mutating x/y, so a steady ~10fps loop keeps the dots in sync without
-  // burning CPU.
-  setInterval(schedule, 100);
+  // mutating x/y, so we sample positions at ~10fps and only schedule a
+  // repaint when something actually moved (or when the camera moved).
+  let posSig = 0;
+  let camSig = 0;
+  function computePosSig() {
+    const nodes = state.graph?.nodes || [];
+    let s = 0;
+    // Sum a sparse fingerprint — every Nth node is enough to detect drift.
+    const step = Math.max(1, Math.floor(nodes.length / 24));
+    for (let i = 0; i < nodes.length; i += step) {
+      const n = nodes[i];
+      s += (n.x | 0) * 7919 + (n.y | 0) * 6151;
+    }
+    return s;
+  }
+  function computeCamSig() {
+    const r = getRenderer?.();
+    const fg = r?.fg;
+    if (!fg) return 0;
+    try {
+      if (typeof fg.zoom === 'function' && typeof fg.centerAt === 'function') {
+        const z = fg.zoom() || 0;
+        const c = fg.centerAt() || { x: 0, y: 0 };
+        return (z * 1000) | 0 + (c.x | 0) * 13 + (c.y | 0) * 17;
+      }
+      if (typeof fg.camera === 'function') {
+        const cam = fg.camera();
+        return (cam.position?.x | 0) * 13 + (cam.position?.y | 0) * 17 + (cam.position?.z | 0) * 19;
+      }
+    } catch { /* ignore */ }
+    return 0;
+  }
+  setInterval(() => {
+    const np = computePosSig();
+    const nc = computeCamSig();
+    if (np !== posSig || nc !== camSig) {
+      posSig = np;
+      camSig = nc;
+      schedule();
+    }
+  }, 100);
 
   schedule();
 

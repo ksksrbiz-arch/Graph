@@ -156,7 +156,8 @@ export function initStatsBar({ getBrainMode } = {}) {
     if (reason === 'graph-loaded' || reason === 'filters-changed') recompute();
   });
 
-  // Tick the "last thought" relative clock once per minute.
+  // Tick the "last thought" relative clock every 30s so chips like "2m
+  // ago" stay roughly in sync without flooding rAF.
   setInterval(() => {
     if (lastInsightAt > 0) {
       const last = formatRelativeShort(Date.now() - lastInsightAt);

@@ -456,8 +456,9 @@ function renderPanel() {
   const num = document.getElementById('panel-confidence-num');
   // Reset width so the CSS transition replays.
   fill.style.width = '0%';
-  // eslint-disable-next-line no-unused-expressions
-  fill.offsetWidth;
+  // Force a layout reflow so the CSS width transition replays from 0
+  // every time the inspector opens on a new node.
+  void fill.offsetWidth;
   fill.style.width = `${(conf * 100).toFixed(1)}%`;
   num.textContent = conf.toFixed(2);
 
