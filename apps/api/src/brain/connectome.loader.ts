@@ -5,7 +5,7 @@
 // (0–1, layout force) is reused as the initial synaptic strength.
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Driver } from 'neo4j-driver';
+import neo4j, { type Driver } from 'neo4j-driver';
 import { regionForNode } from '@pkg/cortex';
 import type { ConnectorId, NodeType } from '@pkg/shared';
 import type { ConnectomeInput } from '@pkg/spiking';
@@ -29,7 +29,7 @@ export class ConnectomeLoader {
          WHERE n.deletedAt IS NULL
          RETURN n.id AS id, n.type AS type, n.sourceId AS sourceId
          LIMIT $limit`,
-        { userId, limit },
+        { userId, limit: neo4j.int(limit) },
       );
 
       const neurons = nodesRes.records.map((r) => {
@@ -44,11 +44,11 @@ export class ConnectomeLoader {
       });
 
       const edgesRes = await session.run(
-        `MATCH (a:KGNode {userId: $userId})-[r:REL]->(b:KGNode {userId: $userId})
+        `MATCH (a:KGNode {userId: $userId})-[r]->(b:KGNode {userId: $userId})
          WHERE a.deletedAt IS NULL AND b.deletedAt IS NULL
          RETURN r.id AS id, a.id AS pre, b.id AS post, r.weight AS weight
          LIMIT $limit`,
-        { userId, limit: limit * 4 },
+        { userId, limit: neo4j.int(limit * 4) },
       );
 
       const synapses = edgesRes.records.map((r) => ({

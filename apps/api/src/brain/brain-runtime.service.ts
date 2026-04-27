@@ -124,7 +124,12 @@ export class BrainRuntimeService implements OnApplicationBootstrap, OnModuleDest
   }
 
   async status(userId: string): Promise<BrainRuntimeStatus> {
-    const ownerInstanceId = await this.redis.get(this.lockKey(userId));
+    let ownerInstanceId: string | null = null;
+    try {
+      ownerInstanceId = await this.redis.get(this.lockKey(userId));
+    } catch {
+      // redis unreachable — fall back to local view
+    }
     return {
       userId,
       running: this.brain.isRunning(userId) || ownerInstanceId !== null,
@@ -138,16 +143,27 @@ export class BrainRuntimeService implements OnApplicationBootstrap, OnModuleDest
   }
 
   private async claimLock(userId: string): Promise<boolean> {
-    const claimed = await this.redis.set(
-      this.lockKey(userId),
-      this.instanceId,
-      'EX',
-      this.env.BRAIN_LOCK_TTL_SECONDS,
-      'NX',
-    );
-    if (claimed !== 'OK') return false;
-    this.startRenewTimer(userId);
-    return true;
+    // Phase 0 / single-instance fallback: if Redis is unreachable (placeholder
+    // URL or transient outage), proceed with local-only ownership rather than
+    // refusing to start the brain. min_machines_running=1 on Fly means there
+    // is no remote instance to coordinate with anyway.
+    try {
+      const claimed = await this.redis.set(
+        this.lockKey(userId),
+        this.instanceId,
+        'EX',
+        this.env.BRAIN_LOCK_TTL_SECONDS,
+        'NX',
+      );
+      if (claimed !== 'OK') return false;
+      this.startRenewTimer(userId);
+      return true;
+    } catch (error) {
+      this.log.warn(
+        `redis lock unavailable, claiming local-only lock for user=${userId}: ${(error as Error).message}`,
+      );
+      return true;
+    }
   }
 
   private startRenewTimer(userId: string): void {
@@ -192,7 +208,13 @@ export class BrainRuntimeService implements OnApplicationBootstrap, OnModuleDest
 
   private async releaseLock(userId: string): Promise<void> {
     this.stopRenewTimer(userId);
-    await this.redis.eval(RELEASE_LOCK_SCRIPT, 1, this.lockKey(userId), this.instanceId);
+    try {
+      await this.redis.eval(RELEASE_LOCK_SCRIPT, 1, this.lockKey(userId), this.instanceId);
+    } catch (error) {
+      this.log.debug(
+        `redis releaseLock skipped user=${userId}: ${(error as Error).message}`,
+      );
+    }
   }
 
   private startDreamCycle(userId: string): void {
