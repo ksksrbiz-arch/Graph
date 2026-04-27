@@ -177,11 +177,35 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     fg.refresh?.();
   }
 
+  // Track which nodes/edges we've already shown so newly-arriving ones can
+  // get a one-shot birth pulse (matches the 2D renderer's procedural-build
+  // animation, but reuses the existing 3D spike pulse + edge particle so we
+  // don't add a second WebGL pass).
+  const seenNodes3d = new Set();
+  const seenEdges3d = new Set();
+  let firstSync3d = true;
+
   function setData(graph) {
     if (fourD) applyTemporal(graph);
     else for (const n of graph.nodes) { delete n.fz; }
     fg.graphData(graph);
     applyConfig();
+
+    const newNodeIds = [];
+    const newEdges = [];
+    for (const n of graph.nodes) {
+      if (!firstSync3d && !seenNodes3d.has(n.id)) newNodeIds.push(n.id);
+      seenNodes3d.add(n.id);
+    }
+    for (const e of graph.links || graph.edges || []) {
+      const k = `${srcId(e)}::${tgtId(e)}`;
+      if (!firstSync3d && !seenEdges3d.has(k)) newEdges.push(e);
+      seenEdges3d.add(k);
+    }
+    if (firstSync3d) firstSync3d = false;
+    // Stagger so big imports don't pulse the entire scene at once.
+    newNodeIds.forEach((id, i) => setTimeout(() => api.bornNode(id), i * 35));
+    newEdges.forEach((e, i)   => setTimeout(() => api.grewEdge(e), 200 + i * 25));
   }
 
   function applyTemporal(graph) {
@@ -200,7 +224,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     }
   }
 
-  return {
+  const api = {
     kind: fourD ? '4d' : '3d',
     fg,
     setData,
@@ -253,6 +277,52 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     },
     startSpikes() { /* particles are always rendered — nothing to start */ },
     stopSpikes() { activePulses.clear(); },
+    /** New-node animation in 3D — re-uses the existing spike pulse so the
+     *  newly-arrived neuron flashes once and outgoing edges spit a particle.
+     *  This keeps the visual language consistent with the 2D construction
+     *  renderer without doubling the WebGL work. */
+    bornNode(neuronId) { try { this.spikeNode(neuronId); } catch {} },
+    grewEdge(edge) {
+      if (typeof fg.emitParticle === 'function') {
+        const data = fg.graphData?.();
+        if (!data) return;
+        const want = `${srcId(edge)}::${tgtId(edge)}`;
+        for (const link of data.links) {
+          if (`${srcId(link)}::${tgtId(link)}` === want) {
+            try { fg.emitParticle(link); } catch {}
+            break;
+          }
+        }
+      }
+    },
+    thinkWave(rootId) {
+      // Emit a BFS cascade of edge particles to mimic a wave of thought.
+      if (!rootId || !state.byId.has(rootId)) return;
+      const visited = new Set([rootId]);
+      let frontier = [rootId];
+      let depth = 0;
+      const data = fg.graphData?.();
+      const linkByKey = new Map();
+      if (data) for (const l of data.links) linkByKey.set(`${srcId(l)}::${tgtId(l)}`, l);
+      while (frontier.length && depth < 4) {
+        const next = [];
+        for (const id of frontier) {
+          const outs = state.outgoing?.get(id) || [];
+          for (const e of outs) {
+            const other = srcId(e) === id ? tgtId(e) : srcId(e);
+            if (visited.has(other)) continue;
+            visited.add(other);
+            next.push(other);
+            const link = linkByKey.get(`${srcId(e)}::${tgtId(e)}`);
+            if (link && typeof fg.emitParticle === 'function') {
+              setTimeout(() => { try { fg.emitParticle(link); } catch {} }, depth * 280);
+            }
+          }
+        }
+        frontier = next;
+        depth += 1;
+      }
+    },
     destroy() {
       try { obs.disconnect(); } catch {}
       try { fg._destructor?.(); } catch {}
@@ -262,6 +332,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
       container.innerHTML = '';
     },
   };
+  return api;
 }
 
 function escapeLabel(s) {

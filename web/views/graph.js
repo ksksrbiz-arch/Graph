@@ -11,6 +11,7 @@ import { regionForNode, styleForRegion } from '../cortex.js';
 import { createBrainClient } from '../brain.js';
 import { create2DRenderer } from './graph-2d.js';
 import { create3DRenderer } from './graph-3d.js';
+import { startBackdrop } from '../brain-backdrop.js';
 import { initStatsBar } from '../hud/stats-bar.js';
 import { initBrainControls } from '../hud/brain-controls.js';
 import { initMiniMap } from '../hud/mini-map.js';
@@ -115,6 +116,30 @@ export function initGraphView() {
   reflectModeButtons();
   reflectBrainButton();
   startHud();
+
+  // Ambient wireframe backdrop — sits behind the force-graph canvas and
+  // gives the graph the "brain in a halo" feel from the reference photos.
+  // Mounted on #view-graph so it survives renderer rebuilds (the renderer
+  // clears #canvas.innerHTML on each setup).
+  try { startBackdrop({ container: document.getElementById('view-graph') }); } catch {}
+
+  // Cortex thinking events — the cortex view dispatches these on
+  // `window` whenever a /think request starts/ends so the graph can render
+  // a BFS ripple across the network for the duration of reasoning.
+  window.addEventListener('cortex-thinking-start', (e) => {
+    const rootId = e?.detail?.rootId
+      || state.selectedId
+      || state.focusRootId
+      || null;
+    renderer?.thinkWave?.(rootId);
+  });
+  window.addEventListener('cortex-thinking-tick', (e) => {
+    const rootId = e?.detail?.rootId
+      || state.selectedId
+      || state.focusRootId
+      || null;
+    renderer?.thinkWave?.(rootId, e?.detail?.color);
+  });
 
   // Visual Spec Part 2 §5/§7/§9/§10/§11: HUD overlays. These mount into
   // anchor elements declared in index.html (#hud-stats-bar,
