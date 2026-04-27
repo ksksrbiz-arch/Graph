@@ -50,17 +50,34 @@
         <div class="graph-toolbar">
           <fieldset id="type-filters" aria-label="Filter by node type"></fieldset>
           <div class="graph-toolbar-right">
+            <div class="dim-switch" role="tablist" aria-label="Render mode">
+              <button type="button" data-dim="2" class="active" title="Classic 2D canvas">2D</button>
+              <button type="button" data-dim="3" title="Volumetric WebGL with bloom">3D</button>
+              <button type="button" data-dim="4" title="3D + temporal axis (creation time → Z)">4D</button>
+            </div>
             <label class="slider" title="Hide weak edges below this weight">
               <span>min edge</span>
               <input id="edge-weight" type="range" min="0" max="1" step="0.05" value="0" />
               <span id="edge-weight-val">0.00</span>
             </label>
+            <label class="slider" title="Same-region attraction (cortex clustering)">
+              <span>region pull</span>
+              <input id="region-pull" type="range" min="0" max="1" step="0.05" value="0" />
+              <span id="region-pull-val">0.00</span>
+            </label>
+            <button id="brain-link" type="button" class="brain-link" title="Show neural firing on the graph">
+              <span class="dot"></span><span class="lbl">brain</span>
+            </button>
             <button id="fit-btn" type="button" title="Fit graph to view">Fit</button>
             <button id="reset-focus" type="button" title="Clear ego-network focus" disabled>Reset focus</button>
           </div>
         </div>
         <div id="canvas" role="application" aria-label="Knowledge graph canvas"></div>
         <div class="legend" id="legend" aria-label="Legend"></div>
+        <div class="hud" id="hud" aria-label="Render HUD">
+          <span class="hud-row"><b id="hud-mode">2D</b><span id="hud-fps">— fps</span></span>
+          <span class="hud-row"><span id="hud-spikes">0 spikes/s</span><span id="hud-mode-detail" class="hud-faint"></span></span>
+        </div>
         <div class="zoom-controls">
           <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
           <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
@@ -118,33 +135,140 @@
 
       <!-- Settings view -->
       <section id="view-settings" class="view" aria-label="Settings">
-        <div class="view-header"><h2>Settings</h2></div>
+        <div class="view-header">
+          <h2>Settings</h2>
+          <p class="view-sub">Every setting below is wired to the live graph. Changes apply instantly — no reload.</p>
+        </div>
         <div class="settings-grid">
           <section class="settings-card">
-            <h3>Layout physics</h3>
-            <p class="hint">Live-tweak the force simulation.</p>
+            <h3>Render dimensions</h3>
+            <p class="hint">Switch between flat 2D, volumetric 3D, and 4D (3D + temporal axis).</p>
+            <div class="dim-switch dim-switch-lg" id="cfg-dim-switch">
+              <button type="button" data-dim="2">2D</button>
+              <button type="button" data-dim="3">3D</button>
+              <button type="button" data-dim="4">4D</button>
+            </div>
             <label class="slider">
-              <span>Charge strength</span>
-              <input id="cfg-charge" type="range" min="-400" max="0" step="10" value="-120" />
+              <span>Temporal axis stretch</span>
+              <input id="cfg-tscale" type="range" min="0" max="3" step="0.1" value="1" />
+              <span id="cfg-tscale-val">1.0</span>
+            </label>
+            <label class="row">
+              <span>Temporal field</span>
+              <select id="cfg-tfield">
+                <option value="createdAt" selected>createdAt</option>
+                <option value="updatedAt">updatedAt</option>
+              </select>
+            </label>
+            <label class="row"><input id="cfg-bloom" type="checkbox" checked /> Bloom postprocessing (3D/4D)</label>
+          </section>
+
+          <section class="settings-card">
+            <h3>Layout physics</h3>
+            <p class="hint">d3-force-3d simulation parameters — tweak live.</p>
+            <label class="slider">
+              <span>Charge (repulsion)</span>
+              <input id="cfg-charge" type="range" min="-600" max="0" step="5" value="-120" />
               <span id="cfg-charge-val">-120</span>
             </label>
             <label class="slider">
               <span>Link distance</span>
-              <input id="cfg-link" type="range" min="10" max="200" step="5" value="60" />
+              <input id="cfg-link" type="range" min="10" max="240" step="2" value="60" />
               <span id="cfg-link-val">60</span>
             </label>
             <label class="slider">
-              <span>Node size</span>
-              <input id="cfg-node-size" type="range" min="2" max="14" step="1" value="4" />
-              <span id="cfg-node-size-val">4</span>
+              <span>Link spring strength</span>
+              <input id="cfg-link-strength" type="range" min="0" max="1" step="0.02" value="0.5" />
+              <span id="cfg-link-strength-val">0.50</span>
+            </label>
+            <label class="slider">
+              <span>Gravity (centering)</span>
+              <input id="cfg-gravity" type="range" min="0" max="0.5" step="0.005" value="0.05" />
+              <span id="cfg-gravity-val">0.050</span>
+            </label>
+            <label class="slider">
+              <span>Collision radius</span>
+              <input id="cfg-collision" type="range" min="0" max="40" step="1" value="0" />
+              <span id="cfg-collision-val">0</span>
+            </label>
+            <label class="slider">
+              <span>Velocity decay</span>
+              <input id="cfg-velocity" type="range" min="0.05" max="0.95" step="0.01" value="0.4" />
+              <span id="cfg-velocity-val">0.40</span>
+            </label>
+            <label class="slider">
+              <span>Region clustering</span>
+              <input id="cfg-region" type="range" min="0" max="1" step="0.05" value="0" />
+              <span id="cfg-region-val">0.00</span>
             </label>
           </section>
+
+          <section class="settings-card">
+            <h3>Visual style</h3>
+            <p class="hint">Node size, glow, and edge appearance.</p>
+            <label class="slider">
+              <span>Node size</span>
+              <input id="cfg-node-size" type="range" min="2" max="14" step="0.5" value="4" />
+              <span id="cfg-node-size-val">4</span>
+            </label>
+            <label class="slider">
+              <span>Node opacity</span>
+              <input id="cfg-node-opacity" type="range" min="0.2" max="1" step="0.02" value="1" />
+              <span id="cfg-node-opacity-val">1.00</span>
+            </label>
+            <label class="slider">
+              <span>Edge opacity</span>
+              <input id="cfg-edge-opacity" type="range" min="0.05" max="1" step="0.02" value="0.35" />
+              <span id="cfg-edge-opacity-val">0.35</span>
+            </label>
+            <label class="slider">
+              <span>Edge width scale</span>
+              <input id="cfg-edge-width" type="range" min="0.2" max="6" step="0.1" value="1.6" />
+              <span id="cfg-edge-width-val">1.6</span>
+            </label>
+            <label class="slider">
+              <span>Edge curvature</span>
+              <input id="cfg-edge-curve" type="range" min="0" max="0.7" step="0.02" value="0" />
+              <span id="cfg-edge-curve-val">0.00</span>
+            </label>
+            <label class="row">
+              <span>Color mode</span>
+              <select id="cfg-colormode">
+                <option value="type" selected>by node type</option>
+                <option value="region">by brain region</option>
+                <option value="degree">by degree (heat)</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="settings-card">
+            <h3>Neural link</h3>
+            <p class="hint">Connect the spiking simulator to the graph view.</p>
+            <label class="row"><input id="cfg-spikes" type="checkbox" checked /> Animate spike events (LIF + STDP)</label>
+            <label class="slider">
+              <span>Spike intensity</span>
+              <input id="cfg-spike-int" type="range" min="0.2" max="3" step="0.1" value="1" />
+              <span id="cfg-spike-int-val">1.0</span>
+            </label>
+            <label class="slider">
+              <span>Pulse speed</span>
+              <input id="cfg-pulse-speed" type="range" min="0.25" max="3" step="0.05" value="1" />
+              <span id="cfg-pulse-speed-val">1.00</span>
+            </label>
+            <label class="slider">
+              <span>Edge particles (3D)</span>
+              <input id="cfg-particles" type="range" min="0" max="6" step="1" value="1" />
+              <span id="cfg-particles-val">1</span>
+            </label>
+          </section>
+
           <section class="settings-card">
             <h3>Display</h3>
             <label class="row"><input id="cfg-labels" type="checkbox" /> Always show labels (off = reveal on hover/select)</label>
-            <label class="row"><input id="cfg-spikes" type="checkbox" /> Animate spike events (LIF + STDP)</label>
             <label class="row"><input id="cfg-auto-refresh" type="checkbox" /> Auto-refresh data every 30s</label>
+            <button id="cfg-reset" type="button">Reset all to defaults</button>
           </section>
+
           <section class="settings-card">
             <h3>Data</h3>
             <p class="hint">Graph file: <code>data/graph.json</code></p>
@@ -159,6 +283,7 @@
   <div id="toast" class="toast hidden" role="status"></div>
 
   <script src="./vendor/force-graph.min.js"></script>
+  <script src="./vendor/3d-force-graph.min.js"></script>
   <script src="./vendor/socket.io.min.js"></script>
   <script src="./config.js"></script>
   <script type="module" src="./app.js"></script>

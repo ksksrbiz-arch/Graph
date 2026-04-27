@@ -19,11 +19,37 @@ export const state = {
   focusDepth: 2,
   pendingFocus: null,
   config: {
+    // dimensions: 2 = classic flat, 3 = volumetric, 4 = 3D + temporal axis
+    dimensions: 2,
+    // d3-force tunings
     chargeStrength: -120,
     linkDistance: 60,
+    linkStrength: 0.5,
+    gravity: 0.05,
+    collisionRadius: 0,
+    velocityDecay: 0.4,
+    alphaDecay: 0.0228,
+    cooldownTicks: Infinity,
+    // visuals
     nodeRelSize: 4,
+    nodeOpacity: 1,
+    edgeOpacity: 0.35,
+    edgeCurvature: 0,
+    edgeWidthScale: 1.6,
     showLabels: false,
+    bloom: true,
+    bgIntensity: 0.6,
+    colorMode: 'type',     // 'type' | 'region' | 'degree'
+    // neural-link
     spikes: true,
+    spikeIntensity: 1,
+    pulseSpeed: 1,
+    linkParticles: 1,
+    regionClustering: 0.0,  // 0..1 strength of same-region attraction
+    // 4D temporal axis
+    temporalField: 'createdAt',
+    temporalScale: 1,
+    // misc
     autoRefresh: false,
   },
   loading: false,
@@ -160,6 +186,13 @@ export function setHovered(id) {
 export function setConfig(patch) {
   Object.assign(state.config, patch);
   emit('config-changed', patch);
+}
+
+export function setDimensions(d) {
+  const next = d === 3 || d === 4 ? d : 2;
+  if (state.config.dimensions === next) return;
+  state.config.dimensions = next;
+  emit('dimensions-changed', { dimensions: next });
 }
 
 export function setPendingFocus(id) {

@@ -1,21 +1,29 @@
+// Graph view orchestrator. Owns the renderer (2D/3D/4D), UI panels and
+// context menus, the brain/spike client, and the live tuning loop. Calls
+// down into the renderer module appropriate for the current dimension.
+
 import {
-  state, subscribe, emit, setSelected, setFocusRoot, setHovered,
-  setMinEdgeWeight, toggleFilterType, visibleNodeIds,
+  state, subscribe, setSelected, setFocusRoot, setHovered,
+  setMinEdgeWeight, toggleFilterType, visibleNodeIds, setConfig, setDimensions,
 } from '../state.js';
 import { colorForType, escape, fmtDate, srcId, tgtId, truncate, el } from '../util.js';
-import { createSpikeRenderer } from '../spike-render.js';
+import { regionForNode, styleForRegion } from '../cortex.js';
 import { createBrainClient } from '../brain.js';
+import { create2DRenderer } from './graph-2d.js';
+import { create3DRenderer } from './graph-3d.js';
 
-let fg = null;
-let spikes = null;
+let renderer = null;
 let brain = null;
+let regionForce = null; // d3-force callback installed for region clustering
+let lastSpikeAt = 0;
+let spikeCount1s = 0;
 
 export function initGraphView() {
   const canvas = document.getElementById('canvas');
 
-  document.getElementById('fit-btn').addEventListener('click', () => fg?.zoomToFit(500, 60));
-  document.getElementById('zoom-in').addEventListener('click', () => fg && fg.zoom(fg.zoom() * 1.4, 250));
-  document.getElementById('zoom-out').addEventListener('click', () => fg && fg.zoom(fg.zoom() / 1.4, 250));
+  document.getElementById('fit-btn').addEventListener('click', () => renderer?.fit(500, 60));
+  document.getElementById('zoom-in').addEventListener('click', () => renderer?.zoomIn());
+  document.getElementById('zoom-out').addEventListener('click', () => renderer?.zoomOut());
   document.getElementById('reset-focus').addEventListener('click', clearFocus);
   document.getElementById('focus-banner-close').addEventListener('click', clearFocus);
 
@@ -23,6 +31,29 @@ export function initGraphView() {
   weightSlider.addEventListener('input', () => {
     document.getElementById('edge-weight-val').textContent = Number(weightSlider.value).toFixed(2);
     setMinEdgeWeight(Number(weightSlider.value));
+  });
+
+  const regionSlider = document.getElementById('region-pull');
+  regionSlider.addEventListener('input', () => {
+    const v = Number(regionSlider.value);
+    document.getElementById('region-pull-val').textContent = v.toFixed(2);
+    setConfig({ regionClustering: v });
+    const tw = document.getElementById('cfg-region');
+    const twv = document.getElementById('cfg-region-val');
+    if (tw) tw.value = String(v);
+    if (twv) twv.textContent = v.toFixed(2);
+  });
+
+  document.querySelectorAll('.dim-switch button').forEach((b) => {
+    b.addEventListener('click', () => {
+      const d = Number(b.dataset.dim);
+      setDimensions(d);
+    });
+  });
+
+  const brainBtn = document.getElementById('brain-link');
+  brainBtn.addEventListener('click', () => {
+    setConfig({ spikes: !(state.config.spikes !== false) });
   });
 
   document.getElementById('panel-close').addEventListener('click', () => setSelected(null));
@@ -44,9 +75,19 @@ export function initGraphView() {
       if (state.focusRootId) clearFocus();
       else if (state.selectedId) setSelected(null);
     } else if (e.key === 'f' && !isTyping(e.target)) {
-      fg?.zoomToFit(500, 60);
+      renderer?.fit(500, 60);
+    } else if (e.key === '2' && !isTyping(e.target)) {
+      setDimensions(2);
+    } else if (e.key === '3' && !isTyping(e.target)) {
+      setDimensions(3);
+    } else if (e.key === '4' && !isTyping(e.target)) {
+      setDimensions(4);
     }
   });
+
+  reflectModeButtons();
+  reflectBrainButton();
+  startHud();
 
   subscribe((reason) => {
     if (reason === 'graph-loaded') {
@@ -56,7 +97,13 @@ export function initGraphView() {
       applyFilters();
     } else if (reason === 'selection-changed') { renderPanel(); refreshOverlay(); }
     else if (reason === 'hover-changed') refreshOverlay();
-    else if (reason === 'config-changed') applyConfig();
+    else if (reason === 'config-changed') {
+      reflectBrainButton();
+      applyConfig();
+    } else if (reason === 'dimensions-changed') {
+      reflectModeButtons();
+      rebuildRenderer();
+    }
   });
 }
 
@@ -72,7 +119,7 @@ function buildOrUpdate() {
   }
   buildTypeFilters();
   buildLegend();
-  if (!fg) initForceGraph();
+  if (!renderer) rebuildRenderer();
   applyFilters();
   applyConfig();
   if (state.pendingFocus) {
@@ -82,52 +129,51 @@ function buildOrUpdate() {
   }
 }
 
-function initForceGraph() {
+function rebuildRenderer() {
   const container = document.getElementById('canvas');
-  container.innerHTML = '';
-  fg = ForceGraph()(container)
-    .backgroundColor('rgba(0,0,0,0)')
-    .autoPauseRedraw(false)
-    .nodeId('id')
-    .nodeLabel((n) => `${escape(n.label || n.id)} — ${n.type}`)
-    .nodeVal((n) => Math.max(1, Math.sqrt(n.__degree || 1) * 3))
-    .nodeRelSize(4)
-    .linkColor((l) => edgeColor(l))
-    .linkWidth((l) => 0.4 + (l.weight || 0.3) * 1.6)
-    .onNodeHover((n) => {
-      document.getElementById('canvas').style.cursor = n ? 'pointer' : 'default';
-      setHovered(n ? n.id : null);
-    })
-    .onNodeClick((n) => { setSelected(n.id); })
-    .onNodeRightClick((n, evt) => { evt.preventDefault(); openContextMenu(n, evt); })
-    .onBackgroundClick(() => { setSelected(null); closeContextMenu(); })
-    .onBackgroundRightClick((evt) => { evt.preventDefault(); closeContextMenu(); })
-    .nodeCanvasObjectMode((n) => 'after')
-    .nodeCanvasObject(drawNode);
+  if (renderer) {
+    try { brain?.stop(); } catch {}
+    try { renderer.destroy(); } catch {}
+    renderer = null;
+  }
+  const callbacks = {
+    onClick: (n) => { if (n) setSelected(n.id); },
+    onRightClick: (n, evt) => { evt.preventDefault?.(); if (n) openContextMenu(n, evt); },
+    onHover: (id) => setHovered(id),
+    onBackgroundClick: () => { setSelected(null); closeContextMenu(); },
+    onBackgroundRightClick: (evt) => { evt.preventDefault?.(); closeContextMenu(); },
+  };
+  if (state.config.dimensions === 3 || state.config.dimensions === 4) {
+    renderer = create3DRenderer({
+      container,
+      callbacks,
+      fourD: state.config.dimensions === 4,
+    });
+  }
+  if (!renderer) {
+    renderer = create2DRenderer({ container, callbacks });
+  }
+  if (renderer.kind === '2d') attachLongPress(container);
+  applyFilters();
+  applyConfig();
+  installRegionForce();
+  renderer.startSpikes?.();
 
-  const ro = new ResizeObserver(() => {
-    fg.width(container.clientWidth).height(container.clientHeight);
-  });
-  ro.observe(container);
-  fg.width(container.clientWidth).height(container.clientHeight);
-
-  attachLongPress(container);
-  initSpikes();
-}
-
-function initSpikes() {
-  if (!fg) return;
-  spikes = createSpikeRenderer(fg, state);
+  // (Re)wire the brain client so spikes flow into the new renderer.
+  if (brain) try { brain.stop(); } catch {}
   brain = createBrainClient({
     getGraph: () => state.graph,
     getUserId: () => 'local-demo',
-    onSpike: (e) => spikes?.onSpike(e.neuronId),
-    onWeight: (_e) => { /* reserved: visualise plasticity later */ },
+    onSpike: (e) => {
+      const now = performance.now();
+      if (now - lastSpikeAt < 1000) spikeCount1s += 1;
+      else { spikeCount1s = 1; lastSpikeAt = now; }
+      renderer?.spikeNode?.(e.neuronId);
+    },
+    onWeight: () => {},
   });
-  if (state.config.spikes !== false) {
-    spikes.start();
-    brain.start();
-  }
+  if (state.config.spikes !== false) brain.start();
+  updateModeHud();
 }
 
 function attachLongPress(container) {
@@ -137,14 +183,14 @@ function attachLongPress(container) {
   const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
 
   container.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1 || !fg) return;
+    if (e.touches.length !== 1 || !renderer || renderer.kind !== '2d') return;
     triggered = false;
     const t = e.touches[0];
     startX = t.clientX; startY = t.clientY;
     timer = setTimeout(() => {
       timer = null;
       const rect = container.getBoundingClientRect();
-      const coords = fg.screen2GraphCoords(startX - rect.left, startY - rect.top);
+      const coords = renderer.screen2GraphCoords(startX - rect.left, startY - rect.top);
       const node = pickNodeAt(coords.x, coords.y);
       if (node) {
         triggered = true;
@@ -178,102 +224,23 @@ function pickNodeAt(x, y) {
   return best;
 }
 
-function drawNode(node, ctx, scale) {
-  const r = nodeRadius(node);
-  const dim = isDimmed(node);
-  const c = colorForType(node.type);
-  ctx.beginPath();
-  ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-  ctx.fillStyle = dim ? withAlpha(c, 0.18) : c;
-  ctx.fill();
-  if (state.selectedId === node.id || state.focusRootId === node.id) {
-    ctx.lineWidth = 2 / scale;
-    ctx.strokeStyle = '#ffffff';
-    ctx.stroke();
-  } else if (state.hoveredId === node.id) {
-    ctx.lineWidth = 1.5 / scale;
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    ctx.stroke();
-  }
-  const isFocal =
-    node.id === state.selectedId ||
-    node.id === state.hoveredId ||
-    node.id === state.focusRootId;
-  const focalAnchor = state.hoveredId || state.selectedId;
-  const isFocalNeighbor = focalAnchor && focalAnchor !== node.id &&
-    state.adjacency.get(focalAnchor)?.has(node.id);
-
-  let drawLabel = false;
-  if (isFocal || isFocalNeighbor) {
-    drawLabel = true;
-  } else if (state.config.showLabels) {
-    const isHub = (node.__degree || 0) >= 4;
-    if (isHub || scale >= 1.5) drawLabel = true;
-  }
-  if (!drawLabel) return;
-
-  const label = node.label || node.id;
-  const fontSize = Math.max(10, 12 / scale);
-  ctx.font = `${fontSize}px -apple-system, system-ui, sans-serif`;
-  const textX = node.x + r + 4;
-  const textY = node.y;
-  if (isFocal) {
-    ctx.font = `600 ${fontSize}px -apple-system, system-ui, sans-serif`;
-    const text = truncate(label, 40);
-    const padX = 4 / scale;
-    const padY = 2 / scale;
-    const w = ctx.measureText(text).width;
-    ctx.fillStyle = 'rgba(11,13,18,0.78)';
-    ctx.fillRect(textX - padX, textY - fontSize / 2 - padY, w + padX * 2, fontSize + padY * 2);
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, textX, textY);
-  } else {
-    ctx.fillStyle = dim ? 'rgba(230,232,238,0.35)' : '#e6e8ee';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(truncate(label, 40), textX, textY);
-  }
-}
-
 function nodeRadius(n) {
   const deg = n.__degree || 1;
   return Math.max(3, Math.min(20, 3 + Math.sqrt(deg) * 2));
 }
 
-function isDimmed(node) {
-  if (!state.hoveredId) return false;
-  if (state.hoveredId === node.id) return false;
-  const nbrs = state.adjacency.get(state.hoveredId);
-  return !(nbrs && nbrs.has(node.id));
-}
-
-function edgeColor(link) {
-  if (state.hoveredId) {
-    const s = srcId(link), t = tgtId(link);
-    if (s === state.hoveredId || t === state.hoveredId) return 'rgba(124,156,255,0.85)';
-    return 'rgba(160,170,190,0.08)';
-  }
-  return 'rgba(160,170,190,0.22)';
-}
-
-function withAlpha(hex, a) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-}
-
 function applyFilters() {
-  if (!fg) return;
+  if (!renderer) return;
   const ids = visibleNodeIds();
   const nodes = state.graph.nodes.filter((n) => ids.has(n.id));
+  // Decorate with cached region so renderers can colour by it without
+  // re-running the regionForNode lookup on every frame.
+  for (const n of nodes) if (!n.region) n.region = regionForNode(n);
   const edges = state.graph.edges
     .filter((e) => ids.has(srcId(e)) && ids.has(tgtId(e)))
     .filter((e) => (e.weight || 0) >= state.filters.minEdgeWeight)
     .map((e) => ({ ...e, source: srcId(e), target: tgtId(e) }));
-  fg.graphData({ nodes, links: edges });
+  renderer.setData({ nodes, links: edges });
   document.getElementById('stats').textContent = `${nodes.length} nodes · ${edges.length} edges`;
   document.getElementById('reset-focus').disabled = !state.focusRootId;
   const banner = document.getElementById('focus-banner');
@@ -289,26 +256,64 @@ function applyFilters() {
 }
 
 function applyConfig() {
-  if (!fg) return;
-  const charge = fg.d3Force('charge');
-  if (charge) charge.strength(state.config.chargeStrength);
-  const link = fg.d3Force('link');
-  if (link) link.distance(state.config.linkDistance);
-  fg.nodeRelSize(state.config.nodeRelSize);
-  fg.d3ReheatSimulation();
-
+  if (!renderer) return;
+  renderer.applyConfig();
+  installRegionForce();
   if (state.config.spikes === false) {
-    spikes?.stop();
-    spikes?.clear();
+    renderer.stopSpikes?.();
     brain?.stop();
-  } else if (spikes && brain && !spikes.isActive()) {
-    spikes.start();
-    brain.start();
+  } else {
+    if (brain && brain.mode === 'idle') brain.start();
+    renderer.startSpikes?.();
   }
 }
 
+function installRegionForce() {
+  if (!renderer || !renderer.fg) return;
+  const fg = renderer.fg;
+  if (typeof fg.d3Force !== 'function') return;
+  const k = state.config.regionClustering || 0;
+  if (k <= 0) {
+    if (regionForce) {
+      try { fg.d3Force('region', null); } catch {}
+      regionForce = null;
+    }
+    return;
+  }
+  // Build region centroid table on each tick and pull each node toward its
+  // region's centroid.
+  const force = function (alpha) {
+    const data = fg.graphData?.();
+    if (!data) return;
+    const cx = new Map(), cy = new Map(), cz = new Map(), cn = new Map();
+    for (const n of data.nodes) {
+      const r = n.region || regionForNode(n);
+      cx.set(r, (cx.get(r) || 0) + (n.x || 0));
+      cy.set(r, (cy.get(r) || 0) + (n.y || 0));
+      cz.set(r, (cz.get(r) || 0) + (n.z || 0));
+      cn.set(r, (cn.get(r) || 0) + 1);
+    }
+    for (const [r, n] of cn) {
+      cx.set(r, cx.get(r) / n);
+      cy.set(r, cy.get(r) / n);
+      cz.set(r, cz.get(r) / n);
+    }
+    const strength = k * alpha * 0.4;
+    for (const node of data.nodes) {
+      const r = node.region || regionForNode(node);
+      node.vx = (node.vx || 0) + ((cx.get(r) - (node.x || 0)) * strength);
+      node.vy = (node.vy || 0) + ((cy.get(r) - (node.y || 0)) * strength);
+      if (node.z != null) node.vz = (node.vz || 0) + ((cz.get(r) - (node.z || 0)) * strength);
+    }
+  };
+  fg.d3Force('region', force);
+  regionForce = force;
+  fg.d3ReheatSimulation?.();
+}
+
 function refreshOverlay() {
-  if (!fg) return;
+  if (!renderer) return;
+  renderer.refresh?.();
 }
 
 function buildTypeFilters() {
@@ -343,6 +348,20 @@ function buildLegend(visibleIds) {
   const types = [...counts.keys()].sort();
   if (types.length === 0) { legend.classList.add('hidden'); return; }
   legend.classList.remove('hidden');
+  if (state.config.colorMode === 'region') {
+    const regions = new Map();
+    for (const n of state.graph.nodes) {
+      if (!ids.has(n.id)) continue;
+      const r = n.region || regionForNode(n);
+      regions.set(r, (regions.get(r) || 0) + 1);
+    }
+    for (const r of [...regions.keys()].sort()) {
+      const row = el('div', { class: 'row' });
+      row.innerHTML = `<span class="swatch" style="--c:${styleForRegion(r).color}"></span><b>${styleForRegion(r).label}</b><span class="count">${regions.get(r)}</span>`;
+      legend.appendChild(row);
+    }
+    return;
+  }
   for (const t of types) {
     const row = el('div', { class: 'row' });
     row.innerHTML = `<span class="swatch" style="--c:${colorForType(t)}"></span><b>${t}</b><span class="count">${counts.get(t)}</span>`;
@@ -364,9 +383,11 @@ function renderPanel() {
 
   const meta = document.getElementById('panel-meta');
   meta.innerHTML = '';
+  const region = node.region || regionForNode(node);
   const fields = [
     ['ID', node.id],
     ['Source', node.sourceId || '—'],
+    ['Region', styleForRegion(region).label],
     ['Created', fmtDate(node.createdAt)],
     ['Updated', fmtDate(node.updatedAt)],
     ['Degree', String(node.__degree || 0)],
@@ -412,11 +433,10 @@ function renderPanel() {
 
 function focusOn(id) {
   const node = state.byId.get(id);
-  if (!node || !fg) return;
+  if (!node || !renderer) return;
   setSelected(id);
-  if (node.x != null && node.y != null) {
-    fg.centerAt(node.x, node.y, 600);
-    fg.zoom(Math.max(fg.zoom(), 2.5), 600);
+  if (node.x != null) {
+    renderer.centerOn(node, 600);
   } else {
     setTimeout(() => focusOn(id), 200);
   }
@@ -432,6 +452,7 @@ function openContextMenu(node, evt) {
   const items = [
     { label: 'Focus ego-network', fn: () => setFocusRoot(node.id) },
     { label: 'Open details', fn: () => setSelected(node.id) },
+    { label: 'Stimulate neuron', fn: () => brain?.stimulate?.(node.id, 18) },
     { label: 'Copy node id', fn: () => navigator.clipboard?.writeText(node.id) },
   ];
   const url = node.sourceUrl || node.metadata?.sourceUrl;
@@ -448,6 +469,58 @@ function openContextMenu(node, evt) {
 
 function closeContextMenu() {
   document.getElementById('context-menu')?.classList.add('hidden');
+}
+
+function reflectModeButtons() {
+  const d = state.config.dimensions;
+  document.querySelectorAll('.dim-switch').forEach((sw) => {
+    sw.querySelectorAll('button').forEach((b) => {
+      b.classList.toggle('active', Number(b.dataset.dim) === d);
+    });
+  });
+}
+
+function reflectBrainButton() {
+  const btn = document.getElementById('brain-link');
+  if (!btn) return;
+  const on = state.config.spikes !== false;
+  btn.classList.toggle('active', on);
+  btn.querySelector('.lbl').textContent = on ? 'brain on' : 'brain off';
+}
+
+function startHud() {
+  let frames = 0;
+  let lastT = performance.now();
+  function tick(t) {
+    frames += 1;
+    if (t - lastT >= 500) {
+      const fps = Math.round((frames * 1000) / (t - lastT));
+      const fpsEl = document.getElementById('hud-fps');
+      if (fpsEl) fpsEl.textContent = `${fps} fps`;
+      frames = 0;
+      lastT = t;
+      const sp = document.getElementById('hud-spikes');
+      if (sp) {
+        const sps = (performance.now() - lastSpikeAt < 1500) ? spikeCount1s : 0;
+        sp.textContent = `${sps} spikes/s`;
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function updateModeHud() {
+  const m = document.getElementById('hud-mode');
+  if (!m) return;
+  const d = state.config.dimensions;
+  m.textContent = d === 4 ? '4D' : d === 3 ? '3D' : '2D';
+  const detail = document.getElementById('hud-mode-detail');
+  if (detail) {
+    if (d === 4) detail.textContent = `t-axis: ${state.config.temporalField}`;
+    else if (d === 3) detail.textContent = 'volumetric · bloom';
+    else detail.textContent = 'canvas · 2D';
+  }
 }
 
 export function focusNodeFromOutside(id) {
