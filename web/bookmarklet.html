@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Graph — Drag-to-bookmark ingest</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; font:16px/1.5 system-ui,-apple-system,sans-serif; background:#0b1320; color:#e6eef9; padding:24px; }
+    main { max-width:680px; margin:6vh auto; background:#101a2c; border:1px solid #1d2b44; border-radius:14px; padding:28px; }
+    h1 { margin:0 0 8px; color:#9bd1ff; }
+    .drop {
+      display:inline-block; margin:18px 0;
+      padding:10px 16px; background:#9bd1ff; color:#0b1320;
+      border-radius:8px; font-weight:600; text-decoration:none;
+      box-shadow:0 6px 18px rgba(155,209,255,.25);
+    }
+    code { background:#0a1322; padding:2px 6px; border-radius:4px; color:#9bd1ff; font:13px monospace; }
+    pre { background:#0a1322; padding:14px; border-radius:8px; overflow:auto; font:13px/1.45 monospace; color:#e6eef9; }
+    p { margin:8px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Drop this on your bookmarks bar</h1>
+  <p>Drag the button below into your bookmarks bar. Click it on any page to send the URL + selection into your graph.</p>
+  <p><a id="bm" class="drop" href="#">📌 Add to Graph</a></p>
+  <p><small>Endpoint: <code id="ep">…</code> · User: <code id="user">…</code></small></p>
+
+  <h2 style="font-size:14px;color:#9bd1ff;margin-top:24px">If your browser blocks drag-to-bookmark</h2>
+  <p>Create a new bookmark manually and paste this as the URL:</p>
+  <pre id="src">…</pre>
+</main>
+<script type="module">
+import './config.js';
+const userId = window.GRAPH_CONFIG?.brainUserId || 'local';
+const base   = window.GRAPH_CONFIG?.apiBaseUrl  || window.location.origin;
+const url    = new URL('/api/v1/public/ingest/url', base).toString();
+
+document.getElementById('ep').textContent = url;
+document.getElementById('user').textContent = userId;
+
+// Bookmarklet body — must be a single javascript: URL. Uses fetch to the
+// public ingest path so it works from any origin.
+const code = `javascript:(function(){var u=${JSON.stringify(url)};var d=${JSON.stringify(userId)};var t=document.title||location.hostname;var s=window.getSelection?window.getSelection().toString():'';fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({userId:d,url:location.href,title:t,selection:s})}).then(function(r){return r.json()}).then(function(b){alert(b.error?('Graph: '+b.error):('Graph + '+b.nodes+' nodes / '+b.edges+' edges (total '+b.totalNodes+' / '+b.totalEdges+')'))}).catch(function(e){alert('Graph error: '+e.message)})})();`;
+const a = document.getElementById('bm');
+a.href = code;
+document.getElementById('src').textContent = code;
+</script>
+</body>
+</html>

@@ -23,6 +23,8 @@
 // HTML/JS/CSS/data file routes.
 
 import { parseMarkdown, parseText } from './worker/text-parser.js';
+import { handleIngressApi } from './worker/ingress.js';
+import { recordEvent, upsertNodesAndEdges } from './worker/d1-store.js';
 
 const TEXT_MAX_LENGTH = 200_000;
 const TITLE_MAX_LENGTH = 200;
@@ -61,6 +63,16 @@ export default {
 };
 
 async function handleApi(request, env, url) {
+  // Expose the merge fn so the ingress module can persist into KV without
+  // importing this file (would be circular). Read-only inside ingress.js.
+  if (!env.__mergeAndPersist) env.__mergeAndPersist = mergeAndPersist;
+
+  // New routes (batch / url / webhook / events / sources / stats) handled
+  // first; falls through to the existing health/text/markdown/graph router
+  // when null.
+  const ingress = await handleIngressApi(request, env, url);
+  if (ingress) return ingress;
+
   const { pathname } = url;
   const allowed = allowedUserIds(env);
   const enabled = Boolean(env.GRAPH_KV) && allowed.size > 0;
@@ -136,10 +148,13 @@ async function ingest(request, env, allowed, format) {
     : await parseText(content, { userId, sourceId, title });
 
   const snapshot = await mergeAndPersist(env.GRAPH_KV, userId, parsed, sourceId);
+  const evt = await mirrorToD1(env, { userId, sourceId, sourceKind: format, kind: format, parsed, payload: { format, title, length: content.length } });
 
   return jsonResponse({
     userId,
     format,
+    eventId: evt?.id ?? null,
+    deduped: evt?.deduped ?? false,
     parentId: parsed.parentId,
     nodes: parsed.nodes.length,
     edges: parsed.edges.length,
@@ -186,11 +201,14 @@ async function ingestGraph(request, env, allowed) {
     : [];
 
   const snapshot = await mergeAndPersist(env.GRAPH_KV, userId, { nodes, edges }, sourceId);
+  const evt = await mirrorToD1(env, { userId, sourceId, sourceKind: 'graph', kind: 'graph', parsed: { nodes, edges }, payload: { sourceId, nodes: nodes.length, edges: edges.length } });
 
   return jsonResponse({
     ok: true,
     userId,
     sourceId,
+    eventId: evt?.id ?? null,
+    deduped: evt?.deduped ?? false,
     nodes: nodes.length,
     edges: edges.length,
     totalNodes: snapshot.nodes.length,
@@ -328,4 +346,34 @@ function corsHeaders(request) {
     'access-control-max-age': '86400',
     vary: 'Origin',
   };
+}
+
+
+// ── d1 mirror ────────────────────────────────────────────────────────
+//
+// Best-effort: write to the D1 event log + flat projection alongside KV.
+// Returns the event row (or null on error). KV is the source of truth for
+// rendering; D1 is the source of truth for SQL queries.
+async function mirrorToD1(env, { userId, sourceId, sourceKind, kind, parsed, payload }) {
+  if (!env.GRAPH_DB) return null;
+  try {
+    const [evt] = await Promise.all([
+      recordEvent(env.GRAPH_DB, {
+        userId, sourceId, sourceKind, kind,
+        payload,
+        nodeCount: parsed.nodes?.length ?? 0,
+        edgeCount: parsed.edges?.length ?? 0,
+        status: 'applied',
+      }),
+      upsertNodesAndEdges(env.GRAPH_DB, {
+        userId, sourceKind,
+        nodes: parsed.nodes,
+        edges: parsed.edges,
+      }),
+    ]);
+    return evt;
+  } catch (err) {
+    console.warn('[d1-mirror] failed:', err.message);
+    return null;
+  }
 }

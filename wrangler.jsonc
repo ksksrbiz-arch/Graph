@@ -8,7 +8,7 @@
   },
   // The Worker fronts the static SPA and exposes a `/api/v1/public/*` API on
   // the same origin so the brain + graph nodes persist across visits without
-  // depending on the Fly-hosted Nest API.
+  // depending on the Fly-hosted Nest API or any local dev server.
   "assets": {
     "directory": "web",
     "binding": "ASSETS"
@@ -17,20 +17,28 @@
     "nodejs_compat"
   ],
   "vars": {
-    // CSV of user ids permitted to write through the public ingest path. The
-    // Cloudflare deploy is single-tenant; keep this short.
+    // CSV of user ids permitted to write through the public ingest path.
+    // The Cloudflare deploy is single-tenant; keep this short.
     "PUBLIC_INGEST_USER_IDS": "local"
   },
-  // KV namespace storing per-user graph snapshots. Run
-  //   wrangler kv namespace create GRAPH_KV
-  // and paste the returned `id` (and a `preview_id` for `wrangler dev`) here
-  // before deploying — without a KV binding the Worker still serves the static
-  // assets but the public ingest endpoints respond with `enabled: false`.
+  // KV namespace storing per-user graph snapshots — the rendered
+  // {nodes, edges} that the SPA reads on first paint. O(1) GET, no SQL.
   "kv_namespaces": [
     {
       "binding": "GRAPH_KV",
-      "id": "REPLACE_WITH_KV_NAMESPACE_ID",
-      "preview_id": "REPLACE_WITH_KV_PREVIEW_ID"
+      "id": "83580c10784342ba94a81c6726957d0f",
+      "preview_id": "558dc07635c24d55a7acbf45b5bfcd28"
+    }
+  ],
+  // D1 (SQLite) — append-only event log + flat node/edge projection +
+  // registered ingestion sources + webhook tokens. Lets us answer
+  // "what did Stripe push last week" via SQL without rehydrating the
+  // graph snapshot.
+  "d1_databases": [
+    {
+      "binding": "GRAPH_DB",
+      "database_name": "datab_1",
+      "database_id": "50cf79c6-37a6-4d83-9990-f601ef0e59da"
     }
   ]
 }
