@@ -14,6 +14,15 @@ const LINK_DISTANCE = 110;
 const DRIFT_SPEED = 0.018;
 const PARTICLE_RADIUS = 1.3;
 
+// Mobile / coarse-pointer caps so phones don't burn battery on the halo.
+// Detected at start time, not per-frame, so orientation changes still get
+// a sensible re-seed via the resize handler.
+function isMobileViewport() {
+  if (typeof window === 'undefined') return false;
+  if (window.matchMedia?.('(pointer: coarse)').matches) return true;
+  return Math.min(window.innerWidth, window.innerHeight) <= 820;
+}
+
 let canvas = null;
 let ctx = null;
 let dpr = 1;
@@ -85,10 +94,13 @@ function resize() {
 
 function particleCountFor(w, h) {
   // Scale by viewport area but cap at the default to avoid tanking weak
-  // GPUs on giant monitors.
+  // GPUs on giant monitors. On mobile we halve the count and lift the floor
+  // so the field still reads as a halo at 6"-class screens.
   const area = w * h;
   const scale = Math.min(1, area / (1280 * 720));
-  return Math.max(40, Math.round(PARTICLE_COUNT_DEFAULT * scale));
+  const target = Math.round(PARTICLE_COUNT_DEFAULT * scale);
+  if (isMobileViewport()) return Math.max(28, Math.min(60, Math.round(target * 0.55)));
+  return Math.max(40, target);
 }
 
 function spawn(w, h) {
@@ -101,11 +113,28 @@ function spawn(w, h) {
   };
 }
 
+// Honour the user's reduced-motion preference — drift/twinkle freeze when
+// set, but the static halo still renders so the screen isn't blank.
+function reducedMotion() {
+  return typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
+let lastFrameMs = 0;
 function loop() {
   if (!running) return;
   raf = requestAnimationFrame(loop);
   if (document.hidden) return;
   if (!ctx || !canvas) return;
+
+  // Throttle to ~30fps on mobile / coarse-pointer to save battery; the
+  // animation is decorative and indistinguishable from 60fps at the drift
+  // speeds we use.
+  const tNow = performance.now();
+  const minInterval = isMobileViewport() ? 33 : 0;
+  if (tNow - lastFrameMs < minInterval) return;
+  lastFrameMs = tNow;
+
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
 
@@ -120,13 +149,16 @@ function loop() {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  // Drift + wrap.
+  // Drift + wrap. Skipped under prefers-reduced-motion so the field reads
+  // as a static dot constellation instead of moving.
   const t = performance.now() * 0.001;
-  for (const p of particles) {
-    p.x += p.vx * (1 / 60);
-    p.y += p.vy * (1 / 60);
-    if (p.x < -8) p.x = w + 8; else if (p.x > w + 8) p.x = -8;
-    if (p.y < -8) p.y = h + 8; else if (p.y > h + 8) p.y = -8;
+  if (!reducedMotion()) {
+    for (const p of particles) {
+      p.x += p.vx * (1 / 60);
+      p.y += p.vy * (1 / 60);
+      if (p.x < -8) p.x = w + 8; else if (p.x > w + 8) p.x = -8;
+      if (p.y < -8) p.y = h + 8; else if (p.y > h + 8) p.y = -8;
+    }
   }
 
   // Draw segments between any two particles within LINK_DISTANCE.
