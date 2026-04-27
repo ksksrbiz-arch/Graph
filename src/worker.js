@@ -1,0 +1,273 @@
+// Cloudflare Worker entrypoint for the Graph SPA.
+//
+// Two responsibilities:
+//
+// 1. Serve the static frontend from the `web/` directory via the ASSETS
+//    binding configured in wrangler.jsonc.
+//
+// 2. Implement the same `/api/v1/public/*` surface that apps/api (NestJS)
+//    exposes, so the website hosted at https://graph.skdev-371.workers.dev/
+//    has a same-origin online API and the brain / graph nodes survive across
+//    page reloads, devices, and browsers. Persistence is backed by Workers KV
+//    (binding name: GRAPH_KV) — when no KV binding is configured we still
+//    serve the assets but the public ingest endpoints respond with
+//    `enabled: false` so the SPA falls back to its read-only static graph.
+//
+// Implements:
+//   GET  /api/v1/public/ingest/health
+//   POST /api/v1/public/ingest/text
+//   POST /api/v1/public/ingest/markdown
+//   GET  /api/v1/public/graph?userId=<id>
+//
+// Anything else is handed to the assets binding so the SPA keeps its
+// HTML/JS/CSS/data file routes.
+
+import { parseMarkdown, parseText } from './worker/text-parser.js';
+
+const TEXT_MAX_LENGTH = 200_000;
+const SNAPSHOT_MAX_NODES = 5_000;
+const SNAPSHOT_MAX_EDGES = 20_000;
+
+const JSON_HEADERS = {
+  'content-type': 'application/json; charset=utf-8',
+  'cache-control': 'no-store',
+};
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    // CORS preflight — the public endpoints are intentionally same-origin in
+    // production, but the frontend may be opened from `localhost:3000` (dev
+    // server) and call into a deployed Worker. Mirror the origin so dev
+    // tooling works without further configuration.
+    if (request.method === 'OPTIONS' && url.pathname.startsWith('/api/')) {
+      return new Response(null, { status: 204, headers: corsHeaders(request) });
+    }
+
+    if (url.pathname.startsWith('/api/')) {
+      const res = await handleApi(request, env, url);
+      if (res) {
+        for (const [k, v] of Object.entries(corsHeaders(request))) res.headers.set(k, v);
+        return res;
+      }
+    }
+
+    // Fall through to static assets.
+    if (env.ASSETS) return env.ASSETS.fetch(request);
+    return jsonResponse({ error: 'assets binding missing' }, 500);
+  },
+};
+
+async function handleApi(request, env, url) {
+  const { pathname } = url;
+  const allowed = allowedUserIds(env);
+  const enabled = Boolean(env.GRAPH_KV) && allowed.size > 0;
+
+  if (pathname === '/api/v1/public/ingest/health' && request.method === 'GET') {
+    return jsonResponse({
+      ok: true,
+      enabled,
+      formats: ['text', 'markdown'],
+    });
+  }
+
+  if (pathname === '/api/v1/public/graph' && request.method === 'GET') {
+    const userId = (url.searchParams.get('userId') || '').trim();
+    if (!userId) return jsonResponse({ error: 'userId query param is required' }, 400);
+    if (!allowed.has(userId)) {
+      return jsonResponse({ error: `userId=${userId} is not on the public allowlist` }, 403);
+    }
+    if (!env.GRAPH_KV) return jsonResponse({ error: 'persistence not configured' }, 503);
+    const snapshot = await readSnapshot(env.GRAPH_KV, userId);
+    return jsonResponse(snapshot);
+  }
+
+  if (pathname === '/api/v1/public/ingest/text' && request.method === 'POST') {
+    return ingest(request, env, allowed, 'text');
+  }
+
+  if (pathname === '/api/v1/public/ingest/markdown' && request.method === 'POST') {
+    return ingest(request, env, allowed, 'markdown');
+  }
+
+  // Not an API endpoint we own — let the caller fall through.
+  return null;
+}
+
+async function ingest(request, env, allowed, format) {
+  if (!env.GRAPH_KV) {
+    return jsonResponse({ error: 'persistence not configured' }, 503);
+  }
+
+  let dto;
+  try {
+    dto = await request.json();
+  } catch {
+    return jsonResponse({ error: 'invalid JSON body' }, 400);
+  }
+
+  const userId = typeof dto?.userId === 'string' ? dto.userId.trim() : '';
+  if (!userId) return jsonResponse({ error: 'userId is required' }, 400);
+  if (!allowed.has(userId)) {
+    return jsonResponse({ error: `userId=${userId} is not on the public ingest allowlist` }, 403);
+  }
+
+  const contentField = format === 'markdown' ? 'markdown' : 'text';
+  const content = typeof dto?.[contentField] === 'string' ? dto[contentField] : '';
+  if (!content.trim()) return jsonResponse({ error: `${contentField} is required` }, 400);
+  if (content.length > TEXT_MAX_LENGTH) {
+    return jsonResponse({ error: `${contentField} exceeds ${TEXT_MAX_LENGTH} characters` }, 413);
+  }
+
+  const title = (typeof dto?.title === 'string' && dto.title.trim().length > 0
+    ? dto.title.trim()
+    : defaultTitle(format)
+  ).slice(0, 200);
+
+  const sourceId = format === 'markdown' ? 'obsidian' : 'bookmarks';
+  const parsed = format === 'markdown'
+    ? await parseMarkdown(content, { userId, sourceId, title })
+    : await parseText(content, { userId, sourceId, title });
+
+  const snapshot = await mergeAndPersist(env.GRAPH_KV, userId, parsed, sourceId);
+
+  return jsonResponse({
+    userId,
+    format,
+    parentId: parsed.parentId,
+    nodes: parsed.nodes.length,
+    edges: parsed.edges.length,
+    totalNodes: snapshot.nodes.length,
+    totalEdges: snapshot.edges.length,
+    brainQueuedReload: false,
+  });
+}
+
+// ── persistence ───────────────────────────────────────────────────────
+
+const SNAPSHOT_KEY = (userId) => `graph:${userId}`;
+
+async function readSnapshot(kv, userId) {
+  const raw = await kv.get(SNAPSHOT_KEY(userId), 'json');
+  if (!raw || !Array.isArray(raw.nodes)) return emptySnapshot(userId);
+  return {
+    schemaVersion: raw.schemaVersion || 1,
+    metadata: raw.metadata || { updatedAt: new Date().toISOString(), userId, sources: [] },
+    nodes: raw.nodes,
+    edges: Array.isArray(raw.edges) ? raw.edges : [],
+  };
+}
+
+function emptySnapshot(userId) {
+  return {
+    schemaVersion: 1,
+    metadata: { updatedAt: new Date().toISOString(), userId, sources: [] },
+    nodes: [],
+    edges: [],
+  };
+}
+
+async function mergeAndPersist(kv, userId, parsed, sourceId) {
+  const current = await readSnapshot(kv, userId);
+
+  const nodeIndex = new Map(current.nodes.map((n) => [n.id, n]));
+  for (const node of parsed.nodes) {
+    const existing = nodeIndex.get(node.id);
+    if (existing) {
+      existing.label = node.label ?? existing.label;
+      existing.metadata = { ...(existing.metadata || {}), ...(node.metadata || {}) };
+      existing.updatedAt = node.updatedAt;
+      if (node.sourceUrl) existing.sourceUrl = node.sourceUrl;
+    } else {
+      nodeIndex.set(node.id, { ...node });
+    }
+  }
+
+  const edgeIndex = new Map(current.edges.map((e) => [e.id, e]));
+  for (const edge of parsed.edges) {
+    const existing = edgeIndex.get(edge.id);
+    if (existing) {
+      existing.weight = clampUnit((existing.weight + edge.weight) / 2);
+      existing.metadata = {
+        ...(existing.metadata || {}),
+        ...(edge.metadata || {}),
+        count: ((existing.metadata && existing.metadata.count) || 1) + 1,
+      };
+    } else {
+      edgeIndex.set(edge.id, { ...edge, metadata: { count: 1, ...(edge.metadata || {}) } });
+    }
+  }
+
+  // Cap snapshot size so a single run-away ingest can't blow past KV's 25 MiB
+  // value cap. Drop the oldest items first.
+  let nodes = [...nodeIndex.values()];
+  let edges = [...edgeIndex.values()];
+  if (nodes.length > SNAPSHOT_MAX_NODES) {
+    nodes.sort((a, b) => (a.updatedAt || '').localeCompare(b.updatedAt || ''));
+    nodes = nodes.slice(-SNAPSHOT_MAX_NODES);
+    const keep = new Set(nodes.map((n) => n.id));
+    edges = edges.filter((e) => keep.has(e.source) && keep.has(e.target));
+  }
+  if (edges.length > SNAPSHOT_MAX_EDGES) {
+    edges = edges.slice(-SNAPSHOT_MAX_EDGES);
+  }
+
+  const sources = new Set((current.metadata?.sources || []).map((s) => (typeof s === 'string' ? s : s?.name)).filter(Boolean));
+  if (sourceId) sources.add(sourceId);
+
+  const snapshot = {
+    schemaVersion: 1,
+    metadata: {
+      updatedAt: new Date().toISOString(),
+      userId,
+      sources: [...sources],
+    },
+    nodes,
+    edges,
+  };
+
+  await kv.put(SNAPSHOT_KEY(userId), JSON.stringify(snapshot));
+  return snapshot;
+}
+
+// ── helpers ───────────────────────────────────────────────────────────
+
+function allowedUserIds(env) {
+  const csv = (env.PUBLIC_INGEST_USER_IDS || 'local').toString();
+  return new Set(
+    csv
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
+function defaultTitle(format) {
+  const stamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  return format === 'markdown'
+    ? `Pasted markdown — ${stamp}`
+    : `Pasted text — ${stamp}`;
+}
+
+function clampUnit(x) {
+  if (Number.isNaN(x)) return 0.4;
+  if (x < 0) return 0;
+  if (x > 1) return 1;
+  return x;
+}
+
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { ...JSON_HEADERS } });
+}
+
+function corsHeaders(request) {
+  const origin = request.headers.get('origin') || '*';
+  return {
+    'access-control-allow-origin': origin,
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    'access-control-max-age': '86400',
+    vary: 'Origin',
+  };
+}
