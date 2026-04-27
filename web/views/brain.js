@@ -34,6 +34,10 @@ const EMPTY_ANIM_BASE_SIZE = 0.9;
 const EMPTY_ANIM_SIZE_STEP = 0.6;
 const EMPTY_ANIM_MIN_DPR = 1;
 const EMPTY_ANIM_MAX_DPR = 2;
+const EMPTY_ANIM_RING_BASE_SPEED = 0.0009;
+const EMPTY_ANIM_RING_SPEED_STEP = 0.00025;
+const EMPTY_ANIM_RING_PHASE_STEP = Math.PI * 0.5;
+const EMPTY_ANIM_RING_SWEEP = Math.PI * 1.6;
 
 let socket = null;
 let lastSummary = null;
@@ -407,11 +411,24 @@ function startEmptyAnimation() {
     start: performance.now(),
     w: 0,
     h: 0,
+    dpr: EMPTY_ANIM_MIN_DPR,
+    onResize: null,
   };
+
+  const updateDpr = () => {
+    if (!placeholderState) return;
+    placeholderState.dpr = Math.max(
+      EMPTY_ANIM_MIN_DPR,
+      Math.min(EMPTY_ANIM_MAX_DPR, window.devicePixelRatio || EMPTY_ANIM_MIN_DPR),
+    );
+  };
+  placeholderState.onResize = updateDpr;
+  updateDpr();
+  window.addEventListener('resize', updateDpr);
 
   const tick = (now) => {
     if (!placeholderState) return;
-    const dpr = Math.max(EMPTY_ANIM_MIN_DPR, Math.min(EMPTY_ANIM_MAX_DPR, window.devicePixelRatio || 1));
+    const dpr = placeholderState.dpr;
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(120, Math.floor((rect.width || canvas.width) * dpr));
     const height = Math.max(80, Math.floor((rect.height || canvas.height) * dpr));
@@ -439,11 +456,11 @@ function startEmptyAnimation() {
 
     const ringAlpha = 0.16 + (Math.sin(t * 0.0013) * 0.06);
     for (let i = 0; i < 4; i++) {
-      const phase = (t * (0.0009 + i * 0.00025)) + (i * Math.PI * 0.5);
+      const phase = (t * (EMPTY_ANIM_RING_BASE_SPEED + i * EMPTY_ANIM_RING_SPEED_STEP)) + (i * EMPTY_ANIM_RING_PHASE_STEP);
       ctx.strokeStyle = `rgba(166,201,255,${Math.max(0.05, ringAlpha - i * 0.03).toFixed(3)})`;
       ctx.lineWidth = Math.max(1, (2.2 - i * 0.35) * dpr * 0.5);
       ctx.beginPath();
-      ctx.arc(mx, my, core + i * (core * 0.45) + Math.sin(phase) * (6 * dpr), phase * 0.4, phase * 0.4 + Math.PI * 1.6);
+      ctx.arc(mx, my, core + i * (core * 0.45) + Math.sin(phase) * (6 * dpr), phase * 0.4, phase * 0.4 + EMPTY_ANIM_RING_SWEEP);
       ctx.stroke();
     }
 
@@ -476,6 +493,7 @@ function startEmptyAnimation() {
 
 function stopEmptyAnimation() {
   if (placeholderRaf) cancelAnimationFrame(placeholderRaf);
+  if (placeholderState?.onResize) window.removeEventListener('resize', placeholderState.onResize);
   placeholderRaf = 0;
   placeholderState = null;
 }
