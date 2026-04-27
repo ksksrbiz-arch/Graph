@@ -11,7 +11,7 @@
 // future build step can inject a JWT-aware base URL without touching this
 // file.
 
-import { el, fmtTime, escape, socketNamespaceUrl } from '../util.js';
+import { el, fmtTime, escape, socketNamespaceUrl, shouldAttemptBrainSocket } from '../util.js';
 
 const REGION_LABELS = {
   sensory: 'Sensory',
@@ -47,6 +47,10 @@ function maybeConnect() {
 function ensureSocket() {
   if (socket || typeof io === 'undefined') return;
   const config = window.GRAPH_CONFIG || {};
+  if (!shouldAttemptBrainSocket(config.apiBaseUrl)) {
+    setStatus('offline (no brain api configured for this host)');
+    return;
+  }
   const socketUrl = socketNamespaceUrl(config.apiBaseUrl, '/brain');
   const userId = config.brainUserId || FALLBACK_USER_ID;
 
@@ -95,7 +99,7 @@ function renderShell(root) {
         'Live view of the spiking network the API is building from your knowledge graph. ',
         'Spikes light up regions; STDP strengthens (or prunes) pathways between concepts that fire together.',
       ),
-      el('div', { class: 'brain-status', id: 'brain-status' }, 'connecting…'),
+      el('div', { class: 'brain-status', id: 'brain-status' }, '…'),
     ),
   );
   if (config.apiBaseUrl) {

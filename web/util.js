@@ -71,6 +71,26 @@ function originFromApiBase(apiBaseUrl) {
   return window.location.origin;
 }
 
+/** True when there is plausibly a brain API to talk to. Returns false on the
+ *  static MVP hosts (workers.dev / pages.dev / github.io) when no explicit
+ *  cross-origin apiBaseUrl is configured — that combination has no API and a
+ *  websocket attempt would just produce a noisy DevTools error. */
+export function shouldAttemptBrainSocket(apiBaseUrl) {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (typeof apiBaseUrl === 'string' && apiBaseUrl.length > 0) {
+      const target = new URL(apiBaseUrl, window.location.origin).origin;
+      if (target !== window.location.origin) return true;
+    }
+  } catch {}
+  const h = window.location.hostname || '';
+  if (h === 'localhost' || h === '127.0.0.1' || h.endsWith('.local')) return true;
+  if (h.endsWith('.workers.dev')) return false;
+  if (h.endsWith('.pages.dev')) return false;
+  if (h.endsWith('.github.io')) return false;
+  return true;
+}
+
 export function showToast(msg, kind = '') {
   const el = document.getElementById('toast');
   el.textContent = msg;
