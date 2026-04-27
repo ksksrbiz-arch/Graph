@@ -16,6 +16,7 @@ import { initBrainControls } from '../hud/brain-controls.js';
 import { initMiniMap } from '../hud/mini-map.js';
 import { initHoloCursor } from '../hud/holo-cursor.js';
 import { ensureQualityTierInit } from '../hud/quality.js';
+import { triggerInsightBurst } from '../hud/insight-burst.js';
 
 let renderer = null;
 let brain = null;
@@ -143,6 +144,9 @@ export function initGraphView() {
       const text = `forced spike on “${truncate(pick.label || pick.id, 40)}”`;
       brainControlsApi?.pushInsight(text);
       statsBarApi?.pushInsight(text);
+      // Visual Spec Part 3 §12 — trigger the insight burst at the canvas
+      // center; it draws on its own overlay canvas above the graph.
+      triggerInsightBurst({ text });
     },
   });
   initMiniMap({ getRenderer: () => renderer });

@@ -1,0 +1,154 @@
+/* =============================================================================
+   GRAPH BRAIN VISUAL SPEC — Part 3 of 3 · §13 Boot Screen
+   -----------------------------------------------------------------------------
+   Full-screen overlay shown on app start. Auto-dismisses when graph data
+   loads (via `graph-loaded` state event) or after 3 s, whichever comes first.
+   Plain-CSS-compatible so the dev server can serve as `text/css`.
+   ========================================================================== */
+
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg-void);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  font-family: var(--text-ui);
+  color: var(--text-primary);
+  transition: opacity 400ms ease-out, transform 400ms ease-out, visibility 0s linear 400ms;
+  /* Prevent users from clicking through during boot. */
+  pointer-events: auto;
+}
+
+.boot-screen.hide {
+  opacity: 0;
+  transform: scale(0.95);
+  visibility: hidden;
+}
+
+/* ─── Hex logo ────────────────────────────────────────────────────────── */
+.boot-hex {
+  width: 80px;
+  height: 80px;
+  position: relative;
+}
+
+.boot-hex .core {
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: rgba(0, 212, 255, 0.06);
+  border: 2px solid var(--cyan-core);
+  /* Box-shadow doesn't honour clip-path, so we layer a glow ring under it. */
+  animation: bootHexSpin 3s linear infinite, bootHexPulse 2s ease-in-out infinite;
+}
+
+.boot-hex::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: radial-gradient(circle at center, var(--cyan-glow) 0%, transparent 60%);
+  filter: blur(6px);
+  z-index: -1;
+  animation: bootHexPulse 2s ease-in-out infinite;
+}
+
+@keyframes bootHexSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes bootHexPulse {
+  0%, 100% { transform: rotate(var(--r, 0deg)) scale(1.0); }
+  50%      { transform: rotate(var(--r, 0deg)) scale(1.05); }
+}
+
+/* ─── App name ──────────────────────────────────────────────────────────── */
+.boot-name {
+  font-family: var(--text-ui);
+  font-weight: 300;
+  font-size: 18px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  display: inline-block;
+  white-space: nowrap;
+  /* Each character is wrapped in a span by JS; opacity rolls in. */
+}
+.boot-name .ch {
+  opacity: 0;
+  display: inline-block;
+  transition: opacity 200ms ease-out;
+}
+.boot-name .ch.on { opacity: 1; }
+
+/* ─── Boot log lines ────────────────────────────────────────────────────── */
+.boot-log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--text-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 360px;
+  max-width: 80vw;
+}
+
+.boot-log .line {
+  display: grid;
+  grid-template-columns: 1fr 96px 32px;
+  gap: 12px;
+  align-items: center;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 250ms ease-out, transform 250ms ease-out;
+}
+.boot-log .line.on {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.boot-log .line .lbl {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.boot-log .line .lbl::before {
+  content: '> ';
+  color: var(--cyan-core);
+}
+
+.boot-log .line .bar {
+  height: 8px;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid var(--border-dim);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.boot-log .line .bar .fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: linear-gradient(90deg, var(--cyan-core), var(--teal-core));
+  box-shadow: 0 0 6px var(--cyan-glow);
+  transition: width 200ms ease-out;
+}
+
+.boot-log .line .status {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.boot-log .line.done .status {
+  color: var(--teal-core);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-hex .core,
+  .boot-hex::before { animation: none !important; }
+}
