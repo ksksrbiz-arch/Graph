@@ -49,6 +49,7 @@ export interface CallbackRequest {
   connectorId: ConnectorId;
   code: string;
   state: string;
+  /** Derived callback URI from inbound request (kept for diagnostics). */
   redirectUri: string;
 }
 
@@ -83,6 +84,7 @@ export class OAuthService {
       state,
       userId: req.userId,
       connectorId: req.connectorId,
+      redirectUri: req.redirectUri,
       createdAt: Date.now(),
       ...(req.returnTo ? { returnTo: req.returnTo } : {}),
     };
@@ -129,11 +131,17 @@ export class OAuthService {
         `state/connector mismatch: ${entry.connectorId} vs ${req.connectorId}`,
       );
     }
+    if (req.redirectUri !== entry.redirectUri) {
+      this.log.warn(
+        `oauth callback redirect_uri mismatch connector=${req.connectorId}: ` +
+          `callback=${req.redirectUri} authorize=${entry.redirectUri}`,
+      );
+    }
 
     const tokens = await this.exchangeCode({
       provider,
       code: req.code,
-      redirectUri: req.redirectUri,
+      redirectUri: entry.redirectUri,
       ...(entry.codeVerifier ? { codeVerifier: entry.codeVerifier } : {}),
     });
 
