@@ -1,0 +1,438 @@
+/**
+ * Ingest Wizard — multi-step modal for configuring and running any data
+ * ingestion connector.
+ *
+ * Usage:
+ *   import { openWizard } from './ingest-wizard.js';
+ *   openWizard({ connector, onSuccess });
+ *
+ * `connector` must match the shape defined in connectors.js
+ * (id, name, icon, ingestSlug, wizard.fields, …).
+ *
+ * The wizard walks the user through three steps:
+ *   1. Configure — connector-specific form fields.
+ *   2. Running   — spinner + live stdout/stderr log.
+ *   3. Done      — summary (nodes / edges) and action buttons.
+ *
+ * All DOM manipulation is vanilla JS; no framework needed.
+ */
+
+import {
+  runIngestWithParams,
+  uploadFileIngest,
+  localIngestSupported,
+  githubOAuthStatus,
+  githubOAuthDisconnect,
+  startGitHubOAuth,
+  loadGraph,
+} from '../data.js';
+import { setGraph } from '../state.js';
+import { showToast, el } from '../util.js';
+
+const WIZARD_ID = 'ingest-wizard';
+const SCRIM_ID  = 'ingest-wizard-scrim';
+
+let _isOpen = false;
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+export function openWizard({ connector, onSuccess } = {}) {
+  if (_isOpen) return;
+  _isOpen = true;
+  ensureMounted();
+  mountWizard(connector, onSuccess);
+}
+
+// ── Mount / teardown ──────────────────────────────────────────────────────────
+
+function ensureMounted() {
+  if (document.getElementById(WIZARD_ID)) return;
+
+  const scrim = document.createElement('div');
+  scrim.id = SCRIM_ID;
+  scrim.className = 'wiz-scrim';
+  document.body.appendChild(scrim);
+
+  const dlg = document.createElement('div');
+  dlg.id = WIZARD_ID;
+  dlg.className = 'wiz-dialog';
+  dlg.setAttribute('role', 'dialog');
+  dlg.setAttribute('aria-modal', 'true');
+  document.body.appendChild(dlg);
+}
+
+function mountWizard(connector, onSuccess) {
+  const scrim = document.getElementById(SCRIM_ID);
+  const dlg   = document.getElementById(WIZARD_ID);
+  dlg.innerHTML = '';
+  scrim.classList.add('wiz-visible');
+  dlg.classList.add('wiz-visible');
+  dlg.setAttribute('aria-label', `Ingest: ${connector.name}`);
+
+  let step = 'configure'; // 'configure' | 'running' | 'done'
+  let result = null;
+  const fileMap = {}; // fieldName → File
+
+  // ── Step indicator ───
+  const stepBar = el('div', { class: 'wiz-steps' },
+    stepDot(1, 'Configure', () => step),
+    el('div', { class: 'wiz-step-line' }),
+    stepDot(2, 'Running', () => step),
+    el('div', { class: 'wiz-step-line' }),
+    stepDot(3, 'Done', () => step),
+  );
+
+  // ── Header ───
+  const header = el('header', { class: 'wiz-header' },
+    el('span', { class: 'wiz-icon', 'aria-hidden': 'true' }, connector.icon || '⚡'),
+    el('div', { class: 'wiz-header-text' },
+      el('h2', {}, connector.name),
+      el('p', { class: 'wiz-sub' }, connector.description || ''),
+    ),
+    closeBtn(),
+  );
+
+  // ── Body (swappable per step) ───
+  const body = el('div', { class: 'wiz-body' });
+  const footer = el('div', { class: 'wiz-footer' });
+
+  dlg.append(stepBar, header, body, footer);
+
+  // ── Keyboard close ───
+  function onKey(e) {
+    if (e.key === 'Escape' && step !== 'running') closeWizard();
+  }
+  document.addEventListener('keydown', onKey);
+
+  function closeWizard() {
+    if (!_isOpen) return;
+    _isOpen = false;
+    scrim.classList.remove('wiz-visible');
+    dlg.classList.remove('wiz-visible');
+    document.removeEventListener('keydown', onKey);
+  }
+
+  scrim.onclick = () => { if (step !== 'running') closeWizard(); };
+
+  function closeBtn() {
+    const btn = el('button', { class: 'wiz-close', type: 'button', 'aria-label': 'Close' }, '×');
+    btn.onclick = () => { if (step !== 'running') closeWizard(); };
+    return btn;
+  }
+
+  // ── Step 1: Configure ─────────────────────────────────────────────────────
+
+  function renderConfigure() {
+    step = 'configure';
+    updateStepBar();
+    body.innerHTML = '';
+    footer.innerHTML = '';
+
+    const fields = connector.wizard?.fields || [];
+
+    if (!fields.length) {
+      body.appendChild(el('p', { class: 'wiz-hint' }, 'No configuration required. Click Run to start.'));
+    }
+
+    const form = el('form', { class: 'wiz-form', id: 'wiz-form' });
+    form.onsubmit = (e) => { e.preventDefault(); triggerRun(); };
+
+    const oauthFields  = fields.filter((f) => f.type === 'oauth');
+    const regularFields = fields.filter((f) => f.type !== 'oauth');
+
+    for (const field of oauthFields) {
+      form.appendChild(buildOAuthField(field));
+    }
+
+    for (const field of regularFields) {
+      form.appendChild(buildField(field, fileMap));
+    }
+
+    body.appendChild(form);
+
+    // Local-only warning
+    if (connector.localOnly) {
+      const hint = el('p', { class: 'wiz-hint wiz-hint-warn' },
+        '⚠ This connector requires the local dev server. Run ',
+        el('code', {}, 'npm run start'),
+        ' first.',
+      );
+      localIngestSupported().then((ok) => {
+        if (!ok) body.appendChild(hint);
+      });
+    }
+
+    const btnRun = el('button', { type: 'submit', form: 'wiz-form', class: 'primary wiz-btn-run' }, 'Run Ingest');
+    const btnCancel = el('button', { type: 'button', class: 'wiz-btn-cancel' }, 'Cancel');
+    btnCancel.onclick = closeWizard;
+    footer.append(btnCancel, btnRun);
+  }
+
+  // ── Step 2: Running ───────────────────────────────────────────────────────
+
+  function renderRunning(slug) {
+    step = 'running';
+    updateStepBar();
+    body.innerHTML = '';
+    footer.innerHTML = '';
+
+    body.appendChild(
+      el('div', { class: 'wiz-running' },
+        el('div', { class: 'wiz-spinner', 'aria-label': 'Loading' }),
+        el('p', { class: 'wiz-running-label' }, `Running ${connector.name}…`),
+      ),
+    );
+
+    const log = el('div', { class: 'wiz-log', 'aria-live': 'polite' }, 'Starting…\n');
+    body.appendChild(log);
+
+    // Show cancel-unavailable hint
+    footer.appendChild(el('p', { class: 'wiz-hint' }, 'Ingestion in progress — please wait…'));
+
+    return { log };
+  }
+
+  // ── Step 3: Done ──────────────────────────────────────────────────────────
+
+  function renderDone(res) {
+    step = 'done';
+    updateStepBar();
+    body.innerHTML = '';
+    footer.innerHTML = '';
+
+    if (res.ok) {
+      const statsRow = el('div', { class: 'wiz-stats' });
+      if (res.nodes != null) statsRow.appendChild(statBox(res.nodes, 'nodes'));
+      if (res.edges != null) statsRow.appendChild(statBox(res.edges, 'edges'));
+      body.appendChild(
+        el('div', { class: 'wiz-done wiz-done-ok' },
+          el('div', { class: 'wiz-done-icon' }, '✓'),
+          el('h3', {}, 'Ingest complete'),
+          statsRow,
+          res.stdout ? el('div', { class: 'wiz-log wiz-log-sm' }, res.stdout.trim()) : null,
+        ),
+      );
+      showToast(`${connector.name} ingested`, 'success');
+    } else {
+      body.appendChild(
+        el('div', { class: 'wiz-done wiz-done-err' },
+          el('div', { class: 'wiz-done-icon' }, '✗'),
+          el('h3', {}, 'Ingest failed'),
+          el('p', { class: 'wiz-err-msg' }, res.error || res.stderr || `Exit code ${res.status}`),
+          (res.stdout || res.stderr) ? el('div', { class: 'wiz-log wiz-log-sm' }, (res.stdout || '') + (res.stderr || '')) : null,
+        ),
+      );
+      showToast(`${connector.name} failed`, 'error');
+    }
+
+    const btnClose = el('button', { type: 'button', class: 'primary' }, 'Close');
+    btnClose.onclick = closeWizard;
+    const btnAgain = el('button', { type: 'button' }, 'Run again');
+    btnAgain.onclick = renderConfigure;
+    footer.append(btnAgain, btnClose);
+  }
+
+  // ── Run trigger ───────────────────────────────────────────────────────────
+
+  async function triggerRun() {
+    const isLocal = await localIngestSupported();
+    if (!isLocal) {
+      showToast('Local dev server not running — start with npm run start', 'error');
+      return;
+    }
+
+    const fields = connector.wizard?.fields || [];
+    const env = {};
+    let fileField = null;
+
+    for (const field of fields) {
+      if (field.type === 'oauth') continue;
+      if (field.type === 'file') {
+        if (fileMap[field.name]) {
+          fileField = { file: fileMap[field.name], envVar: field.envVar };
+        }
+        continue;
+      }
+      const inputEl = document.getElementById(`wiz-field-${field.name}`);
+      if (!inputEl) continue;
+      const val = inputEl.value.trim();
+      if (val) {
+        if (field.type === 'urls-textarea') {
+          // Comma-join for WEBCLIP_URLS
+          env[field.envVar] = val.split('\n').map((u) => u.trim()).filter(Boolean).join(',');
+        } else {
+          env[field.envVar] = val;
+        }
+      }
+    }
+
+    const { log } = renderRunning(connector.ingestSlug);
+    log.textContent = `Running ${connector.ingestSlug}…\n`;
+
+    let res;
+    try {
+      if (fileField) {
+        res = await uploadFileIngest(connector.ingestSlug, fileField.file, fileField.envVar, env);
+      } else {
+        res = await runIngestWithParams(connector.ingestSlug, env);
+      }
+    } catch (err) {
+      res = { ok: false, error: err.message };
+    }
+
+    // Append output to log before transitioning
+    const output = [(res.stdout || ''), (res.stderr || '')].filter(Boolean).join('\n');
+    if (output) log.textContent += output + '\n';
+
+    result = res;
+
+    // Auto-reload graph on success
+    if (res.ok) {
+      try {
+        const fresh = await loadGraph();
+        setGraph(fresh);
+        if (typeof onSuccess === 'function') onSuccess(res);
+      } catch { /* graph reload failure is non-fatal */ }
+    }
+
+    renderDone(res);
+  }
+
+  // ── Step bar updater ─────────────────────────────────────────────────────
+
+  function updateStepBar() {
+    const dots = stepBar.querySelectorAll('.wiz-step-dot');
+    const stepOrder = ['configure', 'running', 'done'];
+    const idx = stepOrder.indexOf(step);
+    dots.forEach((dot, i) => {
+      dot.classList.toggle('active', i === idx);
+      dot.classList.toggle('done', i < idx);
+    });
+  }
+
+  // ── Initial render ───────────────────────────────────────────────────────
+  renderConfigure();
+}
+
+// ── Field builders ────────────────────────────────────────────────────────────
+
+function buildField(field, fileMap) {
+  const wrap = el('div', { class: 'wiz-field' });
+  const labelEl = el('label', { for: `wiz-field-${field.name}`, class: 'wiz-label' },
+    field.label,
+    field.required ? el('span', { class: 'wiz-required' }, ' *') : null,
+  );
+  wrap.appendChild(labelEl);
+
+  let input;
+  if (field.type === 'textarea' || field.type === 'urls-textarea') {
+    input = el('textarea', {
+      id: `wiz-field-${field.name}`,
+      class: 'wiz-input wiz-textarea',
+      rows: '6',
+      placeholder: field.placeholder || '',
+    });
+    if (field.default) input.value = field.default;
+  } else if (field.type === 'file') {
+    input = el('input', {
+      id: `wiz-field-${field.name}`,
+      type: 'file',
+      class: 'wiz-input wiz-file-input',
+      accept: field.accept || '',
+    });
+    input.addEventListener('change', () => {
+      if (input.files?.[0]) fileMap[field.name] = input.files[0];
+    });
+    // Drag-and-drop zone
+    const dropZone = el('div', { class: 'wiz-drop-zone', 'aria-hidden': 'true' },
+      el('span', {}, field.dropLabel || `Drop ${field.accept || 'file'} here or click to browse`),
+    );
+    dropZone.addEventListener('click', () => input.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const file = e.dataTransfer?.files?.[0];
+      if (file) {
+        fileMap[field.name] = file;
+        dropZone.querySelector('span').textContent = `✓ ${file.name}`;
+      }
+    });
+    wrap.appendChild(dropZone);
+    wrap.appendChild(input);
+    if (field.hint) wrap.appendChild(el('p', { class: 'wiz-field-hint' }, field.hint));
+    return wrap;
+  } else {
+    input = el('input', {
+      id: `wiz-field-${field.name}`,
+      type: field.type || 'text',
+      class: 'wiz-input',
+      placeholder: field.placeholder || '',
+    });
+    if (field.default) input.value = field.default;
+  }
+
+  if (field.required) input.setAttribute('required', '');
+  wrap.appendChild(input);
+  if (field.hint) wrap.appendChild(el('p', { class: 'wiz-field-hint' }, field.hint));
+  return wrap;
+}
+
+function buildOAuthField(field) {
+  const wrap = el('div', { class: 'wiz-field wiz-oauth-field' });
+
+  const statusLine = el('div', { class: 'wiz-oauth-status' });
+  const connectBtn = el('button', { type: 'button', class: 'wiz-oauth-btn' });
+
+  async function refreshStatus() {
+    const st = await githubOAuthStatus();
+    if (st.connected) {
+      statusLine.innerHTML = '<span class="wiz-oauth-ok">✓ GitHub connected</span>';
+      connectBtn.textContent = 'Disconnect';
+      connectBtn.className = 'wiz-oauth-btn wiz-oauth-disconnect';
+    } else {
+      statusLine.innerHTML = '<span class="wiz-oauth-none">Not connected</span>';
+      connectBtn.textContent = 'Connect GitHub';
+      connectBtn.className = 'wiz-oauth-btn primary';
+    }
+  }
+
+  connectBtn.addEventListener('click', async () => {
+    const st = await githubOAuthStatus();
+    if (st.connected) {
+      await githubOAuthDisconnect();
+    } else {
+      connectBtn.disabled = true;
+      connectBtn.textContent = 'Opening…';
+      await startGitHubOAuth();
+      connectBtn.disabled = false;
+    }
+    await refreshStatus();
+  });
+
+  refreshStatus();
+
+  wrap.appendChild(el('label', { class: 'wiz-label' }, field.label || 'GitHub OAuth'));
+  wrap.appendChild(statusLine);
+  wrap.appendChild(connectBtn);
+  if (field.hint) wrap.appendChild(el('p', { class: 'wiz-field-hint' }, field.hint));
+  return wrap;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function stepDot(num, label) {
+  const dot = el('div', { class: 'wiz-step-dot' },
+    el('span', { class: 'wiz-step-num' }, String(num)),
+    el('span', { class: 'wiz-step-label' }, label),
+  );
+  return dot;
+}
+
+function statBox(value, label) {
+  return el('div', { class: 'wiz-stat-box' },
+    el('div', { class: 'num' }, String(value ?? '—')),
+    el('div', { class: 'lbl' }, label),
+  );
+}

@@ -111,12 +111,99 @@ export async function loadStaticGraph() {
   return res.json();
 }
 
-/** Run a v1 (filesystem-based) ingester via the local dev server. */
-export async function runLocalIngest(name) {
-  const res = await fetch(`${ENDPOINT_LOCAL_INGEST}/${encodeURIComponent(name)}`, { method: 'POST' });
-  let body = {};
-  try { body = await res.json(); } catch {}
-  return { ok: res.ok, status: res.status, ...body };
+/** Run a v1 (filesystem-based) ingester via the local dev server.
+ *  Accepts an optional `params` object:
+ *    params.env  — { KEY: value } object of env var overrides forwarded to the script.
+ *    params.file — { name, content (base64 string), field } for uploading a file.
+ */
+export async function runLocalIngest(name, params = {}) {
+  const body = {};
+  if (params.env && Object.keys(params.env).length) body.env = params.env;
+  if (params.file) body.file = params.file;
+
+  const res = await fetch(`${ENDPOINT_LOCAL_INGEST}/${encodeURIComponent(name)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  let bodyOut = {};
+  try { bodyOut = await res.json(); } catch {}
+  return { ok: res.ok, status: res.status, ...bodyOut };
+}
+
+/** Run a local ingester with environment variable overrides. */
+export async function runIngestWithParams(name, env = {}) {
+  return runLocalIngest(name, { env });
+}
+
+/** Run a local ingester with a file upload (File object from an <input type="file">). */
+export async function uploadFileIngest(name, file, envField, extraEnv = {}) {
+  const content = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // reader.result is a data URL like "data:...;base64,<data>"
+      const b64 = reader.result.split(',')[1];
+      resolve(b64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  return runLocalIngest(name, {
+    env: extraEnv,
+    file: { name: file.name, content, field: envField },
+  });
+}
+
+/** Check whether GitHub is connected (token held by the local dev server). */
+export async function githubOAuthStatus() {
+  try {
+    const res = await fetch('/api/oauth/github/status');
+    if (!res.ok) return { connected: false };
+    return res.json();
+  } catch {
+    return { connected: false };
+  }
+}
+
+/** Disconnect GitHub OAuth token from the local dev server. */
+export async function githubOAuthDisconnect() {
+  try {
+    await fetch('/api/oauth/github/status', { method: 'DELETE' });
+  } catch { /* ignore */ }
+}
+
+/** Max polling attempts before giving up on the OAuth popup (1 attempt/second). */
+const OAUTH_POLL_MAX_ATTEMPTS = 180;
+
+/** Open a popup to start the GitHub OAuth flow and return a Promise that
+ *  resolves to true when the token appears on the server (polling). */
+export function startGitHubOAuth() {
+  return new Promise((resolve) => {
+    const popup = window.open(
+      '/api/oauth/github/start',
+      'github-oauth',
+      'width=700,height=600,scrollbars=yes',
+    );
+
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      attempts += 1;
+      try {
+        const status = await githubOAuthStatus();
+        if (status.connected) {
+          clearInterval(interval);
+          try { popup?.close(); } catch { /* ignore */ }
+          resolve(true);
+          return;
+        }
+      } catch { /* ignore */ }
+      // Closed popup before completing, or timeout
+      if (popup?.closed || attempts > OAUTH_POLL_MAX_ATTEMPTS) {
+        clearInterval(interval);
+        resolve(false);
+      }
+    }, 1000);
+  });
 }
 
 /** Send a free-text or markdown blob to the public API for ingestion. */
@@ -145,6 +232,6 @@ export async function ingestPublicText({ text, title, format = 'text' }) {
 }
 
 /** Back-compat shim used by the "Ingest Claude Code" button. */
-export async function runIngest(name) {
-  return runLocalIngest(name);
+export async function runIngest(name, params) {
+  return runLocalIngest(name, params);
 }
