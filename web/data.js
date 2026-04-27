@@ -106,6 +106,7 @@ export async function loadGraphFromApi() {
 
 export async function loadStaticGraph() {
   const res = await fetch(`./data/graph.json?ts=${Date.now()}`, { cache: 'no-store' });
+  if (res.status === 404) return { schemaVersion: 1, metadata: {}, nodes: [], edges: [] };
   if (!res.ok) throw new Error(`Failed to load graph (${res.status})`);
   return res.json();
 }
