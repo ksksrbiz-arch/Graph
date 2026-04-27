@@ -235,7 +235,7 @@ Each layer is independently deployable + reversible.
 | 6 | Vectorize semantic recall | **shipped** | `cortex-embeddings` (768d cosine) + `cortex/vector.js` + `recall` tool + RAG pre-fetch in reason.js |
 | 7 | Voice in (Whisper) | next | `web/voice.js` + `/perceive {modality:'voice'}` |
 | 8 | Vision in (Llava) | next | `web/vision.js` + `/perceive {modality:'vision'}` |
-| 9 | Cron-driven autonomy | next | Cloudflare cron triggers + `/cortex/think` |
+| 9 | Cron-driven autonomy | **shipped** | `wrangler.jsonc` triggers + `scheduled()` handler + `cortex/scheduler.js` + `/schedules` admin routes |
 | 10 | Tool plugins via MCP | next | Each tool can be replaced by an MCP server |
 | 11 | TTS out (Workers AI) | later | `tool:speak` |
 | 12 | Capability handshake + remote clients | later | `/cortex/clients` registration UI |
@@ -264,3 +264,36 @@ the movies has a beautiful spinning UI but no model of WHAT it's thinking
 about. Yours does — the connectome is the working memory and the spike
 animation is the visible attention. Reasoning over the graph fires the
 graph.
+
+
+## 12 · Autonomy (Layer 9 reference)
+
+The cortex now thinks on its own schedule, not just on demand. Three
+cadences (UTC), all defined in `src/worker/cortex/scheduler.js`:
+
+| Cron | Name | Window | Min new events | Budget | Behavior |
+|---|---|---|---|---|---|
+| `*/15 * * * *` | pulse | 15 min | 1 | 8 s / 3 steps | Top-of-mind check; "is anything new worth noticing?" |
+| `0 * * * *` | hourly | 60 min | 2 | 12 s / 4 steps | Theme detection over the hour using recall |
+| `0 7 * * *` | daily | 24 h | 3 | 20 s / 6 steps | Synthesize yesterday → write a 3-bullet note |
+
+Each run:
+1. Checks a watermark KV key — short-circuits if a previous run touched
+   the same window (idempotent against double cron firings).
+2. Counts events in the window via D1 — skips with `status:'skipped-quiet'`
+   if below `minNewEvents` (don't reason about nothing).
+3. Calls `think()` with a system-authored question and the per-cadence budget.
+4. Writes a `scheduled-think` event to D1 carrying the schedule name,
+   step count, elapsed ms, new-event count, and final answer.
+5. Updates the watermark.
+
+Manual surfaces:
+- `GET  /api/v1/cortex/schedules?userId=…` — list cadences + lastRun
+- `POST /api/v1/cortex/schedules/:name/run` — force-run with `{userId, force?:true}`
+- `GET  /api/v1/cortex/scheduled-thoughts?userId=…&limit=…` — recent autonomous thoughts
+
+Tuning knobs (no code change):
+- `AUTONOMY_USER_IDS` (var) — comma-separated allowlist of who gets thought-about
+- `triggers.crons` (wrangler) — add or change cadences
+- `CRON_PLAYBOOK` (scheduler.js) — per-cadence prompt, budget, minNewEvents
+

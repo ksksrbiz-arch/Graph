@@ -15,6 +15,7 @@ import { readAttention, writeAttention } from './attention.js';
 import { stamp, isPerceive, isThink, isAct } from './protocol.js';
 import { describeTools, dispatch } from './tools.js';
 import { upsertNodes as upsertVectors } from './vector.js';
+import { CRON_PLAYBOOK, listSchedules, runSchedule } from './scheduler.js';
 import { think } from './reason.js';
 
 export async function handleCortexApi(request, env, url) {
@@ -79,6 +80,53 @@ export async function handleCortexApi(request, env, url) {
     if (!checkUser(userId, env)) return forbidden(userId);
     const result = await dispatch(env, intent, dto?.args || {}, { userId });
     return jsonResponse(result);
+  }
+
+  // GET /api/v1/cortex/schedules — list configured cron cadences + last-run watermarks
+  if (pathname === '/api/v1/cortex/schedules' && method === 'GET') {
+    const userId = need(url, 'userId') || 'local';
+    if (!checkUser(userId, env)) return forbidden(userId);
+    const schedules = listSchedules();
+    if (env.GRAPH_KV) {
+      for (const sch of schedules) {
+        const ts = await env.GRAPH_KV.get('schedule:' + userId + ':' + sch.name + ':lastRun');
+        sch.lastRun = ts ? parseInt(ts, 10) : null;
+      }
+    }
+    return jsonResponse({ userId, schedules });
+  }
+
+  // POST /api/v1/cortex/schedules/:name/run — manually trigger a scheduled think
+  // Body: {userId, force?: boolean}
+  const schedRunMatch = pathname.match(/^\/api\/v1\/cortex\/schedules\/([a-z0-9_-]+)\/run$/);
+  if (schedRunMatch && method === 'POST') {
+    const dto = (await safeJson(request)) || {};
+    const userId = (dto.userId || 'local').toString().trim();
+    if (!checkUser(userId, env)) return forbidden(userId);
+    const out = await runSchedule({ env, userId, name: schedRunMatch[1], force: !!dto.force });
+    return jsonResponse(out);
+  }
+
+  // GET /api/v1/cortex/scheduled-thoughts?userId=… — recent autonomous thoughts
+  if (pathname === '/api/v1/cortex/scheduled-thoughts' && method === 'GET') {
+    const userId = need(url, 'userId') || 'local';
+    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!env.GRAPH_DB) return jsonResponse({ error: 'GRAPH_DB binding missing' }, 503);
+    const limit = clampInt(parseInt(url.searchParams.get('limit') || '20', 10), 1, 200, 20);
+    const sql = "SELECT id, ts, payload_json, status, error FROM events " +
+                "WHERE user_id = ?1 AND kind = 'scheduled-think' " +
+                "ORDER BY ts DESC LIMIT " + limit;
+    const { results } = await env.GRAPH_DB.prepare(sql).bind(userId).all();
+    const thoughts = (results || []).map((r) => {
+      let payload = {};
+      try { payload = JSON.parse(r.payload_json); } catch {}
+      return {
+        id: r.id, ts: r.ts, status: r.status, error: r.error,
+        schedule: payload.schedule, finalAnswer: payload.finalAnswer,
+        steps: payload.steps, elapsedMs: payload.elapsedMs, newCount: payload.newCount,
+      };
+    });
+    return jsonResponse({ userId, thoughts });
   }
 
   // POST /api/v1/cortex/admin/backfill-vectors — embed every D1 node

@@ -25,6 +25,7 @@
 import { parseMarkdown, parseText } from './worker/text-parser.js';
 import { handleIngressApi } from './worker/ingress.js';
 import { handleCortexApi } from './worker/cortex/router.js';
+import { dispatchCron } from './worker/cortex/scheduler.js';
 import { recordEvent, upsertNodesAndEdges } from './worker/d1-store.js';
 import { upsertNodes as upsertVectors } from './worker/cortex/vector.js';
 
@@ -39,6 +40,13 @@ const JSON_HEADERS = {
 };
 
 export default {
+  // Cron-driven autonomy entry point. Cloudflare invokes this on every
+  // configured trigger in wrangler.jsonc → triggers.crons. We fan out to
+  // dispatchCron() which knows the cron→prompt mapping.
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(dispatchCron(env, controller.cron));
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 

@@ -16,11 +16,6 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "vars": {
-    // CSV of user ids permitted to write through the public ingest path.
-    // The Cloudflare deploy is single-tenant; keep this short.
-    "PUBLIC_INGEST_USER_IDS": "local"
-  },
   // KV namespace storing per-user graph snapshots — the rendered
   // {nodes, edges} that the SPA reads on first paint. O(1) GET, no SQL.
   "kv_namespaces": [
@@ -50,5 +45,21 @@
   // and pre-fetched into every think() prompt as RAG context.
   "vectorize": [
     { "binding": "VECTORS", "index_name": "cortex-embeddings" }
-  ]
+  ],
+  // Cron-driven autonomy. Each cadence maps to a system-authored question
+  // that calls cortex.think() with a tight budget. See src/worker/cortex/scheduler.js
+  // for the cron→prompt mapping. Crons fire UTC.
+  "triggers": {
+    "crons": [
+      "*/15 * * * *",   // pulse — has anything new arrived I should notice?
+      "0 * * * *",      // hourly — what theme is forming this hour?
+      "0 7 * * *"       // daily 07:00 UTC — synthesize yesterday into a note
+    ]
+  },
+  // Comma-separated user ids that scheduled thinks run for. Same allowlist
+  // shape as PUBLIC_INGEST_USER_IDS — typically equal or a subset.
+  "vars": {
+    "PUBLIC_INGEST_USER_IDS": "local",
+    "AUTONOMY_USER_IDS": "local"
+  }
 }
