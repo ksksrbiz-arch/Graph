@@ -1,0 +1,64 @@
+/* =============================================================================
+   GRAPH BRAIN VISUAL SPEC — Part 1 of 3 · §1 Design Tokens
+   -----------------------------------------------------------------------------
+   Repo layout findings (per spec step 3 — "confirm findings in a comment block"):
+     - This repo is a vanilla HTML/CSS/JS app served from `web/` (entry:
+       `web/index.html`, styles: `web/styles.css`). It is NOT an Angular
+       project, so the spec's references to `src/app/app.component.ts` and
+       `styles.scss` do not exist here.
+     - Graph rendering lives in `web/views/graph-2d.js` (force-graph) and
+       `web/views/graph-3d.js` (3d-force-graph / THREE), driven from
+       `web/app.js`. The simulation uses d3-force-3d under the hood (see
+       `web/vendor/3d-force-graph.min.js`). Routing is hash-based in
+       `web/app.js`.
+     - Per the spec: routing, worker logic, and the d3-force-3d engine are
+       NOT modified. There is no SCSS toolchain, so this file is authored in
+       plain-CSS-compatible syntax (custom properties only, no SCSS-specific
+       constructs) and the dev server is taught to serve `.scss` as
+       `text/css` so the browser can load it directly.
+     - All colors below are exposed as CSS custom properties so downstream
+       styles can reference them — no hardcoded hex outside this file.
+   ========================================================================== */
+
+:root {
+  --bg-void:        #000507;
+  --bg-panel:       #040d14;
+  --bg-glass:       rgba(4, 20, 35, 0.72);
+
+  --cyan-core:      #00d4ff;
+  --cyan-glow:      #00d4ff99;
+  --cyan-dim:       #00d4ff33;
+  --teal-core:      #00ffaa;
+  --teal-glow:      #00ffaa88;
+  --orange-core:    #ff6d00;
+  --purple-core:    #b44bff;
+  --gold-core:      #ffd700;
+  --red-core:       #ff2244;
+
+  --text-primary:   #e8f4f8;
+  --text-secondary: #7ab8cc;
+  --text-dim:       #2a4a5a;
+  --text-label:     #00d4ffcc;
+  --text-mono:      'JetBrains Mono', 'Roboto Mono', monospace;
+  --text-ui:        'Inter', sans-serif;
+
+  --border-dim:     rgba(0, 212, 255, 0.12);
+  --border-active:  rgba(0, 212, 255, 0.45);
+  --grid-line:      rgba(0, 212, 255, 0.04);
+
+  --t-snap:   80ms;  --t-fast: 150ms;
+  --t-normal: 300ms; --t-slow: 600ms;
+
+  --glow-cyan-sm: 0 0 8px var(--cyan-glow);
+  --glow-cyan-md: 0 0 20px var(--cyan-glow), 0 0 40px var(--cyan-dim);
+  --glow-teal-md: 0 0 20px var(--teal-glow), 0 0 40px rgba(0,255,170,0.13);
+
+  --node-concept:    #00d4ff;
+  --node-person:     #00ffaa;
+  --node-org:        #ffd700;
+  --node-fact:       #b44bff;
+  --node-insight:    #ff6d00;
+  --node-question:   #ff2244;
+  --node-autonomous: #b44bff;
+  --node-meta:       #ffffff;
+}
