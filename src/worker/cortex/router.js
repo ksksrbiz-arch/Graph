@@ -201,6 +201,8 @@ async function perceive(env, userId, msg) {
   let parsed;
   let payload = msg.payload || {};
   let kind = msg.modality;
+  let transcript = null;
+  let caption = null;
 
   if (msg.modality === 'text') {
     const text = (payload.text || '').toString();
@@ -222,6 +224,68 @@ async function perceive(env, userId, msg) {
   } else if (msg.modality === 'graph') {
     if (!Array.isArray(payload.nodes)) return { ok: false, error: 'graph payload must have nodes[]' };
     parsed = { nodes: payload.nodes, edges: payload.edges || [] };
+  } else if (msg.modality === 'voice') {
+    // Layer 7: audio blob (base64) → Whisper transcription → text nodes.
+    if (!env.AI) return { ok: false, error: 'AI binding required for voice transcription' };
+    const audioB64 = payload.audio;
+    if (!audioB64 || typeof audioB64 !== 'string') {
+      return { ok: false, error: 'voice payload must include audio as a base64 string' };
+    }
+    let audioBytes;
+    try {
+      audioBytes = base64ToBytes(audioB64);
+    } catch {
+      return { ok: false, error: 'audio must be valid base64' };
+    }
+    try {
+      const result = await env.AI.run('@cf/openai/whisper', { audio: [...audioBytes] });
+      transcript = (result?.text || '').trim();
+    } catch (err) {
+      return { ok: false, error: `whisper failed: ${err.message}` };
+    }
+    if (!transcript) return { ok: false, error: 'whisper returned an empty transcript' };
+    parsed = await parseText(transcript, {
+      userId, sourceId: msg.source || 'voice',
+      title: payload.title || `Voice note — ${isoStamp()}`,
+    });
+    // Stash the raw transcript on the first node so callers can surface it.
+    if (parsed.nodes?.[0]) {
+      parsed.nodes[0].metadata = { ...parsed.nodes[0].metadata, transcript };
+    }
+    kind = 'voice';
+  } else if (msg.modality === 'vision') {
+    // Layer 8: image blob (base64) → LLaVA caption → text nodes.
+    if (!env.AI) return { ok: false, error: 'AI binding required for vision captioning' };
+    const imageB64 = payload.image;
+    if (!imageB64 || typeof imageB64 !== 'string') {
+      return { ok: false, error: 'vision payload must include image as a base64 string' };
+    }
+    let imageBytes;
+    try {
+      imageBytes = base64ToBytes(imageB64);
+    } catch {
+      return { ok: false, error: 'image must be valid base64' };
+    }
+    try {
+      const result = await env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
+        image: [...imageBytes],
+        prompt: payload.prompt || 'Describe this image in detail.',
+        max_tokens: 512,
+      });
+      caption = (result?.description || '').trim();
+    } catch (err) {
+      return { ok: false, error: `llava failed: ${err.message}` };
+    }
+    if (!caption) return { ok: false, error: 'llava returned an empty caption' };
+    parsed = await parseText(caption, {
+      userId, sourceId: msg.source || 'vision',
+      title: payload.title || `Vision note — ${isoStamp()}`,
+    });
+    // Stash the raw caption on the first node so callers can surface it.
+    if (parsed.nodes?.[0]) {
+      parsed.nodes[0].metadata = { ...parsed.nodes[0].metadata, caption };
+    }
+    kind = 'vision';
   } else if (msg.modality === 'webhook' || msg.modality === 'event') {
     // Treat as a structured event — record it but don't graph-mutate unless
     // the payload contains nodes.
@@ -234,10 +298,14 @@ async function perceive(env, userId, msg) {
 
   let evtRow = null;
   if (env.GRAPH_DB) {
+    // Strip heavy binary fields (base64 audio/image) from the event log payload.
+    const { audio: _audio, image: _image, ...safePayload } = payload;
+    if (transcript !== null) safePayload.transcript = transcript;
+    if (caption    !== null) safePayload.caption    = caption;
     const [e] = await Promise.all([
       recordEvent(env.GRAPH_DB, {
         userId, sourceKind: msg.modality, kind,
-        payload: { source: msg.source, ...payload },
+        payload: { source: msg.source, ...safePayload },
         nodeCount: parsed.nodes?.length ?? 0,
         edgeCount: parsed.edges?.length ?? 0,
         status: 'applied',
@@ -266,6 +334,8 @@ async function perceive(env, userId, msg) {
     edges: parsed.edges?.length ?? 0,
     totalNodes: snap.nodes.length,
     totalEdges: snap.edges.length,
+    ...(transcript !== null && { transcript }),
+    ...(caption    !== null && { caption }),
   };
 }
 
@@ -291,4 +361,17 @@ function jsonResponse(body, status = 200) {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
   });
+}
+
+/** Decode a base64 string to a Uint8Array. Throws on invalid input. */
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+/** Return the current time as a compact ISO-8601 string (seconds precision). */
+function isoStamp() {
+  return new Date().toISOString().slice(0, 19);
 }
