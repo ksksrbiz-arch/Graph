@@ -227,7 +227,7 @@ async function perceive(env, userId, msg) {
   } else if (msg.modality === 'voice') {
     // Layer 7: audio blob (base64) → Whisper transcription → text nodes.
     if (!env.AI) return { ok: false, error: 'AI binding required for voice transcription' };
-    const audioB64 = payload.audio;
+    const audioB64 = payload.audio || payload.audioBase64;
     if (!audioB64 || typeof audioB64 !== 'string') {
       return { ok: false, error: 'voice payload must include audio as a base64 string' };
     }
@@ -256,7 +256,7 @@ async function perceive(env, userId, msg) {
   } else if (msg.modality === 'vision') {
     // Layer 8: image blob (base64) → LLaVA caption → text nodes.
     if (!env.AI) return { ok: false, error: 'AI binding required for vision captioning' };
-    const imageB64 = payload.image;
+    const imageB64 = payload.image || payload.imageBase64;
     if (!imageB64 || typeof imageB64 !== 'string') {
       return { ok: false, error: 'vision payload must include image as a base64 string' };
     }

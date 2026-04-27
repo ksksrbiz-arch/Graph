@@ -15,6 +15,7 @@
 import { listEvents, recordEvent, upsertNodesAndEdges } from '../d1-store.js';
 import { parseText } from '../text-parser.js';
 import { recall as vectorRecall } from './vector.js';
+import { speakText } from './sensory.js';
 
 const FETCH_TIMEOUT_MS = 8_000;
 const MAX_URL_BYTES = 1_500_000;
@@ -124,6 +125,16 @@ export const REGISTRY = {
         } };
       }
       return { ok: false, error: 'KV merge not wired' };
+    },
+  },
+
+  'speak': {
+    intent: 'speak',
+    description: 'Synthesize speech from text via Workers AI Aura-1 (TTS, voice asteria default). Args: {text: string, voice?: string}. Returns {audioBase64, mimeType, voice} the SPA plays inline. Use only when the user asked the cortex to speak — not for every answer.',
+    async run(env, args) {
+      const out = await speakText(env, (args?.text || '').toString(), { voice: args?.voice });
+      if (!out.ok) return { ok: false, error: out.error };
+      return { ok: true, result: { audioBase64: out.audioBase64, mimeType: out.mimeType, voice: out.voice, bytes: out.bytes } };
     },
   },
 

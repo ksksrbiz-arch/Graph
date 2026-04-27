@@ -233,11 +233,11 @@ Each layer is independently deployable + reversible.
 | 4 | Tool registry (built-in 5) | **shipping now** | `src/worker/cortex/tools.js` |
 | 5 | Cortex SPA view | **shipping now** | `web/views/cortex.js` |
 | 6 | Vectorize semantic recall | **shipped** | `cortex-embeddings` (768d cosine) + `cortex/vector.js` + `recall` tool + RAG pre-fetch in reason.js |
-| 7 | Voice in (Whisper) | next | `web/voice.js` + `/perceive {modality:'voice'}` |
-| 8 | Vision in (Llava) | next | `web/vision.js` + `/perceive {modality:'vision'}` |
+| 7 | Voice in (Whisper) | **shipped** (PR #46) | inline @cf/openai/whisper in router.js + MediaRecorder in cortex.js |
+| 8 | Vision in (Llava) | **shipped** (PR #46 + drag-drop) | inline @cf/llava-hf/llava-1.5-7b-hf in router.js + file-picker in cortex.js + drag-drop overlay |
 | 9 | Cron-driven autonomy | **shipped** | `wrangler.jsonc` triggers + `scheduled()` handler + `cortex/scheduler.js` + `/schedules` admin routes |
 | 10 | Tool plugins via MCP | next | Each tool can be replaced by an MCP server |
-| 11 | TTS out (Workers AI) | later | `tool:speak` |
+| 11 | TTS out (Workers AI) | **shipped** | `cortex/sensory.js` speakText (Aura-1) + `tool:speak` + inline `<audio>` in cortex view |
 | 12 | Capability handshake + remote clients | later | `/cortex/clients` registration UI |
 
 ## 10 · Live status
@@ -296,4 +296,31 @@ Tuning knobs (no code change):
 - `AUTONOMY_USER_IDS` (var) — comma-separated allowlist of who gets thought-about
 - `triggers.crons` (wrangler) — add or change cadences
 - `CRON_PLAYBOOK` (scheduler.js) — per-cadence prompt, budget, minNewEvents
+
+
+
+## 13 · Sensory I/O (Layers 7 / 8 / 11 reference)
+
+The cortex perceives audio + images and emits speech, all through one
+`/api/v1/cortex/perceive` envelope and the existing tool registry. Each
+modality decodes its base64 payload server-side, runs the matching Workers AI
+model, and funnels the resulting **text** through parseText → KV merge →
+D1 mirror → vector embed. Voice notes, screenshots, and pasted text all
+become the same kind of node in the same graph.
+
+| Capability | Workers AI model | Surface | Field aliases |
+|---|---|---|---|
+| Speech-to-text | `@cf/openai/whisper` | `POST /perceive {modality:'voice', payload}` | `payload.audio` OR `payload.audioBase64` |
+| Image captioning | `@cf/llava-hf/llava-1.5-7b-hf` | `POST /perceive {modality:'vision', payload}` | `payload.image` OR `payload.imageBase64` |
+| Text-to-speech | `@cf/deepgram/aura-1` | Tool `speak` — `POST /act/speak {args:{text, voice?}}` | returns `{audioBase64, mimeType:'audio/mpeg', voice, bytes}` |
+
+SPA wiring (`web/views/cortex.js`):
+- 🎙 mic button → MediaRecorder → blob → base64 → POST
+- 📷 camera button + drag-drop on the panel → file → base64 → POST
+- speak tool results render an inline `<audio autoplay controls>` in the trace
+
+Live verification (smoke):
+- TTS → 13,479 bytes of audio/mpeg from "Cortex sensory layer online"
+- TTS → Whisper round-trip → 2 nodes ingested from the cortex's own voice
+- Cataas cat 33 KB JPEG → Llava → 3 nodes captioned into the graph
 

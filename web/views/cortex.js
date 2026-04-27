@@ -297,6 +297,11 @@ function renderTrace(trace) {
     } else if (step.kind === 'action') {
       add('action', `→ ${step.intent}(${shortJson(step.args)})`);
     } else if (step.kind === 'observation') {
+      // 'speak' tool returns audio — render an inline player.
+      if (step.intent === 'speak' && step.ok && step.result?.audioBase64) {
+        addAudio('observe', '← speak: ok (' + step.result.bytes + ' bytes ' + step.result.voice + ')', step.result);
+        continue;
+      }
       const head = step.ok ? 'ok' : `err: ${step.error}`;
       add('observe', `← ${step.intent}: ${head} ${step.result ? '· ' + shortJson(step.result) : ''}`);
     } else if (step.kind === 'final') {
@@ -319,6 +324,21 @@ function add(kind, text) {
   div.className = `cortex-msg cortex-${kind}`;
   div.innerHTML = `<span class="cm-tag">${kind}</span><span class="cm-body"></span>`;
   div.querySelector('.cm-body').textContent = text;
+  transcriptEl.appendChild(div);
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  lastClass = kind; lastEl = div;
+}
+
+function addAudio(kind, label, audioObj) {
+  const div = document.createElement('div');
+  div.className = 'cortex-msg cortex-' + kind;
+  div.innerHTML = '<span class="cm-tag">' + kind + '</span><span class="cm-body"></span>';
+  div.querySelector('.cm-body').textContent = label;
+  const a = document.createElement('audio');
+  a.controls = true; a.autoplay = true;
+  a.src = 'data:' + (audioObj.mimeType || 'audio/mpeg') + ';base64,' + audioObj.audioBase64;
+  div.querySelector('.cm-body').appendChild(document.createElement('br'));
+  div.querySelector('.cm-body').appendChild(a);
   transcriptEl.appendChild(div);
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
   lastClass = kind; lastEl = div;
@@ -399,3 +419,28 @@ function injectStylesOnce() {
   `;
   document.head.appendChild(style);
 }
+
+
+// Drag-and-drop image support — layered onto Copilot's PR #46 Layer 8 impl.
+// Finds the existing hidden input (#cortex-vision-input) and feeds dropped
+// files into it via DataTransfer so their existing 'change' handler runs.
+function initImageDrop() {
+  const shell = document.querySelector('.cortex-shell');
+  const input = document.getElementById('cortex-vision-input');
+  if (!shell || !input) return;
+  ['dragenter', 'dragover'].forEach((ev) =>
+    shell.addEventListener(ev, (e) => { e.preventDefault(); shell.classList.add('drag-over'); }));
+  ['dragleave', 'drop'].forEach((ev) =>
+    shell.addEventListener(ev, (e) => { e.preventDefault(); shell.classList.remove('drag-over'); }));
+  shell.addEventListener('drop', (e) => {
+    const f = e.dataTransfer?.files?.[0];
+    if (!f || !/^image\//.test(f.type)) return;
+    // Mirror the file into the existing hidden input + trigger change.
+    const dt = new DataTransfer();
+    dt.items.add(f);
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+// Try to wire after DOM settles. mount() in cortex.js fires once on app boot.
+setTimeout(initImageDrop, 50);
