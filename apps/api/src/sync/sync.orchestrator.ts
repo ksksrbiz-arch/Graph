@@ -18,7 +18,7 @@ import {
 } from '@pkg/shared';
 import { ConnectorConfigStore } from '../connectors/connector-config.store';
 import { ConnectorRegistry } from '../connectors/connector-registry';
-import { GraphRepository } from '../graph/graph.repository';
+import { GraphService } from '../graph/graph.service';
 import { SensoryService } from '../brain/sensory.service';
 import { SyncGateway } from './sync.gateway';
 import type { SyncJobResult, SyncJobSpec } from './sync.types';
@@ -38,7 +38,7 @@ export class SyncOrchestrator {
   constructor(
     private readonly registry: ConnectorRegistry,
     private readonly configs: ConnectorConfigStore,
-    private readonly graph: GraphRepository,
+    private readonly graph: GraphService,
     @Inject(forwardRef(() => SensoryService))
     private readonly sensory: SensoryService,
     private readonly gateway: SyncGateway,

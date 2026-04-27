@@ -1,4 +1,4 @@
-// Service backing the public, anonymous ingest path. Wraps GraphRepository
+// Service backing the public, anonymous ingest path. Wraps GraphService
 // so paste-in-the-website can produce real KGNodes for the demo userId,
 // pokes the brain via SensoryService.perceive(), and queues a debounced
 // connectome reload so newly-added nodes start firing soon after.
@@ -18,7 +18,7 @@ import { loadEnv } from '../config/env';
 import { splitCsvEnv } from '../config/env-utils';
 import { BrainService } from '../brain/brain.service';
 import { SensoryService } from '../brain/sensory.service';
-import { GraphRepository } from '../graph/graph.repository';
+import { GraphService } from '../graph/graph.service';
 import {
   parseMarkdown,
   parseText,
@@ -52,7 +52,7 @@ export class PublicIngestService {
   private readonly reloadTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
-    private readonly graph: GraphRepository,
+    private readonly graph: GraphService,
     private readonly sensory: SensoryService,
     private readonly brain: BrainService,
   ) {}
@@ -127,7 +127,7 @@ export class PublicIngestService {
       throw new ForbiddenException(`userId=${userId} is not on the public allowlist`);
     }
     const { nodes, edges } = await this.graph.snapshotForUser(userId, limit);
-    const sources = [...new Set(nodes.map((n) => n.sourceId).filter(Boolean))];
+    const sources = [...new Set(nodes.map((n) => n.sourceId))];
     return {
       schemaVersion: 1,
       metadata: { updatedAt: new Date().toISOString(), userId, sources },
