@@ -14,6 +14,7 @@ const API_GRAPH_PATH = '/api/v1/public/graph';
 const API_HEALTH_PATH = '/api/v1/public/ingest/health';
 const API_INGEST_TEXT_PATH = '/api/v1/public/ingest/text';
 const API_INGEST_MARKDOWN_PATH = '/api/v1/public/ingest/markdown';
+const API_INGEST_GRAPH_PATH = '/api/v1/public/ingest/graph';
 
 const ENDPOINT_LOCAL_INGEST = '/api/ingest';
 
@@ -236,4 +237,27 @@ export async function ingestPublicText({ text, title, format = 'text' }) {
 /** Back-compat shim used by the "Ingest Claude Code" button. */
 export async function runIngest(name, params) {
   return runLocalIngest(name, params);
+}
+
+/**
+ * Send a pre-parsed graph (nodes + edges) to the public API for ingestion.
+ * Used by the client-side ingest path when the local dev server is unavailable.
+ */
+export async function ingestPublicGraph({ nodes, edges, sourceId }) {
+  const url = publicApiUrl(API_INGEST_GRAPH_PATH);
+  if (!url) return { ok: false, status: 0, error: 'no apiBaseUrl configured' };
+
+  let body = {};
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userId: brainUserId(), nodes, edges, sourceId }),
+    });
+  } catch (err) {
+    return { ok: false, status: 0, error: err.message };
+  }
+  try { body = await res.json(); } catch {}
+  return { ok: res.ok, status: res.status, ...body };
 }
