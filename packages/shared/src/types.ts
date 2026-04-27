@@ -92,6 +92,9 @@ export const CONNECTOR_IDS = [
   'todoist',
   'linear',
   'bookmarks',
+  'zotero',
+  'evernote',
+  'web_clip',
 ] as const;
 
 export type ConnectorId = (typeof CONNECTOR_IDS)[number];
