@@ -39,9 +39,15 @@ pnpm install
 # 3. Bring up the data services
 pnpm stack:up                # docker compose up -d
 
-# 4. Run the API in watch mode
+# 4. Seed Neo4j with a mock graph (one-shot, idempotent)
+pnpm stack:seed              # populates userId=local with ~120 nodes
+
+# 5. Run the API in watch mode
 pnpm --filter @pkg/api start:dev
 # Swagger UI at http://localhost:3001/api/docs
+
+# 6. (Optional) run the React 18 client scaffold
+pnpm --filter @pkg/web dev   # http://localhost:3000
 ```
 
 Bring everything down with `pnpm stack:down`.
@@ -52,6 +58,7 @@ Bring everything down with `pnpm stack:down`.
 - Point `POSTGRES_URL`, `NEO4J_*`, `REDIS_URL`, and `MEILI_*` at hosted services instead of the local `docker-compose.yml` stack.
 - Set `API_PUBLIC_URL` and `CORS_ORIGINS` so OAuth callbacks, browser CORS, and Socket.IO all target the hosted API correctly.
 - Set `BRAIN_AUTO_START_USER_IDS` to the user ids whose brains should resume automatically after deploys/restarts.
+- Set `PUBLIC_INGEST_USER_IDS` to the demo user ids that may write through the anonymous `/api/v1/public/ingest/*` endpoints — the Cloudflare-hosted website uses this to live-ingest pasted text/markdown directly into the public brain.
 - Keep `wrangler.jsonc`/`web/` for the static frontend and set `web/config.js` during deployment so the SPA connects to the hosted API.
 
 ---

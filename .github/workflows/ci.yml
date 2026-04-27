@@ -105,20 +105,25 @@ jobs:
     name: Detect optional CI targets
     runs-on: ubuntu-latest
     outputs:
-      web: ${{ steps.check.outputs.web }}
+      e2e: ${{ steps.check.outputs.e2e }}
+      lighthouse: ${{ steps.check.outputs.lighthouse }}
       stryker: ${{ steps.check.outputs.stryker }}
     steps:
       - uses: actions/checkout@v4
       - id: check
         run: |
-          if [ -f apps/web/package.json ]; then echo "web=true" >> $GITHUB_OUTPUT; else echo "web=false" >> $GITHUB_OUTPUT; fi
+          # The e2e + lighthouse jobs only kick in once their config files
+          # exist. The scaffold (apps/web/package.json) lands in Phase 0; the
+          # config files arrive with Phases 3 + 8 respectively.
+          if [ -f apps/web/playwright.config.ts ]; then echo "e2e=true" >> $GITHUB_OUTPUT; else echo "e2e=false" >> $GITHUB_OUTPUT; fi
+          if [ -f apps/web/lighthouserc.json ]; then echo "lighthouse=true" >> $GITHUB_OUTPUT; else echo "lighthouse=false" >> $GITHUB_OUTPUT; fi
           if [ -f apps/api/stryker.conf.json ] || [ -f apps/api/stryker.conf.mjs ]; then echo "stryker=true" >> $GITHUB_OUTPUT; else echo "stryker=false" >> $GITHUB_OUTPUT; fi
 
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
     needs: [detect-targets]
-    if: github.event_name == 'pull_request' && needs.detect-targets.outputs.web == 'true'
+    if: github.event_name == 'pull_request' && needs.detect-targets.outputs.e2e == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
@@ -147,7 +152,7 @@ jobs:
     name: Lighthouse CI
     runs-on: ubuntu-latest
     needs: [lint-and-type-check, detect-targets]
-    if: github.event_name == 'pull_request' && needs.detect-targets.outputs.web == 'true'
+    if: github.event_name == 'pull_request' && needs.detect-targets.outputs.lighthouse == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3

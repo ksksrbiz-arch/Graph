@@ -23,6 +23,7 @@
     "stack:up": "docker compose up -d",
     "stack:down": "docker compose down",
     "stack:logs": "docker compose logs -f",
+    "stack:seed": "pnpm --filter @pkg/shared build && node scripts/seed-stack.mjs",
     "import:neo4j": "node scripts/import-to-neo4j.mjs",
     "sniff:brain": "node --no-warnings tools/sniff-brain.mjs",
     "data:sync": "cp data/graph.json web/data/graph.json"

@@ -893,3 +893,76 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
   0%, 48% { transform: translateX(-130%); }
   62%, 100% { transform: translateX(130%); }
 }
+
+/* ── Ingest dialog (paste-to-graph) ─────────────────────────────── */
+.ingest-scrim {
+  position: fixed; inset: 0;
+  background: rgba(8, 10, 16, 0.6);
+  backdrop-filter: blur(6px);
+  z-index: 80;
+}
+.ingest-scrim.hidden, .ingest-dialog.hidden { display: none; }
+.ingest-dialog {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 90;
+  width: min(640px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  display: flex; flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.1rem 1.2rem 1rem;
+  background: var(--bg-elev-1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+  overflow-y: auto;
+}
+.ingest-dialog header h2 { margin: 0 0 0.3rem; font-size: 1.05rem; }
+.ingest-dialog header .hint {
+  margin: 0; font-size: 0.85rem; color: var(--text-dim);
+}
+.ingest-dialog label.row {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  font-size: 0.78rem; color: var(--text-dim);
+}
+.ingest-dialog input[type=text],
+.ingest-dialog select {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+  font-size: 0.9rem;
+}
+.ingest-dialog textarea {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem;
+  font: 0.86rem/1.45 var(--font-mono, ui-monospace, monospace);
+  resize: vertical;
+  min-height: 9rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.ingest-dialog textarea:focus,
+.ingest-dialog input[type=text]:focus,
+.ingest-dialog select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.ingest-dialog footer {
+  display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.2rem;
+}
+.ingest-dialog footer button { font-size: 0.86rem; padding: 0.45rem 0.85rem; }
+.ingest-dialog footer button.primary {
+  background: var(--accent); color: var(--accent-fg, #0b0f1a); font-weight: 600;
+}
+.ingest-status { font-size: 0.82rem; min-height: 1.1rem; color: var(--text-dim); }
+.ingest-status.ok   { color: var(--success); }
+.ingest-status.warn { color: #f5b942; }
+.ingest-status.err  { color: var(--danger); }
+.ingest-status.info { color: var(--accent-hover, var(--accent)); }

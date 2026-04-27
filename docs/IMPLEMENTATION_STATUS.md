@@ -8,12 +8,13 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 
 | DoD item                                                       | Status | Notes |
 | -------------------------------------------------------------- | ------ | ----- |
-| Monorepo scaffold (pnpm workspaces): `apps/web`, `apps/api`, `packages/shared` | 🟡 | API + shared exist; `apps/web` (React 18) deferred — v1 static MVP under `/web` still active |
+| Monorepo scaffold (pnpm workspaces): `apps/web`, `apps/api`, `packages/shared` | ✅ | `apps/web` ships as a Vite + React 18 scaffold; v1 static MVP under `/web` continues to serve the live demo until the canvas migration in Phase 3 |
 | Docker Compose with Neo4j, PostgreSQL, Redis, Meilisearch     | ✅ | `docker-compose.yml` |
-| `docker compose up` brings up all services with seed data     | 🟡 | Services up; seed script lands with users module (Phase 1) |
-| CI pipeline: lint + type-check + unit tests pass on every PR  | ✅ | `.github/workflows/ci.yml` |
+| `docker compose up` brings up all services with seed data     | ✅ | `pnpm stack:up && pnpm stack:seed` (`scripts/seed-stack.mjs` populates Neo4j with mock graph for `userId=local`) |
+| CI pipeline: lint + type-check + unit tests pass on every PR  | ✅ | `.github/workflows/ci.yml` (e2e + lighthouse jobs gated on phase-3 config files) |
 | Shared TypeScript interfaces + JSON schemas published from `packages/shared` | ✅ | zod schemas mirror types |
 | README with local dev setup instructions                      | ✅ | |
+| Live, public ingest from the Cloudflare-hosted website        | ✅ | `apps/api/src/public/*` exposes `POST /api/v1/public/ingest/{text,markdown}` + `GET /api/v1/public/graph`; web client opens a paste dialog and the brain perceives new nodes within seconds |
 
 ## Phase 1 — Auth & User Management (Week 3)
 

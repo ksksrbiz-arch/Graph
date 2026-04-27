@@ -25,6 +25,11 @@ primary_region = "sjc"
   PORT = "8080"
   CORS_ORIGINS = "https://graph.skdev-371.workers.dev"
   LOG_LEVEL = "info"
+  # Allow the Cloudflare-hosted demo to ingest pasted text directly into the
+  # public brain. `local` matches web/config.js → brainUserId. Add more ids
+  # here (comma separated) to grant additional demo identities.
+  PUBLIC_INGEST_USER_IDS = "local"
+  BRAIN_AUTO_START_USER_IDS = "local"
 
 [[vm]]
   cpu_kind = "shared"

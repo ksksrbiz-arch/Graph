@@ -10,6 +10,7 @@ import { GraphModule } from './graph/graph.module';
 import { HealthModule } from './health/health.module';
 import { MotorModule } from './motor/motor.module';
 import { OAuthModule } from './oauth/oauth.module';
+import { PublicModule } from './public/public.module';
 import { ReasoningModule } from './reasoning/reasoning.module';
 import { Neo4jModule } from './shared/neo4j/neo4j.module';
 import { CryptoModule } from './shared/crypto/crypto.module';
@@ -41,6 +42,7 @@ import { RedisModule } from './shared/redis/redis.module';
     OAuthModule,
     ConnectorsModule,
     SyncModule,
+    PublicModule,
   ],
 })
 export class AppModule {}
