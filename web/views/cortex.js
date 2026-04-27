@@ -114,6 +114,12 @@ async function onSubmit(ev) {
   }
 
   startPulse();
+  // Tell the graph view to render a thinking ripple while we reason. A
+  // periodic tick keeps the wave alive on long thinks (>2.4s).
+  window.dispatchEvent(new CustomEvent('cortex-thinking-start', { detail: {} }));
+  const thinkTickTimer = setInterval(() => {
+    window.dispatchEvent(new CustomEvent('cortex-thinking-tick', { detail: {} }));
+  }, 1800);
   try {
     const r = await fetch(api(API_THINK), {
       method: 'POST',
@@ -133,6 +139,8 @@ async function onSubmit(ev) {
     stopPulse();
     add('error', `think failed: ${err.message}`);
   } finally {
+    clearInterval(thinkTickTimer);
+    window.dispatchEvent(new CustomEvent('cortex-thinking-end', { detail: {} }));
     sendBtn.disabled = false;
   }
 }
