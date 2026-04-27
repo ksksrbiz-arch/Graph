@@ -1,0 +1,85 @@
+/* =============================================================================
+   GRAPH BRAIN VISUAL SPEC — Part 3 of 3 · §14 Global Animations
+   -----------------------------------------------------------------------------
+   The spec calls for these keyframes/utility classes to live in a single
+   `src/styles/animations.scss` file. Per the repo's existing convention, this
+   file is plain-CSS-compatible (no SCSS-specific syntax) and is served as
+   `text/css` by `scripts/serve.mjs`.
+
+   Note on order: `index.html` loads design-tokens → hud-panel → animations →
+   cursor → app `styles.css`, so any rule in this file may safely reference
+   the design-tokens custom properties.
+
+   Some rules (`hudEnter`, `.status-dot`) were temporarily defined in
+   `hud-panel.scss` while Part 2 landed without Part 3 — they are kept there
+   as well because both files are now loaded together and the definitions are
+   identical, but THIS file is the canonical home going forward.
+   ========================================================================== */
+
+/* ---------- glowPulse: 0.6 → 1.0 → 0.6 opacity oscillation ---------------- */
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1.0; }
+}
+
+/* ---------- hudEnter: blur-in + slide-down (shared with hud-panel) -------- */
+@keyframes hudEnter {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    filter: blur(0); }
+}
+
+/* ---------- shimmer: text gradient sweeps left-to-right ------------------- */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.text-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--text-dim) 0%,
+    var(--cyan-core) 50%,
+    var(--text-dim) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: shimmer 3s linear infinite;
+}
+
+.glow-breathe {
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+/* ---------- Status dot — canonical definition ----------------------------- */
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.status-dot.active {
+  background: var(--teal-core);
+  box-shadow: 0 0 8px var(--teal-core);
+  animation: glowPulse 1.5s ease-in-out infinite;
+}
+.status-dot.idle {
+  background: var(--text-dim);
+}
+.status-dot.thinking {
+  background: var(--orange-core);
+  box-shadow: 0 0 8px var(--orange-core);
+  animation: glowPulse 0.7s ease-in-out infinite;
+}
+
+/* ---------- prefers-reduced-motion: dampen the global heartbeat ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .glow-breathe,
+  .text-shimmer,
+  .status-dot.active,
+  .status-dot.thinking {
+    animation: none !important;
+  }
+}

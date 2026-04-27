@@ -9,6 +9,7 @@
 import { state } from '../state.js';
 import { colorForType, srcId, tgtId } from '../util.js';
 import { regionForNode, styleForRegion } from '../cortex.js';
+import { bloomStrengthFor, getQualityTier } from '../hud/quality.js';
 
 const PULSE_DURATION_MS = 700;
 
@@ -69,10 +70,16 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     if (!pp) return;
     const ThreeNS = window.THREE || (typeof THREE !== 'undefined' ? THREE : null);
     if (!ThreeNS || !ThreeNS.UnrealBloomPass) return;
-    bloomPass = new ThreeNS.UnrealBloomPass(new ThreeNS.Vector2(window.innerWidth, window.innerHeight), 1.0, 0.6, 0.05);
-    bloomPass.strength = 1.1;
-    bloomPass.radius = 0.65;
-    bloomPass.threshold = 0.05;
+    // Visual Spec Part 2 §5: UnrealBloomPass(strength=0.85, radius=0.4,
+    // threshold=0.6); the actual `strength` is then driven by the current
+    // quality tier (perf=0.0 / balanced=0.85 / ultra=1.2).
+    bloomPass = new ThreeNS.UnrealBloomPass(
+      new ThreeNS.Vector2(window.innerWidth, window.innerHeight),
+      0.85, 0.4, 0.6,
+    );
+    bloomPass.strength = bloomStrengthFor(getQualityTier());
+    bloomPass.radius = 0.4;
+    bloomPass.threshold = 0.6;
     pp.addPass(bloomPass);
   }
 
@@ -162,7 +169,11 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     fg.linkDirectionalParticleSpeed(0.004 * (state.config.pulseSpeed ?? 1));
     if (typeof fg.d3VelocityDecay === 'function') fg.d3VelocityDecay(state.config.velocityDecay);
     if (typeof fg.d3AlphaDecay === 'function') fg.d3AlphaDecay(state.config.alphaDecay);
-    if (bloomPass) bloomPass.strength = state.config.bloom === false ? 0 : 1.1 * (state.config.bgIntensity ?? 0.6) * 1.6;
+    if (bloomPass) {
+      // Spec §5: the `bloom` master toggle still hard-disables; otherwise
+      // the bloom strength is driven entirely by the quality tier.
+      bloomPass.strength = state.config.bloom === false ? 0 : bloomStrengthFor(getQualityTier());
+    }
     fg.refresh?.();
   }
 

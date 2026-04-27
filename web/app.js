@@ -14,6 +14,12 @@ import { initConnectorsView } from './views/connectors.js';
 import { initSearchView } from './views/search.js';
 import { initSettingsView } from './views/settings.js';
 import { initBrainView } from './views/brain.js';
+import { showBootScreen, reportBootProgress } from './hud/boot-screen.js';
+
+// Visual Spec Part 3 §13 — show the boot splash as early as possible, before
+// any view init runs, so users see the hex logo while the rest of the app
+// boots in the background.
+showBootScreen();
 
 const ROUTES = ['#/graph', '#/timeline', '#/connectors', '#/brain', '#/search', '#/settings'];
 
@@ -150,8 +156,11 @@ async function relabelIngestButton() {
 
 async function refresh() {
   try {
+    reportBootProgress(0.1);
     const data = await loadGraph();
+    reportBootProgress(0.9);
     setGraph(data);
+    reportBootProgress(1.0);
     if (data.metadata?.updatedAt) {
       document.getElementById('sidebar-foot').textContent = `data: ${fmtDate(data.metadata.updatedAt)}`;
     } else {
