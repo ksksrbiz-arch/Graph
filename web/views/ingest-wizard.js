@@ -422,7 +422,7 @@ function buildOAuthField(field) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function stepDot(num, label, getStep) {
+function stepDot(num, label) {
   const dot = el('div', { class: 'wiz-step-dot' },
     el('span', { class: 'wiz-step-num' }, String(num)),
     el('span', { class: 'wiz-step-label' }, label),

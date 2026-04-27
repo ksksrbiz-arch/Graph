@@ -172,6 +172,9 @@ export async function githubOAuthDisconnect() {
   } catch { /* ignore */ }
 }
 
+/** Max polling attempts before giving up on the OAuth popup (1 attempt/second). */
+const OAUTH_POLL_MAX_ATTEMPTS = 180;
+
 /** Open a popup to start the GitHub OAuth flow and return a Promise that
  *  resolves to true when the token appears on the server (polling). */
 export function startGitHubOAuth() {
@@ -194,8 +197,8 @@ export function startGitHubOAuth() {
           return;
         }
       } catch { /* ignore */ }
-      // Closed popup before completing, or timeout after 3 minutes
-      if (popup?.closed || attempts > 180) {
+      // Closed popup before completing, or timeout
+      if (popup?.closed || attempts > OAUTH_POLL_MAX_ATTEMPTS) {
         clearInterval(interval);
         resolve(false);
       }

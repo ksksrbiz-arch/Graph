@@ -195,7 +195,7 @@ const KNOWN_CONNECTORS = [
     id: 'github',
     name: 'GitHub',
     icon: '🐙',
-    description: 'Repos, issues, and PRs via OAuth. Authorise once and run to keep the graph current.',
+    description: 'Repos, issues, and PRs via OAuth. Authorize once and run to keep the graph current.',
     enabled: true,
     localOnly: true,
     ingestSlug: 'github',
@@ -206,7 +206,7 @@ const KNOWN_CONNECTORS = [
           type: 'oauth',
           provider: 'github',
           label: 'GitHub account',
-          hint: 'Authorise read access to your repos, issues, and PRs. Requires GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET on the server.',
+          hint: 'Authorize read access to your repos, issues, and PRs. Requires GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET on the server.',
         },
         {
           name: 'GITHUB_LOGIN',

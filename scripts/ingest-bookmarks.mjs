@@ -101,8 +101,15 @@ function parseBookmarksHtml(html) {
   return bookmarks;
 }
 
-function stripTags(html) {
-  return html.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+function stripTags(text) {
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')  // decode &amp; last to avoid double-decode of &amp;lt; etc.
+    .replace(/<[^>]*>/g, '')  // strip any tags that were entity-encoded
+    .trim();
 }
 
 async function main() {

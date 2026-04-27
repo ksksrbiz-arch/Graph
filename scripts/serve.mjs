@@ -39,8 +39,11 @@ const runningIngesters = new Set();
 /** In-memory GitHub OAuth token (per server process). */
 let githubToken = null;
 
-/** Pending OAuth state tokens  state → { createdAt }. */
+/** Pending OAuth state tokens: state → { createdAt }. */
 const pendingOAuthStates = new Map();
+
+/** Stale OAuth states are pruned after this many milliseconds (10 minutes). */
+const OAUTH_STATE_TIMEOUT_MS = 600_000;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -113,7 +116,8 @@ async function handleIngestPost(slug, req, res) {
   if (body.file?.content && body.file?.field) {
     try {
       tmpDir = await mkdtemp(join(tmpdir(), 'graph-ingest-'));
-      const safeName = (body.file.name || 'upload').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const rawName = String(body.file.name || 'upload');
+      const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.{2,}/g, '_');
       const tmpPath = join(tmpDir, safeName);
       await writeFile(tmpPath, Buffer.from(String(body.file.content), 'base64'));
       envOverrides[String(body.file.field)] = tmpPath;
@@ -150,7 +154,7 @@ function handleGitHubOAuthStart(req, res) {
   pendingOAuthStates.set(state, { createdAt: Date.now() });
   // Prune stale states (> 10 min)
   for (const [k, v] of pendingOAuthStates) {
-    if (Date.now() - v.createdAt > 600_000) pendingOAuthStates.delete(k);
+    if (Date.now() - v.createdAt > OAUTH_STATE_TIMEOUT_MS) pendingOAuthStates.delete(k);
   }
   const redirectUri = `http://localhost:${PORT}/api/oauth/github/callback`;
   const url = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(clientId)}&scope=repo%2Cread%3Auser&state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`;
