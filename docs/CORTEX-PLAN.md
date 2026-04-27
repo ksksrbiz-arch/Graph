@@ -232,7 +232,7 @@ Each layer is independently deployable + reversible.
 | 3 | ReAct loop + Llama | **shipping now** | `src/worker/cortex/reason.js`, `env.AI` binding |
 | 4 | Tool registry (built-in 5) | **shipping now** | `src/worker/cortex/tools.js` |
 | 5 | Cortex SPA view | **shipping now** | `web/views/cortex.js` |
-| 6 | Vectorize semantic recall | next | `wrangler vectorize create cortex-embeddings` + `cortex/vector.js` |
+| 6 | Vectorize semantic recall | **shipped** | `cortex-embeddings` (768d cosine) + `cortex/vector.js` + `recall` tool + RAG pre-fetch in reason.js |
 | 7 | Voice in (Whisper) | next | `web/voice.js` + `/perceive {modality:'voice'}` |
 | 8 | Vision in (Llava) | next | `web/vision.js` + `/perceive {modality:'vision'}` |
 | 9 | Cron-driven autonomy | next | Cloudflare cron triggers + `/cortex/think` |
@@ -243,7 +243,7 @@ Each layer is independently deployable + reversible.
 ## 10 · Live status
 
 - [x] Layer 0–5 shipped — see commit log on `main`.
-- [ ] Vectorize index — pending account R2/Vectorize enable.
+- [x] Vectorize index — `cortex-embeddings` 768d cosine, metadata indexes on `userId` and `type`, all 28 existing nodes backfilled, embed-on-write hooked into mirrorToD1, recall tool live, RAG pre-fetched into every think() prompt.
 - [ ] Voice/vision sensors — pending mic/file pickers in SPA.
 - [ ] Cron autonomy — pending crontab in `wrangler.jsonc`.
 

@@ -9,6 +9,7 @@
 import { listEvents } from '../d1-store.js';
 import { readAttention, writeAttention } from './attention.js';
 import { describeTools, dispatch } from './tools.js';
+import { recall as vectorRecall } from './vector.js';
 
 const DEFAULT_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 const DEFAULT_BUDGET_MS = 15_000;
@@ -52,7 +53,19 @@ export async function think(env, { userId, question, budgetMs, budgetSteps, mode
   const attention = await readAttention(env.GRAPH_KV, userId);
   const recentEvents = await listEvents(env.GRAPH_DB, { userId, limit: 10 });
 
-  const ctx = { userId, attention, recentEvents, observations: [] };
+  const ctx = { userId, attention, recentEvents, observations: [], recalled: [] };
+  // Diagnostic: surface what recall pulled before the loop starts.
+  trace.push({ step: 0, kind: 'pre', recentCount: recentEvents.length, attentionFocus: attention.focus.length });
+  if (question && env.VECTORS && env.AI) {
+    try {
+      const r = await vectorRecall(env, userId, question, { topK: 6 });
+      if (r.ok) ctx.recalled = r.matches;
+      trace.push({ step: 0, kind: 'recalled', count: ctx.recalled.length, top3: ctx.recalled.slice(0,3).map(m=>({nodeId:m.nodeId,label:m.label?.slice(0,80),score:m.score})) });
+    } catch (err) {
+      // Recall failure is non-fatal — the loop still runs without it.
+      console.warn('[reason] pre-recall failed:', err.message);
+    }
+  }
   let final = null;
 
   for (let step = 1; step <= stepCap; step++) {
@@ -124,6 +137,7 @@ function renderPrompt({ question, ctx, tools }) {
   const attentionBlock = renderAttention(ctx.attention, ctx.recentEvents, ctx.observations);
   const system = SYSTEM_PROMPT
     .replace('{TOOLS}', toolBlock)
+    .replace('{RECALLED}', renderRecalled(ctx.recalled))
     .replace('{ATTENTION}', attentionBlock)
     .replace('{QUESTION}', question || '(no explicit question — what should I look at next?)');
   return { system, user: question || 'Pick one useful thing to do next and do it.' };
@@ -189,4 +203,13 @@ function truncateAtSecondStep(t) {
   const cuts = [blank, second].filter((n) => n > 0);
   if (cuts.length === 0) return t;
   return t.slice(0, Math.min(...cuts)).trim();
+}
+
+
+function renderRecalled(matches) {
+  if (!matches?.length) return '(none)';
+  return matches
+    .slice(0, 6)
+    .map((m, i) => `  ${i+1}. [${m.type}] ${m.label} (id=${m.nodeId?.slice(0,8)}, score=${m.score?.toFixed?.(3) ?? m.score})`)
+    .join('\n');
 }

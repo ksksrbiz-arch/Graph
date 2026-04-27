@@ -14,6 +14,7 @@
 
 import { listEvents, recordEvent, upsertNodesAndEdges } from '../d1-store.js';
 import { parseText } from '../text-parser.js';
+import { recall as vectorRecall } from './vector.js';
 
 const FETCH_TIMEOUT_MS = 8_000;
 const MAX_URL_BYTES = 1_500_000;
@@ -30,6 +31,15 @@ export const REGISTRY = {
         since: args?.since ? Number(args.since) : undefined,
       });
       return { ok: true, result: { events } };
+    },
+  },
+
+  'recall': {
+    intent: 'recall',
+    description: 'Semantic recall over the user\'s connectome via vector embeddings. Args: {query: string, topK?: number}. Returns the most semantically similar nodes — use this when graph-query (substring match) misses the concept.',
+    async run(env, args, { userId }) {
+      const out = await vectorRecall(env, userId, (args?.query || '').toString(), { topK: args?.topK });
+      return out.ok ? { ok: true, result: { matches: out.matches } } : { ok: false, error: out.error };
     },
   },
 

@@ -26,6 +26,7 @@ import { parseMarkdown, parseText } from './worker/text-parser.js';
 import { handleIngressApi } from './worker/ingress.js';
 import { handleCortexApi } from './worker/cortex/router.js';
 import { recordEvent, upsertNodesAndEdges } from './worker/d1-store.js';
+import { upsertNodes as upsertVectors } from './worker/cortex/vector.js';
 
 const TEXT_MAX_LENGTH = 200_000;
 const TITLE_MAX_LENGTH = 200;
@@ -373,6 +374,12 @@ async function mirrorToD1(env, { userId, sourceId, sourceKind, kind, parsed, pay
         userId, sourceKind,
         nodes: parsed.nodes,
         edges: parsed.edges,
+      }),
+      // Fire-and-forget vector embed. Catches its own errors so a flaky
+      // AI call doesn't roll back the KV/D1 ingest above.
+      upsertVectors(env, userId, parsed.nodes ?? []).catch((e) => {
+        console.warn('[mirror] vector upsert failed:', e.message);
+        return 0;
       }),
     ]);
     return evt;

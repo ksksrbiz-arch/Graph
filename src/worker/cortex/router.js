@@ -14,6 +14,7 @@ import { parseMarkdown, parseText } from '../text-parser.js';
 import { readAttention, writeAttention } from './attention.js';
 import { stamp, isPerceive, isThink, isAct } from './protocol.js';
 import { describeTools, dispatch } from './tools.js';
+import { upsertNodes as upsertVectors } from './vector.js';
 import { think } from './reason.js';
 
 export async function handleCortexApi(request, env, url) {
@@ -80,7 +81,62 @@ export async function handleCortexApi(request, env, url) {
     return jsonResponse(result);
   }
 
+  // POST /api/v1/cortex/admin/backfill-vectors — embed every D1 node
+  // for a user into Vectorize. Idempotent — vector ids are deterministic.
+  // Body: {userId, batch?: number, sinceTs?: number}
+  if (pathname === '/api/v1/cortex/admin/backfill-vectors' && method === 'POST') {
+    const dto = await safeJson(request);
+    const userId = (dto?.userId || 'local').toString().trim();
+    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!env.GRAPH_DB) return jsonResponse({ error: 'GRAPH_DB binding missing' }, 503);
+    if (!env.VECTORS || !env.AI) return jsonResponse({ error: 'VECTORS or AI binding missing' }, 503);
+    const batch = clampInt(dto?.batch, 50, 1000, 200);
+    const sinceTs = Number(dto?.sinceTs || 0);
+    let cursor = null;
+    let total = 0;
+    let written = 0;
+    const startedAt = Date.now();
+    // Walk D1 nodes in batches keyed by last_seen_at so we get newest first
+    // and can resume by passing sinceTs from the prior call.
+    for (let page = 0; page < 200; page++) {
+      const where = ['user_id = ?'];
+      const params = [userId];
+      if (cursor !== null) { where.push('last_seen_at < ?'); params.push(cursor); }
+      else if (sinceTs)    { where.push('last_seen_at >= ?'); params.push(sinceTs); }
+      const sql = 'SELECT id, type, label, data_json, source_kind, last_seen_at FROM nodes WHERE ' + where.join(' AND ') + ' ORDER BY last_seen_at DESC LIMIT ' + batch;
+      const { results } = await env.GRAPH_DB.prepare(sql).bind(...params).all();
+      const rows = results || [];
+      if (!rows.length) break;
+      const nodes = rows.map((r) => ({
+        id: r.id,
+        type: r.type,
+        label: r.label,
+        sourceKind: r.source_kind,
+        metadata: safeJson_(r.data_json),
+      }));
+      try {
+        const w = await upsertVectors(env, userId, nodes);
+        written += w;
+      } catch (err) {
+        console.warn('[backfill] batch failed:', err.message);
+      }
+      total += rows.length;
+      cursor = rows[rows.length - 1].last_seen_at;
+      if (Date.now() - startedAt > 25_000) break; // stay under sub-request budget
+      if (rows.length < batch) break;
+    }
+    return jsonResponse({ ok: true, total, written, elapsedMs: Date.now() - startedAt, nextCursor: cursor });
+  }
+
   return null;
+}
+
+function clampInt(v, lo, hi, dflt) {
+  const n = Number.isFinite(+v) ? Math.floor(+v) : dflt;
+  return Math.max(lo, Math.min(hi, n));
+}
+function safeJson_(s) {
+  try { return JSON.parse(s); } catch { return {}; }
 }
 
 // ── perceive dispatcher ──────────────────────────────────────────────
