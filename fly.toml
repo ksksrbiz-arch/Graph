@@ -1,0 +1,32 @@
+app = "pkg-brain-9909"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "apps/api/Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[[http_service.checks]]
+  type = "http"
+  method = "get"
+  path = "/health"
+  interval = "30s"
+  timeout = "4s"
+  grace_period = "30s"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  CORS_ORIGINS = "https://graph.skdev-371.workers.dev"
+  LOG_LEVEL = "info"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
