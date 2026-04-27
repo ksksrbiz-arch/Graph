@@ -1,9 +1,12 @@
 // Data plane for the SPA. Knows about three sources, in priority order:
-//   1. The hosted API (apiBaseUrl from web/config.js) — exposes a public
-//      ingest + snapshot pair so the Cloudflare deploy can mutate the graph
-//      live without a filesystem dev server.
+//   1. The hosted online API (apiBaseUrl from web/config.js, or — when
+//      apiBaseUrl is blank — the same origin as the page). On the Cloudflare
+//      deploy this is the Worker in src/worker.js, which exposes the public
+//      ingest + snapshot pair backed by Workers KV so paste-in actions
+//      persist across visits.
 //   2. The local dev server (scripts/serve.mjs) — exposes /api/ingest/* that
-//      shells out to the v1 ingester scripts.
+//      shells out to the v1 ingester scripts. Used as a fallback when the
+//      online API is unreachable or not configured for this user id.
 //   3. The static `data/graph.json` file — used in either case as a fallback
 //      and to seed first paint.
 
@@ -18,8 +21,7 @@ let _localIngestSupported = null;
 let _publicApiAvailable = null;
 
 function publicApiUrl(path) {
-  const base = (window.GRAPH_CONFIG?.apiBaseUrl || '').trim();
-  if (!base) return null;
+  const base = (window.GRAPH_CONFIG?.apiBaseUrl || '').trim() || window.location.origin;
   try {
     return new URL(path, base).toString();
   } catch {

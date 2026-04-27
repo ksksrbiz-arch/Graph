@@ -1,14 +1,36 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "graph",
+  "main": "src/worker.js",
   "compatibility_date": "2026-04-25",
   "observability": {
     "enabled": true
   },
+  // The Worker fronts the static SPA and exposes a `/api/v1/public/*` API on
+  // the same origin so the brain + graph nodes persist across visits without
+  // depending on the Fly-hosted Nest API.
   "assets": {
-    "directory": "web"
+    "directory": "web",
+    "binding": "ASSETS"
   },
   "compatibility_flags": [
     "nodejs_compat"
+  ],
+  "vars": {
+    // CSV of user ids permitted to write through the public ingest path. The
+    // Cloudflare deploy is single-tenant; keep this short.
+    "PUBLIC_INGEST_USER_IDS": "local"
+  },
+  // KV namespace storing per-user graph snapshots. Run
+  //   wrangler kv namespace create GRAPH_KV
+  // and paste the returned `id` (and a `preview_id` for `wrangler dev`) here
+  // before deploying — without a KV binding the Worker still serves the static
+  // assets but the public ingest endpoints respond with `enabled: false`.
+  "kv_namespaces": [
+    {
+      "binding": "GRAPH_KV",
+      "id": "REPLACE_WITH_KV_NAMESPACE_ID",
+      "preview_id": "REPLACE_WITH_KV_PREVIEW_ID"
+    }
   ]
 }
