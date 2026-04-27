@@ -81,7 +81,7 @@ const CONNECTOR_BIAS: Partial<Record<ConnectorId, Region>> = {
 };
 
 export function regionForNodeType(type: NodeType): Region {
-  return NODE_TYPE_TO_REGION[type];
+  return NODE_TYPE_TO_REGION[type]!;
 }
 
 /**
