@@ -31,10 +31,10 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 | DoD item                                                | Status | Notes |
 | ------------------------------------------------------- | ------ | ----- |
 | Neo4j connection provider + repository pattern          | ✅ | |
-| REST + GraphQL endpoints for nodes/edges/subgraph       | 🟡 | REST `/subgraph` and `DELETE /nodes/:id` only; GraphQL pending |
-| Meilisearch node indexing + search endpoint             | ⬜ | |
-| WebSocket gateway (Socket.IO) for `graph:delta` events  | ⬜ | |
-| Unit + integration tests for graph repository           | 🟡 | Service-level mock tests; integration tests pending |
+| REST + GraphQL endpoints for nodes/edges/subgraph       | ✅ | REST: `GET /graph/nodes` (cursor-paged), `GET /graph/nodes/:id`, `GET /graph/subgraph`, `GET /graph/search`, `DELETE /nodes/:id`. GraphQL (code-first, Apollo): `nodes`, `node`, `subgraph`, `searchNodes` queries via `GraphResolver` |
+| Meilisearch node indexing + search endpoint             | ✅ | `SearchService` in `src/shared/meilisearch/`; nodes indexed on upsert, removed on delete; `GET /graph/search?q=` endpoint |
+| WebSocket gateway (Socket.IO) for `graph:delta` events  | ✅ | `GraphGateway` in `/graph` namespace; emits `graph:delta` (NODES_ADDED/UPDATED/DELETED, EDGES_ADDED/DELETED) on every write via `GraphService` |
+| Unit + integration tests for graph repository           | ✅ | `graph.repository.spec.ts` (16 tests: idempotency + subgraph + snapshotForUser + listNodes + getNode), `graph.service.spec.ts` (7 tests incl. search+delta), `graph.controller.spec.ts` (7 tests) |
 
 ## Brain layer follow-ups (post-LIF/STDP merge)
 
