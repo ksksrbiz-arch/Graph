@@ -159,11 +159,14 @@ function rebuildRenderer() {
   installRegionForce();
   renderer.startSpikes?.();
 
-  // (Re)wire the brain client so spikes flow into the new renderer.
+  // (Re)wire the brain client so spikes flow into the new renderer. The
+  // userId must match window.GRAPH_CONFIG.brainUserId so the gateway joins us
+  // to the same room (`brain:<userId>`) the auto-started simulator emits to —
+  // otherwise the socket connects but no spike events ever land here.
   if (brain) try { brain.stop(); } catch {}
   brain = createBrainClient({
     getGraph: () => state.graph,
-    getUserId: () => 'local-demo',
+    getUserId: () => window.GRAPH_CONFIG?.brainUserId || 'local',
     onSpike: (e) => {
       const now = performance.now();
       if (now - lastSpikeAt < 1000) spikeCount1s += 1;
