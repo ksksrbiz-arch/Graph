@@ -16,6 +16,11 @@ let inputEl = null;
 let sendBtn = null;
 let pulseTimer = null;
 
+// Layer 7 — voice recording state
+let mediaRecorder  = null;
+let audioChunks    = [];
+let micBtn         = null;
+
 export function mount(rootEl, opts = {}) {
   if (mounted) return;
   mounted = true;
@@ -32,6 +37,9 @@ export function mount(rootEl, opts = {}) {
       <form class="cortex-form" id="cortex-form">
         <textarea id="cortex-input" rows="2" placeholder="Ask something, paste a URL, or drop a thought…" autocomplete="off"></textarea>
         <div class="cortex-actions">
+          <button type="button" id="cortex-mic"     title="Record voice (Layer 7 — Whisper)">🎙</button>
+          <button type="button" id="cortex-vision"  title="Capture image (Layer 8 — LLaVA)">📷</button>
+          <input  type="file"   id="cortex-vision-input" accept="image/*" capture="environment" style="display:none" />
           <button type="button" id="cortex-perceive" title="Just record this — no reasoning">Perceive</button>
           <button type="submit"  id="cortex-think" class="primary" title="Perceive + run the ReAct loop">Think →</button>
         </div>
@@ -43,8 +51,14 @@ export function mount(rootEl, opts = {}) {
   transcriptEl = document.getElementById('cortex-transcript');
   inputEl      = document.getElementById('cortex-input');
   sendBtn      = document.getElementById('cortex-think');
+  micBtn       = document.getElementById('cortex-mic');
   document.getElementById('cortex-form').addEventListener('submit', onSubmit);
   document.getElementById('cortex-perceive').addEventListener('click', onPerceive);
+  micBtn.addEventListener('click', onMicClick);
+  document.getElementById('cortex-vision').addEventListener('click', () => {
+    document.getElementById('cortex-vision-input').click();
+  });
+  document.getElementById('cortex-vision-input').addEventListener('change', onVisionFile);
   inputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
@@ -62,6 +76,137 @@ async function hello() {
   } catch {
     add('system', 'cortex offline — POST will retry when you send.');
   }
+}
+
+// ── Layer 7: voice input via Whisper ─────────────────────────────────
+
+async function onMicClick() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    add('error', `microphone access denied: ${err.message}`);
+    return;
+  }
+
+  audioChunks = [];
+  mediaRecorder = new MediaRecorder(stream);
+
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data?.size > 0) audioChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = async () => {
+    // Stop all tracks so the browser releases the mic indicator.
+    stream.getTracks().forEach((t) => t.stop());
+    micBtn.textContent = '🎙';
+    micBtn.title = 'Record voice (Layer 7 — Whisper)';
+    micBtn.classList.remove('recording');
+
+    const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+    audioChunks = [];
+    if (blob.size === 0) { add('error', 'voice recording was empty'); return; }
+
+    add('system', `recorded ${(blob.size / 1024).toFixed(1)} KB — transcribing…`);
+
+    let audioB64;
+    try {
+      audioB64 = await blobToBase64(blob);
+    } catch (err) {
+      replaceLast('error', `encoding failed: ${err.message}`);
+      return;
+    }
+
+    try {
+      const r = await fetch(api(API_PERCEIVE), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          kind: 'perceive', modality: 'voice',
+          source: 'cortex-ui', userId,
+          payload: { audio: audioB64 },
+        }),
+      });
+      const out = await r.json();
+      if (!r.ok || out.error) throw new Error(out.error || 'HTTP ' + r.status);
+      const transcript = out.transcript || '(transcribed)';
+      replaceLast('system', `🎙 transcribed · +${out.nodes} nodes — "${truncateText(transcript, 80)}"`);
+    } catch (err) {
+      replaceLast('error', `voice perceive failed: ${err.message}`);
+    }
+  };
+
+  mediaRecorder.start();
+  micBtn.textContent = '⏹';
+  micBtn.title = 'Stop recording';
+  micBtn.classList.add('recording');
+  add('system', 'recording… click ⏹ to stop');
+}
+
+// ── Layer 8: vision input via LLaVA ──────────────────────────────────
+
+async function onVisionFile(ev) {
+  const file = ev.target.files?.[0];
+  ev.target.value = '';
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    add('error', `expected an image file, got ${file.type}`);
+    return;
+  }
+  add('system', `image selected (${(file.size / 1024).toFixed(1)} KB) — captioning…`);
+
+  let imageB64;
+  try {
+    imageB64 = await blobToBase64(file);
+  } catch (err) {
+    replaceLast('error', `encoding failed: ${err.message}`);
+    return;
+  }
+
+  try {
+    const r = await fetch(api(API_PERCEIVE), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'perceive', modality: 'vision',
+        source: 'cortex-ui', userId,
+        payload: { image: imageB64 },
+      }),
+    });
+    const out = await r.json();
+    if (!r.ok || out.error) throw new Error(out.error || 'HTTP ' + r.status);
+    const caption = out.caption || '(captioned)';
+    replaceLast('system', `📷 captioned · +${out.nodes} nodes — "${truncateText(caption, 80)}"`);
+  } catch (err) {
+    replaceLast('error', `vision perceive failed: ${err.message}`);
+  }
+}
+
+// ── helpers ───────────────────────────────────────────────────────────
+
+/** Convert a Blob/File to a base64 string (data URI prefix stripped). */
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      // Strip "data:<mime>;base64," prefix
+      const comma = dataUrl.indexOf(',');
+      resolve(comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Truncate text to maxLen chars, appending "…" when cut. */
+function truncateText(s, maxLen) {
+  return s.length <= maxLen ? s : s.slice(0, maxLen) + '…';
 }
 
 async function onPerceive(ev) {
@@ -241,6 +386,8 @@ function injectStylesOnce() {
     .cortex-actions button { padding:6px 12px; border-radius:6px; border:1px solid #1d2b44; background:#101a2c; color:#e6eef9; cursor:pointer; font:12px/1 system-ui; }
     .cortex-actions button.primary { background:#9bd1ff; color:#0b1320; border-color:#9bd1ff; font-weight:600; }
     .cortex-actions button:disabled { opacity:0.5; cursor:wait; }
+    .cortex-actions button.recording { background:#ff3b30; border-color:#ff3b30; color:#fff; animation:cortex-blink 1s step-start infinite; }
+    @keyframes cortex-blink { 50% { opacity:0.5; } }
   `;
   document.head.appendChild(style);
 }
