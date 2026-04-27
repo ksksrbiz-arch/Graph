@@ -11,6 +11,11 @@ Phase progress is tracked in [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATI
 
 ---
 
+## Prerequisites
+
+- **v1 quick start**: Node 18+ only.
+- **v2 monorepo**: Node 18+, pnpm 9 (via `corepack`), Docker (for the local data stack).
+
 ## v1 quick start (no install)
 
 ```bash
@@ -19,6 +24,8 @@ npm start                    # http://localhost:3000
 ```
 
 Zero runtime dependencies. Ingesters available: `claude-code`, `git`, `markdown`.
+
+> `data/graph.json` and `web/data/graph.json` are **generated locally from your own data** and are gitignored. A fresh clone has no graph until you run an ingester.
 
 ## v2 quick start (monorepo)
 
