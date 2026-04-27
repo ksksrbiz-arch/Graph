@@ -13,6 +13,8 @@ export interface OAuthState {
   state: string;
   userId: string;
   connectorId: ConnectorId;
+  /** Exact redirect_uri used in authorize request; must be replayed at token exchange. */
+  redirectUri: string;
   /** PKCE verifier — only set when the provider supports PKCE. */
   codeVerifier?: string;
   /** Final redirect target (e.g. the SPA route to land on after success). */
