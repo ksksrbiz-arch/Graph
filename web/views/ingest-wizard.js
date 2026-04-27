@@ -21,6 +21,8 @@ import {
   runIngestWithParams,
   uploadFileIngest,
   localIngestSupported,
+  publicIngestAvailable,
+  ingestPublicGraph,
   githubOAuthStatus,
   githubOAuthDisconnect,
   startGitHubOAuth,
@@ -150,7 +152,7 @@ function mountWizard(connector, onSuccess) {
 
     body.appendChild(form);
 
-    // Local-only warning
+    // Availability warning — shown only when the connector truly cannot run
     if (connector.localOnly) {
       const hint = el('p', { class: 'wiz-hint wiz-hint-warn' },
         '⚠ This connector requires the local dev server. Run ',
@@ -159,6 +161,14 @@ function mountWizard(connector, onSuccess) {
       );
       localIngestSupported().then((ok) => {
         if (!ok) body.appendChild(hint);
+      });
+    } else if (typeof connector.clientIngest === 'function') {
+      // Can run via public API when no local server — show informational hint
+      const hint = el('p', { class: 'wiz-hint' },
+        'ℹ Runs in the browser — no local dev server needed.',
+      );
+      Promise.all([localIngestSupported(), publicIngestAvailable()]).then(([loc, pub]) => {
+        if (!loc && pub) body.appendChild(hint);
       });
     }
 
@@ -235,9 +245,20 @@ function mountWizard(connector, onSuccess) {
   // ── Run trigger ───────────────────────────────────────────────────────────
 
   async function triggerRun() {
-    const isLocal = await localIngestSupported();
-    if (!isLocal) {
-      showToast('Local dev server not running — start with npm run start', 'error');
+    const [isLocal, isPublic] = await Promise.all([localIngestSupported(), publicIngestAvailable()]);
+    const hasClientIngest = typeof connector.clientIngest === 'function';
+
+    // Determine run mode
+    const useLocal = isLocal;
+    const useClient = !isLocal && isPublic && hasClientIngest;
+
+    if (!useLocal && !useClient) {
+      showToast(
+        connector.localOnly
+          ? 'Local dev server not running — start with npm run start'
+          : 'Ingest requires the local dev server or a configured online API',
+        'error',
+      );
       return;
     }
 
@@ -271,16 +292,29 @@ function mountWizard(connector, onSuccess) {
 
     let res;
     try {
-      if (fileField) {
-        res = await uploadFileIngest(connector.ingestSlug, fileField.file, fileField.envVar, env);
+      if (useLocal) {
+        // Local dev server path — spawn the Node.js ingester script
+        if (fileField) {
+          res = await uploadFileIngest(connector.ingestSlug, fileField.file, fileField.envVar, env);
+        } else {
+          res = await runIngestWithParams(connector.ingestSlug, env);
+        }
       } else {
-        res = await runIngestWithParams(connector.ingestSlug, env);
+        // Client-side path — parse in browser, POST graph to public API
+        log.textContent += 'Parsing in browser (no local server)…\n';
+        const parsed = await connector.clientIngest({ env, fileMap });
+        log.textContent += `Parsed ${parsed.nodes.length} nodes, ${parsed.edges.length} edges. Sending to API…\n`;
+        res = await ingestPublicGraph({
+          nodes: parsed.nodes,
+          edges: parsed.edges,
+          sourceId: parsed.sourceId || connector.id,
+        });
       }
     } catch (err) {
       res = { ok: false, error: err.message };
     }
 
-    // Append output to log before transitioning
+    // Append output to log before transitioning (local server path only)
     const output = [(res.stdout || ''), (res.stderr || '')].filter(Boolean).join('\n');
     if (output) log.textContent += output + '\n';
 

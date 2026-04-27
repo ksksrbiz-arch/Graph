@@ -1,8 +1,15 @@
 import { state, subscribe } from '../state.js';
 import { fmtDate, el, showToast } from '../util.js';
-import { runIngest, loadGraph, localIngestSupported } from '../data.js';
+import { runIngest, loadGraph, localIngestSupported, publicIngestAvailable } from '../data.js';
 import { setGraph } from '../state.js';
 import { openWizard } from './ingest-wizard.js';
+import {
+  parseBookmarks,
+  parseEnex,
+  parseClaudeExport,
+  ingestZotero,
+  ingestGithub,
+} from '../ingest-client.js';
 
 // ── Connector definitions ─────────────────────────────────────────────────────
 // Each connector may have a `wizard.fields` array that drives the wizard UI.
@@ -70,8 +77,14 @@ const KNOWN_CONNECTORS = [
     icon: '📚',
     description: 'Academic papers, books, and PDFs from your Zotero library. Creates document, person, and tag nodes.',
     enabled: true,
-    localOnly: true,
+    localOnly: false,
     ingestSlug: 'zotero',
+    clientIngest: async ({ env }) => ingestZotero({
+      userId: env.ZOTERO_USER_ID,
+      apiKey: env.ZOTERO_API_KEY,
+      groupId: env.ZOTERO_GROUP_ID || undefined,
+      limit: env.ZOTERO_LIMIT ? Number(env.ZOTERO_LIMIT) : 200,
+    }),
     wizard: {
       fields: [
         {
@@ -138,8 +151,14 @@ const KNOWN_CONNECTORS = [
     icon: '🐘',
     description: 'Import notes from an Evernote ENEX export file. Creates note and concept nodes.',
     enabled: true,
-    localOnly: true,
+    localOnly: false,
     ingestSlug: 'evernote',
+    clientIngest: async ({ fileMap }) => {
+      const file = fileMap['_enex_file'];
+      if (!file) throw new Error('No ENEX file selected');
+      const xml = await file.text();
+      return parseEnex(xml);
+    },
     wizard: {
       fields: [
         {
@@ -195,18 +214,32 @@ const KNOWN_CONNECTORS = [
     id: 'github',
     name: 'GitHub',
     icon: '🐙',
-    description: 'Repos, issues, and PRs via OAuth. Authorize once and run to keep the graph current.',
+    description: 'Repos, issues, and PRs. Use OAuth (local server) or a personal access token (online).',
     enabled: true,
-    localOnly: true,
+    localOnly: false,
     ingestSlug: 'github',
+    clientIngest: async ({ env }) => ingestGithub({
+      token: env.GITHUB_TOKEN,
+      login: env.GITHUB_LOGIN || undefined,
+      reposLimit: env.GITHUB_REPOS_LIMIT ? Number(env.GITHUB_REPOS_LIMIT) : 50,
+      itemsLimit: env.GITHUB_ITEMS_LIMIT ? Number(env.GITHUB_ITEMS_LIMIT) : 30,
+    }),
     wizard: {
       fields: [
         {
           name: '_github_oauth',
           type: 'oauth',
           provider: 'github',
-          label: 'GitHub account',
-          hint: 'Authorize read access to your repos, issues, and PRs. Requires GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET on the server.',
+          label: 'GitHub account (OAuth)',
+          hint: 'Authorize read access via OAuth. Requires the local dev server with GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET.',
+        },
+        {
+          name: 'GITHUB_TOKEN',
+          envVar: 'GITHUB_TOKEN',
+          label: 'Personal access token (alternative to OAuth)',
+          type: 'password',
+          placeholder: 'ghp_…',
+          hint: 'Use a PAT instead of OAuth — works without the local dev server. Create at github.com/settings/tokens (repo + read:user scopes).',
         },
         {
           name: 'GITHUB_LOGIN',
@@ -239,8 +272,14 @@ const KNOWN_CONNECTORS = [
     icon: '⭐',
     description: 'Import Chrome / Firefox / Safari bookmark exports (Netscape HTML format).',
     enabled: true,
-    localOnly: true,
+    localOnly: false,
     ingestSlug: 'bookmarks',
+    clientIngest: async ({ fileMap }) => {
+      const file = fileMap['_bookmarks_file'];
+      if (!file) throw new Error('No bookmarks file selected');
+      const html = await file.text();
+      return parseBookmarks(html);
+    },
     wizard: {
       fields: [
         {
@@ -262,8 +301,14 @@ const KNOWN_CONNECTORS = [
     icon: '💬',
     description: 'Import a conversations.json export from Claude.ai. Creates conversation and note nodes.',
     enabled: true,
-    localOnly: true,
+    localOnly: false,
     ingestSlug: 'claude-export',
+    clientIngest: async ({ fileMap }) => {
+      const file = fileMap['_claude_export_file'];
+      if (!file) throw new Error('No conversations.json file selected');
+      const text = await file.text();
+      return parseClaudeExport(text);
+    },
     wizard: {
       fields: [
         {
@@ -299,14 +344,14 @@ async function render() {
     (state.graph.metadata?.sources || []).map((s) => [s.name, s]),
   );
 
-  const isLocal = await localIngestSupported();
+  const [isLocal, isPublic] = await Promise.all([localIngestSupported(), publicIngestAvailable()]);
 
   for (const c of KNOWN_CONNECTORS) {
-    grid.appendChild(buildCard(c, sources.get(c.id), isLocal));
+    grid.appendChild(buildCard(c, sources.get(c.id), isLocal, isPublic));
   }
 }
 
-function buildCard(connector, source, isLocal) {
+function buildCard(connector, source, isLocal, isPublic) {
   const card = el('div', { class: 'card connector-card' });
 
   // Header row
@@ -369,11 +414,18 @@ function buildCard(connector, source, isLocal) {
   actions.appendChild(btnRun);
   card.appendChild(actions);
 
-  // Local-only indicator
-  if (connector.localOnly && !isLocal) {
+  // Availability indicator — disable button only when truly unavailable
+  const hasClientIngest = typeof connector.clientIngest === 'function';
+  const canRun = isLocal || (!connector.localOnly && isPublic && hasClientIngest);
+  if (!canRun) {
     btnRun.disabled = true;
-    btnRun.title = 'Start the local dev server first: npm run start';
-    card.appendChild(el('p', { class: 'meta connector-local-warn' }, '⚠ Requires local dev server'));
+    if (connector.localOnly) {
+      btnRun.title = 'Start the local dev server first: npm run start';
+      card.appendChild(el('p', { class: 'meta connector-local-warn' }, '⚠ Requires local dev server'));
+    } else {
+      btnRun.title = 'No ingest API available — start the local dev server or configure an online API';
+      card.appendChild(el('p', { class: 'meta connector-local-warn' }, '⚠ Requires local dev server or online API'));
+    }
   }
 
   return card;

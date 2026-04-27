@@ -92,6 +92,10 @@ async function handleApi(request, env, url) {
     return ingest(request, env, allowed, 'markdown');
   }
 
+  if (pathname === '/api/v1/public/ingest/graph' && request.method === 'POST') {
+    return ingestGraph(request, env, allowed);
+  }
+
   // Not an API endpoint we own — let the caller fall through.
   return null;
 }
@@ -142,6 +146,55 @@ async function ingest(request, env, allowed, format) {
     totalNodes: snapshot.nodes.length,
     totalEdges: snapshot.edges.length,
     brainQueuedReload: false,
+  });
+}
+
+async function ingestGraph(request, env, allowed) {
+  if (!env.GRAPH_KV) {
+    return jsonResponse({ error: 'persistence not configured' }, 503);
+  }
+
+  let dto;
+  try {
+    dto = await request.json();
+  } catch {
+    return jsonResponse({ error: 'invalid JSON body' }, 400);
+  }
+
+  const userId = typeof dto?.userId === 'string' ? dto.userId.trim() : '';
+  if (!userId) return jsonResponse({ error: 'userId is required' }, 400);
+  if (!allowed.has(userId)) {
+    return jsonResponse({ error: `userId=${userId} is not on the public ingest allowlist` }, 403);
+  }
+
+  if (!Array.isArray(dto.nodes)) {
+    return jsonResponse({ error: 'nodes array is required' }, 400);
+  }
+
+  const sourceId = typeof dto.sourceId === 'string' && dto.sourceId.trim()
+    ? dto.sourceId.trim()
+    : 'client';
+
+  // Basic shape validation — each item must at least have an id string.
+  const nodes = dto.nodes
+    .filter((n) => n && typeof n.id === 'string' && n.id)
+    .slice(0, SNAPSHOT_MAX_NODES);
+  const edges = Array.isArray(dto.edges)
+    ? dto.edges
+        .filter((e) => e && typeof e.id === 'string' && e.source && e.target)
+        .slice(0, SNAPSHOT_MAX_EDGES)
+    : [];
+
+  const snapshot = await mergeAndPersist(env.GRAPH_KV, userId, { nodes, edges }, sourceId);
+
+  return jsonResponse({
+    ok: true,
+    userId,
+    sourceId,
+    nodes: nodes.length,
+    edges: edges.length,
+    totalNodes: snapshot.nodes.length,
+    totalEdges: snapshot.edges.length,
   });
 }
 
