@@ -1,0 +1,126 @@
+/* =============================================================================
+   GRAPH BRAIN VISUAL SPEC — Part 2 of 3 · §11 Custom Holo Cursor
+   -----------------------------------------------------------------------------
+   `cursor:none` is scoped to #canvas only — the rest of the UI keeps the
+   native pointer so users never lose the system cursor.
+   ========================================================================== */
+
+#canvas, #canvas * { cursor: none !important; }
+
+.holo-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 9999;
+  display: none; /* shown by JS once mouse enters the canvas */
+}
+.holo-cursor.visible { display: block; }
+
+/* Crosshair: 16×16 box with 1px H + V lines and a 4px center gap. */
+.holo-cursor .crosshair {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  transform: translate(-8px, -8px) rotate(0deg);
+  transition: transform var(--t-fast) ease-out;
+  filter: drop-shadow(0 0 6px var(--cyan-core));
+}
+.holo-cursor.pressed .crosshair {
+  transform: translate(-8px, -8px) rotate(45deg);
+}
+
+.holo-cursor .crosshair::before,
+.holo-cursor .crosshair::after {
+  content: '';
+  position: absolute;
+  background: var(--cyan-core);
+  opacity: 0.8;
+}
+/* Horizontal: two 6px segments either side of a 4px gap. */
+.holo-cursor .crosshair::before {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform: translateY(-0.5px);
+  background: linear-gradient(
+    to right,
+    var(--cyan-core) 0,
+    var(--cyan-core) 6px,
+    transparent 6px,
+    transparent 10px,
+    var(--cyan-core) 10px,
+    var(--cyan-core) 16px
+  );
+}
+/* Vertical: same but rotated. */
+.holo-cursor .crosshair::after {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-0.5px);
+  background: linear-gradient(
+    to bottom,
+    var(--cyan-core) 0,
+    var(--cyan-core) 6px,
+    transparent 6px,
+    transparent 10px,
+    var(--cyan-core) 10px,
+    var(--cyan-core) 16px
+  );
+}
+
+/* Outer ring: 32×32 circle, follows with 80ms transition for smoothing. */
+.holo-cursor .ring {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--cyan-core);
+  border-radius: 50%;
+  opacity: 0.4;
+  transform: translate(-16px, -16px) scale(1);
+  transition:
+    transform var(--t-snap) ease-out,
+    width     var(--t-fast) ease-out,
+    height    var(--t-fast) ease-out,
+    opacity   var(--t-fast) ease-out;
+  box-shadow: 0 0 6px var(--cyan-glow) inset;
+}
+
+/* Targeting reticle lock-on: small filled-feeling ring on node hover. */
+.holo-cursor.over-node .ring {
+  width: 8px;
+  height: 8px;
+  transform: translate(-4px, -4px) scale(1);
+  opacity: 1;
+  box-shadow: 0 0 12px var(--cyan-core);
+  border-color: var(--cyan-core);
+}
+
+/* Click ripple: spawned per-click as <div class="cursor-ripple"> at the
+   click point; removed after animation. */
+.cursor-ripple {
+  position: fixed;
+  pointer-events: none;
+  border: 2px solid var(--cyan-core);
+  border-radius: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  opacity: 1;
+  z-index: 9998;
+  animation: cursorRipple 400ms ease-out forwards;
+  box-shadow: 0 0 12px var(--cyan-glow);
+}
+@keyframes cursorRipple {
+  from { width: 4px;  height: 4px;  opacity: 1; }
+  to   { width: 80px; height: 80px; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .holo-cursor .ring,
+  .holo-cursor .crosshair { transition: none; }
+  .cursor-ripple { animation-duration: 1ms; }
+}

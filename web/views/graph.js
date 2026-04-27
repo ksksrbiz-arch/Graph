@@ -11,12 +11,19 @@ import { regionForNode, styleForRegion } from '../cortex.js';
 import { createBrainClient } from '../brain.js';
 import { create2DRenderer } from './graph-2d.js';
 import { create3DRenderer } from './graph-3d.js';
+import { initStatsBar } from '../hud/stats-bar.js';
+import { initBrainControls } from '../hud/brain-controls.js';
+import { initMiniMap } from '../hud/mini-map.js';
+import { initHoloCursor } from '../hud/holo-cursor.js';
+import { ensureQualityTierInit } from '../hud/quality.js';
 
 let renderer = null;
 let brain = null;
 let regionForce = null; // d3-force callback installed for region clustering
 let lastSpikeAt = 0;
 let spikeCount1s = 0;
+let statsBarApi = null;
+let brainControlsApi = null;
 
 export function initGraphView() {
   const canvas = document.getElementById('canvas');
@@ -57,13 +64,32 @@ export function initGraphView() {
   });
 
   document.getElementById('panel-close').addEventListener('click', () => setSelected(null));
-  document.getElementById('panel-focus').addEventListener('click', () => {
+  document.getElementById('panel-action-trace').addEventListener('click', () => {
     if (state.selectedId) setFocusRoot(state.selectedId);
   });
-  document.getElementById('panel-open').addEventListener('click', () => {
+  document.getElementById('panel-action-remove').addEventListener('click', () => {
+    if (!state.selectedId) return;
+    // "Remove" = hide from the current view by toggling its type filter
+    // off. Cheaper than mutating the source data and reversible from the
+    // type filter UI.
     const n = state.byId.get(state.selectedId);
-    const url = n?.metadata?.sourceUrl || n?.sourceUrl || n?.metadata?.url;
-    if (url) window.open(url, '_blank', 'noopener');
+    if (n) toggleFilterType(n.type, false);
+    setSelected(null);
+  });
+  document.getElementById('panel-action-pin').addEventListener('click', () => {
+    if (!state.selectedId) return;
+    const n = state.byId.get(state.selectedId);
+    if (!n) return;
+    // Toggle pinned state by fixing the node at its current coordinates.
+    if (n.fx == null && n.fy == null) {
+      n.fx = n.x; n.fy = n.y; if (n.z != null) n.fz = n.z;
+      n.__pinned = true;
+    } else {
+      delete n.fx; delete n.fy; if (!fourDActive()) delete n.fz;
+      n.__pinned = false;
+    }
+    document.getElementById('panel-action-pin').classList.toggle('active', !!n.__pinned);
+    renderer?.refresh?.();
   });
 
   canvas.addEventListener('click', (e) => {
@@ -89,6 +115,38 @@ export function initGraphView() {
   reflectBrainButton();
   startHud();
 
+  // Visual Spec Part 2 §5/§7/§9/§10/§11: HUD overlays. These mount into
+  // anchor elements declared in index.html (#hud-stats-bar,
+  // #hud-brain-controls, #hud-mini-map, #holo-cursor) and stay live for
+  // the rest of the session.
+  ensureQualityTierInit();
+  initHoloCursor();
+  statsBarApi = initStatsBar({ getBrainMode: () => brain?.mode || 'idle' });
+  brainControlsApi = initBrainControls({
+    getMode: () => brain?.mode || 'idle',
+    onStart: () => {
+      setConfig({ spikes: true });
+      brain?.start();
+    },
+    onPause: () => {
+      setConfig({ spikes: false });
+      brain?.stop();
+    },
+    onForceCycle: () => {
+      // Without a real cognitive cycle we approximate "force a cycle" by
+      // stimulating a random node and broadcasting an insight tick to the
+      // HUD so users get visual feedback.
+      const nodes = state.graph?.nodes || [];
+      if (nodes.length === 0) return;
+      const pick = nodes[Math.floor(Math.random() * nodes.length)];
+      brain?.stimulate?.(pick.id, 22);
+      const text = `forced spike on “${truncate(pick.label || pick.id, 40)}”`;
+      brainControlsApi?.pushInsight(text);
+      statsBarApi?.pushInsight(text);
+    },
+  });
+  initMiniMap({ getRenderer: () => renderer });
+
   subscribe((reason) => {
     if (reason === 'graph-loaded') {
       buildOrUpdate();
@@ -100,6 +158,7 @@ export function initGraphView() {
     else if (reason === 'config-changed') {
       reflectBrainButton();
       applyConfig();
+      brainControlsApi?.syncFromState();
     } else if (reason === 'dimensions-changed') {
       reflectModeButtons();
       rebuildRenderer();
@@ -172,6 +231,7 @@ function rebuildRenderer() {
       if (now - lastSpikeAt < 1000) spikeCount1s += 1;
       else { spikeCount1s = 1; lastSpikeAt = now; }
       renderer?.spikeNode?.(e.neuronId);
+      statsBarApi?.markActive();
     },
     onWeight: () => {},
   });
@@ -374,16 +434,84 @@ function buildLegend(visibleIds) {
 
 function renderPanel() {
   const panel = document.getElementById('panel');
-  if (!state.selectedId) { panel.classList.add('hidden'); return; }
+  if (!state.selectedId) { panel.classList.remove('open'); return; }
   const node = state.byId.get(state.selectedId);
-  if (!node) { panel.classList.add('hidden'); return; }
-  panel.classList.remove('hidden');
+  if (!node) { panel.classList.remove('open'); return; }
+  panel.classList.add('open');
+
+  // Header — type badge + label.
   document.getElementById('panel-title').textContent = node.label || node.id;
-  document.getElementById('panel-type').textContent = node.type;
+  const badge = document.getElementById('panel-type');
+  badge.textContent = node.type || 'node';
+  badge.style.color = colorForType(node.type);
+  badge.style.borderColor = colorForType(node.type);
 
-  const url = node.sourceUrl || node.metadata?.sourceUrl || node.metadata?.url;
-  document.getElementById('panel-open').disabled = !url;
+  // Confidence — accept node.confidence or node.metadata.confidence,
+  // fall back to a degree-derived heuristic so the bar always has something.
+  const rawConf = node.confidence ?? node.metadata?.confidence;
+  const conf = typeof rawConf === 'number' && Number.isFinite(rawConf)
+    ? Math.max(0, Math.min(1, rawConf))
+    : Math.max(0.2, Math.min(1, 0.4 + Math.log2((node.__degree || 0) + 1) * 0.12));
+  const fill = document.getElementById('panel-confidence-fill');
+  const num = document.getElementById('panel-confidence-num');
+  // Reset width so the CSS transition replays.
+  fill.style.width = '0%';
+  // eslint-disable-next-line no-unused-expressions
+  fill.offsetWidth;
+  fill.style.width = `${(conf * 100).toFixed(1)}%`;
+  num.textContent = conf.toFixed(2);
 
+  // Source line.
+  const isAuto = node.autonomous === true || (node.source || node.metadata?.source) === 'autonomous';
+  document.getElementById('panel-source').textContent = isAuto ? 'autonomous' : (node.sourceId || node.source || node.metadata?.source || 'manual');
+
+  // Created (relative).
+  document.getElementById('panel-created').textContent = relTime(node.createdAt) || fmtDate(node.createdAt) || '—';
+
+  // Connections (max 8).
+  const ul = document.getElementById('panel-edges');
+  ul.innerHTML = '';
+  const incident = state.graph.edges.filter((e) => srcId(e) === node.id || tgtId(e) === node.id);
+  document.getElementById('panel-edge-count').textContent = String(incident.length);
+  const limit = Math.min(8, incident.length);
+  for (let i = 0; i < limit; i++) {
+    const e = incident[i];
+    const otherId = srcId(e) === node.id ? tgtId(e) : srcId(e);
+    const other = state.byId.get(otherId);
+    if (!other) continue;
+    const li = el('li');
+    li.style.setProperty('--c', colorForType(other.type));
+    li.innerHTML = `
+      <span class="swatch"></span>
+      <span class="lbl">${escape(other.label || other.id)}</span>
+    `;
+    li.addEventListener('click', () => {
+      setSelected(other.id);
+      focusOn(other.id);
+    });
+    ul.appendChild(li);
+  }
+  if (incident.length > limit) {
+    const more = el('li');
+    more.style.cursor = 'default';
+    more.textContent = `+${incident.length - limit} more…`;
+    ul.appendChild(more);
+  }
+
+  // Autonomous insight (only shown for autonomous nodes that have one).
+  const insightWrap = document.getElementById('panel-insight-wrap');
+  const insightText = node.cycleInsight || node.metadata?.cycleInsight || node.metadata?.insight;
+  if (isAuto && insightText) {
+    insightWrap.hidden = false;
+    document.getElementById('panel-insight').textContent = String(insightText);
+  } else {
+    insightWrap.hidden = true;
+  }
+
+  // Pin button reflects pinned state.
+  document.getElementById('panel-action-pin').classList.toggle('active', !!node.__pinned);
+
+  // Raw metadata (collapsed) — preserves the older debug surface for power users.
   const meta = document.getElementById('panel-meta');
   meta.innerHTML = '';
   const region = node.region || regionForNode(node);
@@ -412,26 +540,25 @@ function renderPanel() {
     }
     meta.append(el('dt', {}, k), dd);
   }
+}
 
-  const ul = document.getElementById('panel-edges');
-  ul.innerHTML = '';
-  const incident = state.graph.edges.filter((e) => srcId(e) === node.id || tgtId(e) === node.id);
-  document.getElementById('panel-edge-count').textContent = String(incident.length);
-  for (const e of incident) {
-    const otherId = srcId(e) === node.id ? tgtId(e) : srcId(e);
-    const other = state.byId.get(otherId);
-    if (!other) continue;
-    const li = el('li');
-    li.innerHTML = `
-      <span class="lbl"><span class="swatch" style="--c:${colorForType(other.type)}"></span><span>${escape(other.label || other.id)}</span></span>
-      <span class="rel">${e.relation}</span>
-    `;
-    li.addEventListener('click', () => {
-      setSelected(other.id);
-      focusOn(other.id);
-    });
-    ul.appendChild(li);
-  }
+function fourDActive() {
+  return state.config.dimensions === 4;
+}
+
+function relTime(iso) {
+  if (!iso) return '';
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '';
+  const diff = Date.now() - t;
+  const sec = Math.round(diff / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  return `${day}d ago`;
 }
 
 function focusOn(id) {
