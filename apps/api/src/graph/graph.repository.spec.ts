@@ -231,7 +231,7 @@ describe('GraphRepository.listNodes', () => {
   it('sets nextCursor when more items exist than the limit', async () => {
     // Return limit+1 records to indicate hasMore.
     const records = Array.from({ length: 3 }, (_, i) =>
-      ({ get: (k: string) => (k === 'n' ? makeFakeNodeNeo4j({ id: `id-${i}`, createdAt: `2024-01-0${i + 1}T00:00:00.000Z` }) : null) }),
+      ({ get: (k: string) => (k === 'n' ? makeFakeNodeNeo4j({ id: `id-${i}`, createdAt: `2024-01-${String(i + 1).padStart(2, '0')}T00:00:00.000Z` }) : null) }),
     );
     const { driver } = makeDriver(records as never);
     const repo = new GraphRepository(driver as never);
