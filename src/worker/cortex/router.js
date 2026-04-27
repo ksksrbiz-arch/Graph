@@ -15,6 +15,7 @@ import { readAttention, writeAttention } from './attention.js';
 import { stamp, isPerceive, isThink, isAct } from './protocol.js';
 import { describeTools, dispatch } from './tools.js';
 import { upsertNodes as upsertVectors } from './vector.js';
+import { addServer as mcpAddServer, listServers as mcpListServers, removeServer as mcpRemoveServer, refreshTools as mcpRefreshTools, setEnabled as mcpSetEnabled } from './mcp-registry.js';
 import { CRON_PLAYBOOK, listSchedules, runSchedule } from './scheduler.js';
 import { think } from './reason.js';
 
@@ -23,7 +24,9 @@ export async function handleCortexApi(request, env, url) {
   const method = request.method;
 
   if (pathname === '/api/v1/cortex/tools' && method === 'GET') {
-    return jsonResponse({ tools: describeTools() });
+    const userId = need(url, 'userId') || 'local';
+    if (!checkUser(userId, env)) return forbidden(userId);
+    return jsonResponse({ tools: await describeTools(env, { userId }) });
   }
 
   if (pathname === '/api/v1/cortex/state' && method === 'GET') {
@@ -72,7 +75,7 @@ export async function handleCortexApi(request, env, url) {
     return jsonResponse(out);
   }
 
-  const actMatch = pathname.match(/^\/api\/v1\/cortex\/act\/([a-z0-9_-]+)$/);
+  const actMatch = pathname.match(/^\/api\/v1\/cortex\/act\/([a-z0-9_:-]+)$/);
   if (actMatch && method === 'POST') {
     const intent = actMatch[1];
     const dto = await safeJson(request);
@@ -127,6 +130,61 @@ export async function handleCortexApi(request, env, url) {
       };
     });
     return jsonResponse({ userId, thoughts });
+  }
+
+  // GET /api/v1/cortex/mcp/servers?userId=&includeTools=1
+  if (pathname === '/api/v1/cortex/mcp/servers' && method === 'GET') {
+    const userId = need(url, 'userId') || 'local';
+    if (!checkUser(userId, env)) return forbidden(userId);
+    const includeTools = url.searchParams.get('includeTools') === '1';
+    const servers = await mcpListServers(env, { userId, includeTools });
+    return jsonResponse({ userId, servers });
+  }
+
+  // POST /api/v1/cortex/mcp/servers  body:{userId, name, url, authToken?}
+  if (pathname === '/api/v1/cortex/mcp/servers' && method === 'POST') {
+    const dto = await safeJson(request);
+    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
+    const userId = (dto.userId || 'local').toString().trim();
+    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!dto.name || !dto.url) return jsonResponse({ error: 'name and url are required' }, 400);
+    try {
+      const out = await mcpAddServer(env, {
+        userId, name: dto.name, url: dto.url, authToken: dto.authToken,
+      });
+      return jsonResponse(out);
+    } catch (err) {
+      return jsonResponse({ error: err.message }, 400);
+    }
+  }
+
+  // DELETE /api/v1/cortex/mcp/servers/:id  body:{userId}
+  const mcpDelMatch = pathname.match(/^\/api\/v1\/cortex\/mcp\/servers\/([^\/]+)$/);
+  if (mcpDelMatch && method === 'DELETE') {
+    const dto = (await safeJson(request)) || {};
+    const userId = (dto.userId || need(url, 'userId') || 'local').toString().trim();
+    if (!checkUser(userId, env)) return forbidden(userId);
+    const ok = await mcpRemoveServer(env, { userId, serverId: mcpDelMatch[1] });
+    return jsonResponse({ ok });
+  }
+
+  // POST /api/v1/cortex/mcp/servers/:id/refresh  body:{userId}
+  const mcpRefreshMatch = pathname.match(/^\/api\/v1\/cortex\/mcp\/servers\/([^\/]+)\/refresh$/);
+  if (mcpRefreshMatch && method === 'POST') {
+    const dto = (await safeJson(request)) || {};
+    const userId = (dto.userId || 'local').toString().trim();
+    if (!checkUser(userId, env)) return forbidden(userId);
+    const out = await mcpRefreshTools(env, { userId, serverId: mcpRefreshMatch[1] });
+    return jsonResponse({ refreshed: out });
+  }
+
+  // POST /api/v1/cortex/mcp/refresh  body:{userId}  refresh ALL servers
+  if (pathname === '/api/v1/cortex/mcp/refresh' && method === 'POST') {
+    const dto = (await safeJson(request)) || {};
+    const userId = (dto.userId || 'local').toString().trim();
+    if (!checkUser(userId, env)) return forbidden(userId);
+    const out = await mcpRefreshTools(env, { userId });
+    return jsonResponse({ refreshed: out });
   }
 
   // POST /api/v1/cortex/admin/backfill-vectors — embed every D1 node

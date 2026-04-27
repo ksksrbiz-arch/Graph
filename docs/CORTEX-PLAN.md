@@ -236,7 +236,7 @@ Each layer is independently deployable + reversible.
 | 7 | Voice in (Whisper) | **shipped** (PR #46) | inline @cf/openai/whisper in router.js + MediaRecorder in cortex.js |
 | 8 | Vision in (Llava) | **shipped** (PR #46 + drag-drop) | inline @cf/llava-hf/llava-1.5-7b-hf in router.js + file-picker in cortex.js + drag-drop overlay |
 | 9 | Cron-driven autonomy | **shipped** | `wrangler.jsonc` triggers + `scheduled()` handler + `cortex/scheduler.js` + `/schedules` admin routes |
-| 10 | Tool plugins via MCP | next | Each tool can be replaced by an MCP server |
+| 10 | Tool plugins via MCP | **shipped** | `cortex/mcp-client.js` + `cortex/mcp-registry.js` + `D1 mcp_servers` + admin routes; `mcp:<server>:<tool>` intents auto-merge into cortex tool registry |
 | 11 | TTS out (Workers AI) | **shipped** | `cortex/sensory.js` speakText (Aura-1) + `tool:speak` + inline `<audio>` in cortex view |
 | 12 | Capability handshake + remote clients | later | `/cortex/clients` registration UI |
 
@@ -323,4 +323,99 @@ Live verification (smoke):
 - TTS → 13,479 bytes of audio/mpeg from "Cortex sensory layer online"
 - TTS → Whisper round-trip → 2 nodes ingested from the cortex's own voice
 - Cataas cat 33 KB JPEG → Llava → 3 nodes captioned into the graph
+
+
+
+## 14 · MCP plugin layer (Layer 10 reference)
+
+The cortex is now an MCP client. Any remote MCP server speaking the Streamable
+HTTP transport becomes a pluggable extension of the tool registry — register
+it once via the admin API and its tools auto-appear to the reasoner with no
+Worker code change. Tools are surfaced as `mcp:<server-name>:<tool-name>`
+so the dispatcher always knows where to route the call.
+
+### Surfaces
+
+| Method | Path | Body / params | Returns |
+|---|---|---|---|
+| GET | `/api/v1/cortex/mcp/servers?userId=&includeTools=1` | — | List registered servers (with tool catalogs if asked) |
+| POST | `/api/v1/cortex/mcp/servers` | `{userId, name, url, authToken?}` | Register + first-discover |
+| DELETE | `/api/v1/cortex/mcp/servers/:id` | `{userId}` | Unregister |
+| POST | `/api/v1/cortex/mcp/servers/:id/refresh` | `{userId}` | Re-fetch tool catalog |
+| POST | `/api/v1/cortex/mcp/refresh` | `{userId}` | Refresh ALL servers |
+| GET | `/api/v1/cortex/tools?userId=` | — | Returns 7 builtin + N MCP-discovered tools |
+| POST | `/api/v1/cortex/act/mcp:srv:tool` | `{userId, args}` | Direct invoke a discovered MCP tool |
+
+### Internals
+
+- `src/worker/cortex/mcp-client.js` — minimal Streamable HTTP MCP client
+  (initialize → notifications/initialized → tools/list / tools/call).
+  Accepts both JSON and SSE responses, captures Mcp-Session-Id header.
+- `src/worker/cortex/mcp-registry.js` — server CRUD, tool catalog cache
+  in D1 `mcp_servers.tools_json`, dispatch by namespaced intent.
+- D1 schema (migration applied 2026-04-27):
+  ```sql
+  CREATE TABLE mcp_servers (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    auth_token TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    last_listed_at INTEGER,
+    last_error TEXT,
+    tools_json TEXT NOT NULL DEFAULT '[]',
+    protocol_version TEXT,
+    server_info_json TEXT
+  );
+  ```
+- `tools.js` — `describeTools(env, {userId})` is now async and merges the
+  MCP catalog at request time. `dispatch()` routes any `mcp:*` intent
+  through `mcp-registry.dispatchMcpTool`.
+- `reason.js` — single line change: `await describeTools(env, {userId})`
+  in renderPrompt. Now every think() loop sees the live MCP tool list in
+  its system prompt.
+
+### Live verification (smoke after deploy e00c7025)
+
+```
+$ POST /mcp/servers {name:'cf-docs', url:'https://docs.mcp.cloudflare.com/mcp'}
+  → discovered 2 tools immediately
+
+$ GET /tools?userId=local
+  → 9 tools total = 7 builtin + 2 mcp:cf-docs:*
+
+$ POST /act/mcp:cf-docs:search_cloudflare_documentation {args:{query:'kv namespace get'}}
+  → returned the live KV docs page
+
+$ POST /think  question:'Use cf-docs MCP to search KV pricing'
+  → Llama autonomously picked mcp:cf-docs:search_cloudflare_documentation,
+    fetched the actual pricing table from Cloudflare's docs MCP server,
+    threaded it back as observation
+```
+
+### Adding a new MCP server (one curl)
+
+```bash
+curl -X POST -H 'content-type: application/json' \
+  -d '{"userId":"local","name":"notion","url":"https://mcp.notion.so/mcp","authToken":"YOUR_TOKEN"}' \
+  https://graph.skdev-371.workers.dev/api/v1/cortex/mcp/servers
+```
+
+That's it — no redeploy, no code change. The next `/think` call sees
+the new tools and can invoke them. To replace a server, DELETE the old
+id then POST the new one (or update the URL via re-register).
+
+### Limits / next-pass items
+
+- Auth tokens are stored as plaintext in D1. For production add KEK-based
+  encryption (we already have the pattern from Phase 1 of apps/api).
+- No OAuth dance yet for servers that require it (most public MCPs are
+  static-token or no-auth). The CF agents SDK has a full OAuth flow if
+  needed — wire its callback into `/api/v1/cortex/mcp/oauth/callback`.
+- Tool catalogs are cached but not auto-refreshed. Add a cron entry that
+  hits `/mcp/refresh` for each user nightly — one-line addition to
+  scheduler.js's CRON_PLAYBOOK if desired.
+- mcp:* intents could be filtered or scoped per user; today they're flat.
 

@@ -74,7 +74,7 @@ export async function think(env, { userId, question, budgetMs, budgetSteps, mode
       break;
     }
 
-    const prompt = renderPrompt({ question, ctx, tools: describeTools() });
+    const prompt = renderPrompt({ question, ctx, tools: await describeTools(env, { userId }) });
     let raw;
     try {
       const r = await env.AI.run(usedModel, {
@@ -168,7 +168,7 @@ function renderAttention(att, recent, observations) {
 
 const RX = {
   thought: /Thought\s*:\s*(.+?)(?=\n[A-Z][a-z]+\s*:|\n*$)/is,
-  action:  /Action\s*:\s*([a-z0-9_-]+)/i,
+  action:  /Action\s*:\s*([a-z0-9_:-]+)/i,
   input:   /Action\s+Input\s*:\s*([\s\S]+?)(?=\n[A-Z][a-z]+\s*:|\s*$)/i,
 };
 

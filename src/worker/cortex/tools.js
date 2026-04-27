@@ -16,6 +16,7 @@ import { listEvents, recordEvent, upsertNodesAndEdges } from '../d1-store.js';
 import { parseText } from '../text-parser.js';
 import { recall as vectorRecall } from './vector.js';
 import { speakText } from './sensory.js';
+import { describeMcpTools, dispatchMcpTool } from './mcp-registry.js';
 
 const FETCH_TIMEOUT_MS = 8_000;
 const MAX_URL_BYTES = 1_500_000;
@@ -158,11 +159,28 @@ export const REGISTRY = {
   },
 };
 
-export function describeTools() {
-  return Object.values(REGISTRY).map((t) => ({ intent: t.intent, description: t.description }));
+export async function describeTools(env, { userId } = {}) {
+  const builtin = Object.values(REGISTRY).map((t) => ({ intent: t.intent, description: t.description }));
+  if (env && userId) {
+    try {
+      const mcp = await describeMcpTools(env, { userId });
+      return [...builtin, ...mcp];
+    } catch (err) {
+      console.warn('[tools] mcp describe failed:', err.message);
+    }
+  }
+  return builtin;
 }
 
 export async function dispatch(env, intent, args, ctx) {
+  // MCP-discovered tools route through the registry → mcp-client.
+  if (typeof intent === 'string' && intent.startsWith('mcp:')) {
+    try {
+      return await dispatchMcpTool(env, intent, args || {}, ctx || {});
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
   const tool = REGISTRY[intent];
   if (!tool) return { ok: false, error: `unknown intent: ${intent}` };
   try {
