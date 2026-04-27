@@ -25,6 +25,7 @@
 import { parseMarkdown, parseText } from './worker/text-parser.js';
 
 const TEXT_MAX_LENGTH = 200_000;
+const TITLE_MAX_LENGTH = 200;
 const SNAPSHOT_MAX_NODES = 5_000;
 const SNAPSHOT_MAX_EDGES = 20_000;
 
@@ -123,7 +124,7 @@ async function ingest(request, env, allowed, format) {
   const title = (typeof dto?.title === 'string' && dto.title.trim().length > 0
     ? dto.title.trim()
     : defaultTitle(format)
-  ).slice(0, 200);
+  ).slice(0, TITLE_MAX_LENGTH);
 
   const sourceId = format === 'markdown' ? 'obsidian' : 'bookmarks';
   const parsed = format === 'markdown'
@@ -262,7 +263,11 @@ function jsonResponse(body, status = 200) {
 }
 
 function corsHeaders(request) {
-  const origin = request.headers.get('origin') || '*';
+  const origin = request.headers.get('origin');
+  // Only attach CORS headers when there is an actual cross-origin request to
+  // honour. Same-origin browser requests don't need them, and returning a
+  // wildcard for header-less callers (e.g. server-to-server) just adds noise.
+  if (!origin) return {};
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-methods': 'GET, POST, OPTIONS',
