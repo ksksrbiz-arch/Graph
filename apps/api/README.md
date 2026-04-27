@@ -2,17 +2,17 @@
 
 PKG-VS API server — NestJS 10 (REST + GraphQL + WebSocket). Implements the contract in spec §6 and the module structure in §8.1.
 
-## Phase 0 status
+## Module status (Phase 1)
 
 | Module        | State                                               |
 | ------------- | --------------------------------------------------- |
-| `health`      | ✅ live + ready (Neo4j check)                        |
+| `health`      | ✅ live + ready (Neo4j, Postgres, Redis, Meilisearch checks) |
 | `shared/crypto` | ✅ AES-256-GCM credential cipher (ADR-006)          |
-| `shared/neo4j`  | ✅ driver provider (host-side env)                  |
-| `auth`        | 🟡 JWT skeleton — login throws 401 until Phase 1     |
-| `graph`       | 🟡 repository + subgraph endpoint, no GraphQL yet    |
-| `users`       | ⬜ Phase 1                                           |
-| `audit`       | ⬜ Phase 1 (table & RLS already in `infra/postgres/init`) |
+| `shared/neo4j`  | ✅ driver provider                                  |
+| `auth`        | ✅ register / login / refresh / logout; bcrypt + token rotation |
+| `users`       | ✅ `GET/PATCH/DELETE /users/me`; Postgres-backed    |
+| `audit`       | ✅ `AuditService` + global `AuditInterceptor`       |
+| `graph`       | 🟡 REST subgraph + node delete; GraphQL pending (Phase 2) |
 | `connectors`  | ⬜ Phases 4–7 — `BaseConnector` contract frozen      |
 | `sync`        | ⬜ Phase 4 (BullMQ)                                  |
 

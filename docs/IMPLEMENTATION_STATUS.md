@@ -20,11 +20,11 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 
 | DoD item                                              | Status | Notes |
 | ----------------------------------------------------- | ------ | ----- |
-| JWT authentication (login, refresh, logout)           | 🟡 | Strategy + module wired; login throws 401 |
-| OAuth2 integration scaffold                           | ⬜ | |
-| User table in PostgreSQL; profile CRUD                | 🟡 | Table in `infra/postgres/init/001-schema.sql`; CRUD pending |
-| Audit log table + middleware wired                    | 🟡 | Table + immutability rules in place; interceptor pending |
-| Unit tests: 90% coverage on auth module               | ⬜ | |
+| JWT authentication (login, refresh, logout)           | ✅ | `AuthService.login/register/refresh/logout` with bcrypt + SHA-256 token hashing; `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` |
+| OAuth2 integration scaffold                           | ✅ | `OAuthService` + providers (GitHub, Google Calendar, Notion); PKCE support; in-memory `ConnectorConfigStore` (Postgres migration Phase 4) |
+| User table in PostgreSQL; profile CRUD                | ✅ | `UsersService` wraps `pg.Pool`; `GET/PATCH/DELETE /users/me` in `UsersController` |
+| Audit log table + middleware wired                    | ✅ | `AuditService.record()` writes to `audit_events`; `AuditInterceptor` auto-logs all mutating routes globally (via `APP_INTERCEPTOR`) |
+| Unit tests: 90% coverage on auth module               | ✅ | `auth.service.spec.ts` (14 tests), `users.service.spec.ts` (10 tests), `audit.service.spec.ts` (3 tests) — 101 total passing |
 
 ## Phase 2 — Graph Core (Week 4–5)
 
