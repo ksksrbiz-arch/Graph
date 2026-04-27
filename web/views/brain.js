@@ -23,6 +23,17 @@ const REGION_LABELS = {
 };
 
 const FALLBACK_USER_ID = 'local';
+const EMPTY_ANIM_PARTICLE_COUNT = 42;
+const EMPTY_ANIM_SEED_MULTIPLIER = 17.3;
+const EMPTY_ANIM_SEED_OFFSET = 9.4;
+const EMPTY_ANIM_BASE_ORBIT = 0.18;
+const EMPTY_ANIM_ORBIT_STEP = 0.07;
+const EMPTY_ANIM_BASE_SPEED = 0.00035;
+const EMPTY_ANIM_SPEED_STEP = 0.00011;
+const EMPTY_ANIM_BASE_SIZE = 0.9;
+const EMPTY_ANIM_SIZE_STEP = 0.6;
+const EMPTY_ANIM_MIN_DPR = 1;
+const EMPTY_ANIM_MAX_DPR = 2;
 
 let socket = null;
 let lastSummary = null;
@@ -382,11 +393,11 @@ function startEmptyAnimation() {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  const particles = Array.from({ length: 42 }, (_, i) => ({
-    seed: i * 17.3 + 9.4,
-    orbit: 0.18 + (i % 11) * 0.07,
-    speed: 0.00035 + (i % 9) * 0.00011,
-    size: 0.9 + (i % 4) * 0.6,
+  const particles = Array.from({ length: EMPTY_ANIM_PARTICLE_COUNT }, (_, i) => ({
+    seed: (i * EMPTY_ANIM_SEED_MULTIPLIER) + EMPTY_ANIM_SEED_OFFSET,
+    orbit: EMPTY_ANIM_BASE_ORBIT + (i % 11) * EMPTY_ANIM_ORBIT_STEP,
+    speed: EMPTY_ANIM_BASE_SPEED + (i % 9) * EMPTY_ANIM_SPEED_STEP,
+    size: EMPTY_ANIM_BASE_SIZE + (i % 4) * EMPTY_ANIM_SIZE_STEP,
   }));
 
   placeholderState = {
@@ -400,7 +411,7 @@ function startEmptyAnimation() {
 
   const tick = (now) => {
     if (!placeholderState) return;
-    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const dpr = Math.max(EMPTY_ANIM_MIN_DPR, Math.min(EMPTY_ANIM_MAX_DPR, window.devicePixelRatio || 1));
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(120, Math.floor((rect.width || canvas.width) * dpr));
     const height = Math.max(80, Math.floor((rect.height || canvas.height) * dpr));
