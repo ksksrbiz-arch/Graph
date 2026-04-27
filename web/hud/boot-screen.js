@@ -37,12 +37,12 @@ export function showBootScreen() {
   root.innerHTML = `
     <div class="boot-hex"><div class="core"></div></div>
     <div class="boot-name" aria-label="${APP_NAME}">
-      ${APP_NAME.split('').map((c) => `<span class="ch">${c === ' ' ? '&nbsp;' : escapeChar(c)}</span>`).join('')}
+      ${APP_NAME.split('').map((c) => `<span class="ch">${c === ' ' ? '&nbsp;' : escapeHtml(c)}</span>`).join('')}
     </div>
     <div class="boot-log" role="log">
       ${BOOT_LINES.map((l, i) => `
         <div class="line" data-i="${i}" data-drives="${l.drives}">
-          <span class="lbl">${escapeChar(l.label)}…</span>
+          <span class="lbl">${escapeHtml(l.label)}…</span>
           <span class="bar"><span class="fill"></span></span>
           <span class="status">…</span>
         </div>
@@ -107,7 +107,7 @@ export function reportBootProgress(p) {
 
 // ── Internals ───────────────────────────────────────────────────────────────
 
-function escapeChar(s) {
+function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   })[c]);

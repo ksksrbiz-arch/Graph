@@ -6,10 +6,11 @@
 //   T+100ms  24 particles explode from the centroid (80–200px range, 800ms)
 //   T+300ms  1.8 s floating ".hud-panel" insight pill ("💡 …")
 //
-// All animation is driven by a single rAF loop (per §15 perf rules — no
-// setInterval, no setTimeout for animation timing); particle count is hard
-// capped (≤24 per burst). A burst auto-cleans its DOM/canvas state when its
-// last animation segment finishes.
+// All ANIMATION FRAMES are driven by a single rAF loop (per §15 perf rules);
+// `setTimeout` is used solely as a one-shot trigger to schedule the floating
+// text DOM mount/unmount — never as an animation tick. Particle count is
+// hard-capped (≤24 per burst). Each burst auto-cleans its DOM/canvas state
+// when its last animation segment finishes.
 
 const SHOCKWAVE_DELAY = 0;
 const SHOCKWAVE_DURATION = 600;
@@ -26,9 +27,10 @@ const TEXT_DELAY = 300;
 const TEXT_DURATION = 1800;
 const TEXT_MAX_WIDTH = 320;
 
-const TOTAL_DURATION = TEXT_DELAY + TEXT_DURATION; // 2100ms; spec says 2.5s
-                                                   // total — extra 400ms is
-                                                   // tail cleanup buffer.
+const TOTAL_DURATION = TEXT_DELAY + TEXT_DURATION; // 2100ms of active drawing.
+// The spec calls out 2.5 s end-to-end; the extra 400 ms (CLEANUP_BUFFER) is
+// the tail used to clear the canvas + remove the floating pill cleanly so
+// nothing flashes when the next burst starts.
 const CLEANUP_BUFFER = 500;
 
 let canvas = null;
