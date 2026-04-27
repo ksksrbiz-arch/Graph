@@ -100,13 +100,16 @@ class GraphBuilder {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function stripHtmlTags(text) {
+  // Strip HTML tags first, then decode any remaining entities.
+  // Stripping before decoding prevents entity-encoded tags (e.g. &lt;script&gt;)
+  // from being reconstructed as real markup after entity decoding.
   return text
+    .replace(/<[^>]*>/g, '')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&amp;/g, '&')
-    .replace(/<[^>]*>/g, '')
     .trim();
 }
 
@@ -212,9 +215,10 @@ function extractXmlAll(xml, tag) {
 }
 
 function enmlToText(enml) {
+  // Convert structural elements to whitespace, then strip all remaining tags.
+  // ENML (Evernote Markup Language) is XHTML-based and should not contain
+  // executable content, but we strip all tags regardless as a safety measure.
   return enml
-    .replace(/<script[\s\S]*?<\/\s*script\s*>/gi, '')
-    .replace(/<style[\s\S]*?<\/\s*style\s*>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
     .replace(/<\/div>/gi, '\n')
@@ -473,7 +477,10 @@ export async function ingestZotero({ userId, apiKey, groupId, limit = 200 }) {
       const normTag = tag.trim().toLowerCase();
       const tagId = stableId('tag', normTag);
       builder.upsertNode({
-        id: tagId, label: `#${normTag}`, type: 'tag', sourceId: SOURCE_ID,
+        id: tagId,
+        label: `#${normTag}`,
+        type: 'tag',
+        sourceId: SOURCE_ID,
         metadata: { tag: normTag },
       });
       builder.upsertEdge({ source: docNode.id, target: tagId, relation: 'TAGGED_WITH', weight: 0.4 });
@@ -572,7 +579,10 @@ export async function ingestGithub({ token, login, reposLimit = 50, itemsLimit =
     for (const topic of topics) {
       const tagId = stableId('tag', topic.toLowerCase());
       builder.upsertNode({
-        id: tagId, label: `#${topic.toLowerCase()}`, type: 'tag', sourceId: SOURCE_ID,
+        id: tagId,
+        label: `#${topic.toLowerCase()}`,
+        type: 'tag',
+        sourceId: SOURCE_ID,
         metadata: { tag: topic.toLowerCase() },
       });
       builder.upsertEdge({ source: repoId, target: tagId, relation: 'TAGGED_WITH', weight: 0.35 });
@@ -611,7 +621,10 @@ export async function ingestGithub({ token, login, reposLimit = 50, itemsLimit =
         if (item.user?.login) {
           const personId = stableId('person', item.user.login.toLowerCase());
           builder.upsertNode({
-            id: personId, label: item.user.login, type: 'person', sourceId: SOURCE_ID,
+            id: personId,
+            label: item.user.login,
+            type: 'person',
+            sourceId: SOURCE_ID,
             sourceUrl: item.user.html_url,
             metadata: { githubLogin: item.user.login },
           });
