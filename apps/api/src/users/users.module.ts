@@ -1,7 +1,12 @@
-// Phase 1 home for user CRUD, profile updates, GDPR delete (§10.3, Rule 19).
-// Phase 0 leaves the module empty so AppModule can import a stable surface.
+// User CRUD, profile updates, GDPR delete (§10.3, Rule 19).
 
 import { Module } from '@nestjs/common';
+import { UsersController } from './users.controller';
+import { UsersService } from './users.service';
 
-@Module({})
+@Module({
+  controllers: [UsersController],
+  providers: [UsersService],
+  exports: [UsersService],
+})
 export class UsersModule {}
