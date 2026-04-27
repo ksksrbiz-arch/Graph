@@ -81,7 +81,11 @@ const CONNECTOR_BIAS: Partial<Record<ConnectorId, Region>> = {
 };
 
 export function regionForNodeType(type: NodeType): Region {
-  return NODE_TYPE_TO_REGION[type];
+  const region = NODE_TYPE_TO_REGION[type];
+  if (region === undefined) {
+    throw new Error(`No region mapping defined for node type: ${type}`);
+  }
+  return region;
 }
 
 /**

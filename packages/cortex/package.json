@@ -15,9 +15,11 @@
     }
   },
   "scripts": {
+    "pretype-check": "pnpm --filter @pkg/shared run build",
     "build": "tsc -p tsconfig.build.json",
     "type-check": "tsc --noEmit",
     "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
+    "pretest": "pnpm --filter @pkg/shared run build",
     "test": "vitest run"
   },
   "dependencies": {
