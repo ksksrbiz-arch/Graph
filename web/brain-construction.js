@@ -34,6 +34,20 @@ const MAX_BIRTHS = 240;
 const MAX_GROWTHS = 480;
 const MAX_WAVES = 12;
 
+// Mobile caps so a 100-node ingest doesn't chew through a phone's battery.
+// Coarse pointer is the most reliable signal (covers tablets too).
+const MOBILE_MAX_BIRTHS  = 60;
+const MOBILE_MAX_GROWTHS = 120;
+const MOBILE_MAX_WAVES   = 4;
+const MOBILE_PARTICLES_PER_BIRTH = 6;
+const MOBILE_SPARKS_PER_GROWTH = 4;
+
+function isMobile() {
+  if (typeof window === 'undefined') return false;
+  if (window.matchMedia?.('(pointer: coarse)').matches) return true;
+  return Math.min(window.innerWidth || 9999, window.innerHeight || 9999) <= 820;
+}
+
 export function createBrainConstruction(fg, state) {
   const births  = [];   // { nodeId, color, bornMs, particles[] }
   const growths = [];   // { edge, color, bornMs, sparks[] }
@@ -44,6 +58,26 @@ export function createBrainConstruction(fg, state) {
   let active = false;
   let attached = false;
   let firstSync = true; // skip animations on the very first graph load
+
+  // Re-evaluated on each spawn so a window resize that crosses the mobile
+  // breakpoint takes effect on subsequent animations.
+  function caps() {
+    return isMobile()
+      ? {
+          maxBirths:  MOBILE_MAX_BIRTHS,
+          maxGrowths: MOBILE_MAX_GROWTHS,
+          maxWaves:   MOBILE_MAX_WAVES,
+          particles:  MOBILE_PARTICLES_PER_BIRTH,
+          sparks:     MOBILE_SPARKS_PER_GROWTH,
+        }
+      : {
+          maxBirths:  MAX_BIRTHS,
+          maxGrowths: MAX_GROWTHS,
+          maxWaves:   MAX_WAVES,
+          particles:  PARTICLES_PER_BIRTH,
+          sparks:     SPARKS_PER_GROWTH,
+        };
+  }
 
   function tintFor(neuronId) {
     const node = state.byId.get(neuronId);
@@ -97,11 +131,12 @@ export function createBrainConstruction(fg, state) {
   function spawnBirth(neuronId, delayMs = 0) {
     const node = state.byId.get(neuronId);
     if (!node) return;
-    if (births.length >= MAX_BIRTHS) births.shift();
+    const c = caps();
+    if (births.length >= c.maxBirths) births.shift();
     const color = tintFor(neuronId);
     const particles = [];
-    for (let i = 0; i < PARTICLES_PER_BIRTH; i++) {
-      const angle = (i / PARTICLES_PER_BIRTH) * Math.PI * 2 + Math.random() * 0.4;
+    for (let i = 0; i < c.particles; i++) {
+      const angle = (i / c.particles) * Math.PI * 2 + Math.random() * 0.4;
       const dist = 60 + Math.random() * 80;
       particles.push({ angle, dist });
     }
@@ -115,10 +150,11 @@ export function createBrainConstruction(fg, state) {
 
   /** Manually trigger a growth animation for a known edge object. */
   function spawnGrowth(edge, delayMs = 0) {
-    if (growths.length >= MAX_GROWTHS) growths.shift();
+    const c = caps();
+    if (growths.length >= c.maxGrowths) growths.shift();
     const color = tintFor(srcId(edge));
     const sparks = [];
-    for (let i = 0; i < SPARKS_PER_GROWTH; i++) {
+    for (let i = 0; i < c.sparks; i++) {
       sparks.push({
         offsetT: Math.random() * 0.18,
         wobble: (Math.random() - 0.5) * 14,
@@ -144,8 +180,9 @@ export function createBrainConstruction(fg, state) {
       const top = [...nodes].sort((a, b) => (b.__degree || 0) - (a.__degree || 0)).slice(0, 12);
       rootId = top[Math.floor(Math.random() * top.length)].id;
     }
-    if (waves.length >= MAX_WAVES) waves.shift();
-    const ripples = bfsRipples(rootId, 4, 280);
+    const c = caps();
+    if (waves.length >= c.maxWaves) waves.shift();
+    const ripples = bfsRipples(rootId, isMobile() ? 3 : 4, 280);
     waves.push({ rootId, bornMs: now(), color, ripples });
   }
 

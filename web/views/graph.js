@@ -12,6 +12,7 @@ import { createBrainClient } from '../brain.js';
 import { create2DRenderer } from './graph-2d.js';
 import { create3DRenderer } from './graph-3d.js';
 import { startBackdrop } from '../brain-backdrop.js';
+import { mountBrainPreview } from '../brain-preview.js';
 import { initStatsBar } from '../hud/stats-bar.js';
 import { initBrainControls } from '../hud/brain-controls.js';
 import { initMiniMap } from '../hud/mini-map.js';
@@ -125,8 +126,15 @@ export function initGraphView() {
 
   // Cortex thinking events — the cortex view dispatches these on
   // `window` whenever a /think request starts/ends so the graph can render
-  // a BFS ripple across the network for the duration of reasoning.
+  // a BFS ripple across the network for the duration of reasoning. When
+  // the live graph has too little data to produce a meaningful ripple, we
+  // mount the looping preview animation instead so the user sees what
+  // thinking *will* look like once they ingest content.
   window.addEventListener('cortex-thinking-start', (e) => {
+    if (!hasEnoughDataForThinking()) {
+      showThinkFallback();
+      return;
+    }
     const rootId = e?.detail?.rootId
       || state.selectedId
       || state.focusRootId
@@ -134,11 +142,15 @@ export function initGraphView() {
     renderer?.thinkWave?.(rootId);
   });
   window.addEventListener('cortex-thinking-tick', (e) => {
+    if (!hasEnoughDataForThinking()) return;
     const rootId = e?.detail?.rootId
       || state.selectedId
       || state.focusRootId
       || null;
     renderer?.thinkWave?.(rootId, e?.detail?.color);
+  });
+  window.addEventListener('cortex-thinking-end', () => {
+    hideThinkFallback();
   });
 
   // Visual Spec Part 2 §5/§7/§9/§10/§11: HUD overlays. These mount into
@@ -680,6 +692,58 @@ function updateModeHud() {
     if (d === 4) detail.textContent = `t-axis: ${state.config.temporalField}`;
     else if (d === 3) detail.textContent = 'volumetric · bloom';
     else detail.textContent = 'canvas · 2D';
+  }
+}
+
+// ── Thinking fallback (insufficient-data) ──────────────────────────
+//
+// Shown when the cortex emits `cortex-thinking-start` but the graph has
+// fewer nodes/edges than would produce a visible BFS ripple. Mounts the
+// brain-preview loop in a small toast over the graph so the user still
+// gets a "thinking" visualisation even when there's nothing to traverse.
+
+const MIN_NODES_FOR_THINKING = 3;
+const MIN_EDGES_FOR_THINKING = 1;
+let thinkFallbackEl = null;
+let thinkFallbackHandle = null;
+
+function hasEnoughDataForThinking() {
+  const nodes = state.graph?.nodes?.length || 0;
+  const edges = state.graph?.edges?.length || 0;
+  return nodes >= MIN_NODES_FOR_THINKING && edges >= MIN_EDGES_FOR_THINKING;
+}
+
+function showThinkFallback() {
+  if (thinkFallbackEl) return; // already mounted
+  const view = document.getElementById('view-graph');
+  if (!view) return;
+  thinkFallbackEl = document.createElement('div');
+  thinkFallbackEl.className = 'brain-think-fallback';
+  thinkFallbackEl.innerHTML = `
+    <button type="button" class="bf-close" aria-label="Dismiss">×</button>
+    <span class="bf-tag">Thinking · preview</span>
+    <div class="bf-host"></div>
+    <span class="bf-hint">
+      Your graph is too small to traverse yet — here's what thinking will
+      look like once you've ingested content.
+    </span>
+  `;
+  view.appendChild(thinkFallbackEl);
+  thinkFallbackEl.querySelector('.bf-close').addEventListener('click', hideThinkFallback);
+  const host = thinkFallbackEl.querySelector('.bf-host');
+  if (host) {
+    try { thinkFallbackHandle = mountBrainPreview(host); } catch {}
+  }
+}
+
+function hideThinkFallback() {
+  if (thinkFallbackHandle) {
+    try { thinkFallbackHandle.stop(); } catch {}
+    thinkFallbackHandle = null;
+  }
+  if (thinkFallbackEl) {
+    try { thinkFallbackEl.remove(); } catch {}
+    thinkFallbackEl = null;
   }
 }
 

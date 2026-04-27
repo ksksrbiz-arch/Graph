@@ -16,6 +16,7 @@ import { initSettingsView } from './views/settings.js';
 import { initBrainView } from './views/brain.js';
 import { mount as mountCortex } from './views/cortex.js';
 import { showBootScreen, reportBootProgress } from './hud/boot-screen.js';
+import { mountBrainPreview } from './brain-preview.js';
 
 // Visual Spec Part 3 §13 — show the boot splash as early as possible, before
 // any view init runs, so users see the hex logo while the rest of the app
@@ -180,9 +181,22 @@ function renderEmpty(reason) {
   const canvas = document.getElementById('canvas');
   canvas.innerHTML = `
     <div class="empty">
-      <div>${reason || 'Graph is empty.'}</div>
-      <div>Click <b>Ingest Claude Code</b> in the top bar, or run <code>npm run ingest:claude-code</code>.</div>
+      <div id="empty-preview" class="empty-preview"></div>
+      <div class="empty-copy">
+        <div>${reason || 'Graph is empty.'}</div>
+        <div>Click <b>Ingest Claude Code</b> in the top bar, or run <code>npm run ingest:claude-code</code>.</div>
+      </div>
     </div>`;
+  // Mount the looping preview animation so users see what the brain will
+  // look like once it has data. Self-contained — no dependency on the
+  // force-graph renderer, so it works even if the live renderer hasn't
+  // initialised yet (offline / cold-start).
+  const host = document.getElementById('empty-preview');
+  if (host) {
+    try { mountBrainPreview(host); } catch (err) {
+      console.warn('[app] brain preview failed to mount', err);
+    }
+  }
 }
 
 bootstrap();
