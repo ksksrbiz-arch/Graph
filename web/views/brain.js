@@ -26,6 +26,8 @@ const FALLBACK_USER_ID = 'local';
 
 let socket = null;
 let lastSummary = null;
+let placeholderRaf = 0;
+let placeholderState = null;
 
 export function initBrainView() {
   const root = document.getElementById('view-brain');
@@ -106,6 +108,26 @@ function renderShell(root) {
     root.appendChild(el('p', { class: 'view-sub' }, `API endpoint: ${config.apiBaseUrl}`));
   }
 
+  root.appendChild(
+    el('section', { class: 'brain-empty-state', id: 'brain-empty-state' },
+      el('div', { class: 'brain-empty-copy' },
+        el('p', { class: 'brain-empty-kicker' }, 'Neural Core • Standby'),
+        el('h3', {}, 'Waiting for live cognitive signals'),
+        el('p', {},
+          'The simulator is online, but no meaningful activity is available yet. ',
+          'Once spikes, pathways, and growth metrics stream in, this display transitions to live telemetry.',
+        ),
+      ),
+      el('canvas', {
+        id: 'brain-empty-canvas',
+        class: 'brain-empty-canvas',
+        width: 980,
+        height: 260,
+        'aria-hidden': 'true',
+      }),
+    ),
+  );
+
   const grid = el('div', { class: 'brain-grid' });
 
   grid.appendChild(panel('Region activity',
@@ -135,6 +157,7 @@ function renderShell(root) {
   ));
 
   root.appendChild(grid);
+  syncEmptyState(null);
 
   // Tab switching for the pathways panel — purely view-side; data comes from
   // the next 'insight' tick.
@@ -179,6 +202,7 @@ function setStatus(text) {
 }
 
 function renderSummary(summary) {
+  syncEmptyState(summary);
   renderRegions(summary.regions || []);
   const sort = document.getElementById('view-brain')?.dataset.pathwaySort || 'strongest';
   renderPathways(summary, sort);
@@ -329,4 +353,118 @@ function drawSparkline(canvasId, samples) {
     else ctx.lineTo(x, y);
   }
   ctx.stroke();
+}
+
+function hasRealData(summary) {
+  if (!summary) return false;
+  if ((summary.regions || []).length > 0) return true;
+  if ((summary.strongestPathways || []).length > 0) return true;
+  if ((summary.growingPathways || []).length > 0) return true;
+  if ((summary.decayingPathways || []).length > 0) return true;
+  if ((summary.recentFormations || []).length > 0) return true;
+  if ((summary.growth || []).length > 0) return true;
+  return false;
+}
+
+function syncEmptyState(summary) {
+  const shell = document.getElementById('brain-empty-state');
+  if (!shell) return;
+  const show = !hasRealData(summary);
+  shell.classList.toggle('hidden', !show);
+  if (show) startEmptyAnimation();
+  else stopEmptyAnimation();
+}
+
+function startEmptyAnimation() {
+  const canvas = document.getElementById('brain-empty-canvas');
+  if (!(canvas instanceof HTMLCanvasElement)) return;
+  if (placeholderRaf) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const particles = Array.from({ length: 42 }, (_, i) => ({
+    seed: i * 17.3 + 9.4,
+    orbit: 0.18 + (i % 11) * 0.07,
+    speed: 0.00035 + (i % 9) * 0.00011,
+    size: 0.9 + (i % 4) * 0.6,
+  }));
+
+  placeholderState = {
+    ctx,
+    canvas,
+    particles,
+    start: performance.now(),
+    w: 0,
+    h: 0,
+  };
+
+  const tick = (now) => {
+    if (!placeholderState) return;
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(120, Math.floor((rect.width || canvas.width) * dpr));
+    const height = Math.max(80, Math.floor((rect.height || canvas.height) * dpr));
+    if (width !== placeholderState.w || height !== placeholderState.h) {
+      placeholderState.w = width;
+      placeholderState.h = height;
+      canvas.width = width;
+      canvas.height = height;
+    }
+
+    const { w, h } = placeholderState;
+    const t = now - placeholderState.start;
+    const mx = w * 0.5;
+    const my = h * 0.5;
+    const core = Math.min(w, h) * 0.14;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const bg = ctx.createRadialGradient(mx, my, core * 0.3, mx, my, Math.max(w, h) * 0.65);
+    bg.addColorStop(0, 'rgba(124,156,255,0.24)');
+    bg.addColorStop(0.45, 'rgba(61,92,190,0.1)');
+    bg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+
+    const ringAlpha = 0.16 + (Math.sin(t * 0.0013) * 0.06);
+    for (let i = 0; i < 4; i++) {
+      const phase = (t * (0.0009 + i * 0.00025)) + (i * Math.PI * 0.5);
+      ctx.strokeStyle = `rgba(166,201,255,${Math.max(0.05, ringAlpha - i * 0.03).toFixed(3)})`;
+      ctx.lineWidth = Math.max(1, (2.2 - i * 0.35) * dpr * 0.5);
+      ctx.beginPath();
+      ctx.arc(mx, my, core + i * (core * 0.45) + Math.sin(phase) * (6 * dpr), phase * 0.4, phase * 0.4 + Math.PI * 1.6);
+      ctx.stroke();
+    }
+
+    const pulse = 0.72 + (Math.sin(t * 0.0024) * 0.2);
+    const coreGlow = ctx.createRadialGradient(mx, my, 0, mx, my, core * 1.5);
+    coreGlow.addColorStop(0, `rgba(198,222,255,${(0.48 * pulse).toFixed(3)})`);
+    coreGlow.addColorStop(0.45, `rgba(124,156,255,${(0.34 * pulse).toFixed(3)})`);
+    coreGlow.addColorStop(1, 'rgba(124,156,255,0)');
+    ctx.fillStyle = coreGlow;
+    ctx.beginPath();
+    ctx.arc(mx, my, core * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (const p of placeholderState.particles) {
+      const a = (t * p.speed) + p.seed;
+      const r = core * (1 + p.orbit * 2.2);
+      const x = mx + Math.cos(a) * r;
+      const y = my + Math.sin(a * 1.35) * (r * 0.68);
+      ctx.fillStyle = 'rgba(211,236,255,0.86)';
+      ctx.beginPath();
+      ctx.arc(x, y, p.size * dpr * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    placeholderRaf = requestAnimationFrame(tick);
+  };
+
+  placeholderRaf = requestAnimationFrame(tick);
+}
+
+function stopEmptyAnimation() {
+  if (placeholderRaf) cancelAnimationFrame(placeholderRaf);
+  placeholderRaf = 0;
+  placeholderState = null;
 }
