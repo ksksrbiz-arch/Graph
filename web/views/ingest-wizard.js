@@ -30,6 +30,7 @@ import {
 } from '../data.js';
 import { setGraph } from '../state.js';
 import { showToast, el } from '../util.js';
+import { loadSavedConfig, saveConfig } from './connector-config.js';
 
 const WIZARD_ID = 'ingest-wizard';
 const SCRIM_ID  = 'ingest-wizard-scrim';
@@ -131,6 +132,7 @@ function mountWizard(connector, onSuccess) {
     footer.innerHTML = '';
 
     const fields = connector.wizard?.fields || [];
+    const savedValues = loadSavedConfig(connector.id);
 
     if (!fields.length) {
       body.appendChild(el('p', { class: 'wiz-hint' }, 'No configuration required. Click Run to start.'));
@@ -147,7 +149,7 @@ function mountWizard(connector, onSuccess) {
     }
 
     for (const field of regularFields) {
-      form.appendChild(buildField(field, fileMap));
+      form.appendChild(buildField(field, fileMap, savedValues));
     }
 
     body.appendChild(form);
@@ -322,6 +324,8 @@ function mountWizard(connector, onSuccess) {
 
     // Auto-reload graph on success
     if (res.ok) {
+      // Persist field values so the card can offer a 1-click Run next time
+      saveConfig(connector.id, env);
       try {
         const fresh = await loadGraph();
         setGraph(fresh);
@@ -350,13 +354,16 @@ function mountWizard(connector, onSuccess) {
 
 // ── Field builders ────────────────────────────────────────────────────────────
 
-function buildField(field, fileMap) {
+function buildField(field, fileMap, savedValues = {}) {
   const wrap = el('div', { class: 'wiz-field' });
   const labelEl = el('label', { for: `wiz-field-${field.name}`, class: 'wiz-label' },
     field.label,
     field.required ? el('span', { class: 'wiz-required' }, ' *') : null,
   );
   wrap.appendChild(labelEl);
+
+  // Resolve saved value: prefer the envVar key, fall back to field name key
+  const savedVal = (savedValues[field.envVar] || savedValues[field.name] || '').trim();
 
   let input;
   if (field.type === 'textarea' || field.type === 'urls-textarea') {
@@ -366,7 +373,7 @@ function buildField(field, fileMap) {
       rows: '6',
       placeholder: field.placeholder || '',
     });
-    if (field.default) input.value = field.default;
+    input.value = savedVal || field.default || '';
   } else if (field.type === 'file' || field.type === 'multifile') {
     const isMulti = field.type === 'multifile';
     const inputAttrs = {
@@ -424,7 +431,7 @@ function buildField(field, fileMap) {
       class: 'wiz-input',
       placeholder: field.placeholder || '',
     });
-    if (field.default) input.value = field.default;
+    input.value = savedVal || field.default || '';
   }
 
   if (field.required) input.setAttribute('required', '');

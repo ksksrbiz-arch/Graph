@@ -1084,6 +1084,22 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
 .connector-never-run { color: var(--text-faint); font-size: 0.78rem; font-style: italic; }
 .connector-local-warn { color: var(--warn); font-size: 0.78rem; margin: 0; }
 
+/* Inline run status (shown on card without opening the wizard) */
+.connector-inline-status { font-size: 0.8rem; min-height: 1.1rem; }
+.connector-inline-running { color: var(--text-dim); }
+.connector-inline-ok { color: var(--success); }
+.connector-inline-err { color: var(--danger); }
+
+/* Secondary "⚙ Configure" button — compact, lower visual weight */
+.connector-btn-cfg {
+  flex: 0 0 auto;
+  padding: 0.38rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  border-color: transparent;
+}
+.connector-btn-cfg:hover:not(:disabled) { color: var(--text); border-color: var(--border); }
+
 /* ── Ingest Wizard ────────────────────────────────────────────────── */
 
 /* Scrim */
