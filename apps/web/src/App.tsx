@@ -278,6 +278,7 @@ export function App(): JSX.Element {
                 </span>
               </div>
               <input
+                aria-label="Search connectors"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search connectors…"

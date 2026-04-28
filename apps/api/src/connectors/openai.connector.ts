@@ -66,7 +66,7 @@ interface OpenAIListResponse<T> {
 }
 
 const PAGE_SIZE = 100;
-const MAX_PAGES = 3; // up to 300 files + 300 assistants per sync
+const MAX_PAGES = 3; // safety ceiling: fetch at most 3 pages per resource type per sync
 const BASE_URL = 'https://api.openai.com/v1';
 /** Weight assigned to assistant→model RELATED_TO edges — moderate confidence
  *  since the relationship is structural (the assistant is backed by this model)
