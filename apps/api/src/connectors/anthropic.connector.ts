@@ -83,7 +83,8 @@ export class AnthropicConnector extends BaseConnector {
       // Yield only models introduced after the last sync. Anthropic's /models
       // endpoint does not guarantee sort order, so we filter with `continue`
       // rather than `break` (unlike connectors with desc-sorted cursors).
-      if (Date.parse(model.created_at) <= since.getTime()) continue;
+      const createdMs = Date.parse(model.created_at);
+      if (Number.isNaN(createdMs) || createdMs <= since.getTime()) continue;
       yield { externalId: `model:${model.id}`, raw: model };
     }
   }

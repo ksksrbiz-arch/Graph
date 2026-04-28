@@ -101,7 +101,7 @@ export class ConnectorsController {
   @HttpCode(201)
   @ApiOperation({
     summary:
-      'Configure an API-key connector — stores the encrypted key and triggers an immediate sync',
+      'Configure an API-key connector — stores the encrypted key and triggers an immediate sync; poll GET /connectors for updated sync status',
   })
   configure(
     @Req() req: AuthedRequest,
