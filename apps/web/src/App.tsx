@@ -17,6 +17,7 @@ import {
   type ConnectorCatalogEntry,
   type ConnectorCategory,
 } from './connectorCatalog';
+import { DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES } from './sharedConstants';
 
 interface ApiHealth {
   ok: boolean;
@@ -413,7 +414,12 @@ export function App(): JSX.Element {
                 <div style={{ color: '#91a0bf', fontSize: '0.85rem', lineHeight: 1.5 }}>
                   {configured ? (
                     <>
-                      <div>Sync interval: every {summary?.syncIntervalMinutes ?? 30} minutes</div>
+                      <div>
+                        Sync interval: every{' '}
+                        {summary?.syncIntervalMinutes ??
+                          DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES}{' '}
+                        minutes
+                      </div>
                       <div>Last sync: {formatDate(summary?.lastSyncAt)}</div>
                     </>
                   ) : (

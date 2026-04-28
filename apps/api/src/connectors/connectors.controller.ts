@@ -21,7 +21,12 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { CONNECTOR_IDS, type ConnectorId, type ConnectorConfig } from '@pkg/shared';
+import {
+  CONNECTOR_IDS,
+  DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES,
+  type ConnectorId,
+  type ConnectorConfig,
+} from '@pkg/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CredentialCipher } from '../shared/crypto/credential-cipher';
 import { Idempotent } from '../shared/idempotency/idempotency.interceptor';
@@ -87,7 +92,7 @@ export class ConnectorsController {
         : {
             id,
             enabled: false,
-            syncIntervalMinutes: 30,
+            syncIntervalMinutes: DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES,
             lastSyncAt: undefined,
             lastSyncStatus: undefined,
             rateLimitRemaining: undefined,
@@ -139,7 +144,8 @@ export class ConnectorsController {
       userId: req.user.sub,
       enabled: true,
       credentials,
-      syncIntervalMinutes: existing?.syncIntervalMinutes ?? 30,
+      syncIntervalMinutes:
+        existing?.syncIntervalMinutes ?? DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES,
     };
 
     // Upsert triggers the SyncScheduler's subscribe listener which immediately

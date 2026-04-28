@@ -85,6 +85,9 @@ export class AnthropicConnector extends BaseConnector {
       // rather than `break` (unlike connectors with desc-sorted cursors).
       const createdMs = Date.parse(model.created_at);
       if (Number.isNaN(createdMs)) {
+        // Skip malformed timestamps so incremental syncs stay deterministic:
+        // without a trustworthy created_at we cannot safely decide whether this
+        // model is new relative to `since`.
         this.log.warn(`anthropic model ${model.id} has invalid created_at: ${model.created_at}`);
         continue;
       }

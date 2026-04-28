@@ -142,6 +142,7 @@ export const CONNECTOR_IDS = [
 ] as const;
 
 export type ConnectorId = (typeof CONNECTOR_IDS)[number];
+export const DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES = 30;
 
 export interface EncryptedCredentials {
   /** AES-256-GCM encrypted token blob (base64) */
