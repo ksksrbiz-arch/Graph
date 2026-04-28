@@ -10,11 +10,15 @@
  * idempotent merges within the KV-backed public graph.
  *
  * Supported connectors:
- *   parseBookmarks(html)                  — Netscape HTML bookmark export
- *   parseEnex(xml)                        — Evernote ENEX export
- *   parseClaudeExport(json)               — Claude.ai conversations.json
- *   ingestZotero({ userId, apiKey, ... }) — Zotero Web API (fetch from browser)
- *   ingestGithub({ token, login, ... })   — GitHub REST API (fetch from browser)
+ *   parseBookmarks(html)                       — Netscape HTML bookmark export
+ *   parseEnex(xml)                             — Evernote ENEX export
+ *   parseClaudeExport(json)                    — Claude.ai conversations.json
+ *   parseMarkdownFiles(files)                  — Obsidian / plain .md folder upload
+ *   buildDailyNote({ date, tags })             — Generates today's daily note
+ *   clipUrls(urls)                             — Web-clip a list of URLs (CORS permitting)
+ *   parseClaudeCodeSessions(files)             — ~/.claude/projects JSONL session files
+ *   ingestZotero({ userId, apiKey, ... })      — Zotero Web API (fetch from browser)
+ *   ingestGithub({ token, login, ... })        — GitHub REST API (fetch from browser)
  */
 
 // ── Deterministic ID generation (FNV-1a 32-bit, two-pass → 16 hex chars) ────
@@ -629,6 +633,668 @@ export async function ingestGithub({ token, login, reposLimit = 50, itemsLimit =
             metadata: { githubLogin: item.user.login },
           });
           builder.upsertEdge({ source: itemId, target: personId, relation: 'AUTHORED_BY', weight: 0.7 });
+        }
+      }
+    }
+  }
+
+  return { nodes: builder.nodes, edges: builder.edges, sourceId: SOURCE_ID };
+}
+
+// ── Markdown / Obsidian vault parser ──────────────────────────────────────────
+
+function splitFrontmatter(text) {
+  if (!text.startsWith('---')) return { frontmatter: '', body: text };
+  const end = text.indexOf('\n---', 3);
+  if (end === -1) return { frontmatter: '', body: text };
+  return { frontmatter: text.slice(3, end).trim(), body: text.slice(end + 4) };
+}
+
+function parseFrontmatter(yaml) {
+  const result = {};
+  if (!yaml) return result;
+  for (const line of yaml.split('\n')) {
+    const colonIdx = line.indexOf(':');
+    if (colonIdx === -1) continue;
+    const key = line.slice(0, colonIdx).trim();
+    const raw = line.slice(colonIdx + 1).trim();
+    if (!key) continue;
+    if (raw.startsWith('[')) {
+      result[key] = raw
+        .slice(1, raw.lastIndexOf(']'))
+        .split(',')
+        .map((v) => v.trim().replace(/^['"]|['"]$/g, ''))
+        .filter(Boolean);
+    } else {
+      result[key] = raw.replace(/^['"]|['"]$/g, '');
+    }
+  }
+  return result;
+}
+
+function normaliseTags(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map((v) => String(v).toLowerCase().trim()).filter(Boolean);
+  return String(value).split(',').map((v) => v.trim().toLowerCase()).filter(Boolean);
+}
+
+function basenameNoExt(path) {
+  const slash = path.lastIndexOf('/');
+  const name = slash >= 0 ? path.slice(slash + 1) : path;
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+/**
+ * Parse one Markdown file's text into a structured note record.
+ * Mirrors scripts/ingest-markdown.mjs → parseMarkdownFile().
+ */
+function parseMarkdownText(text, filePath) {
+  const { frontmatter, body } = splitFrontmatter(text);
+  const fm = parseFrontmatter(frontmatter);
+
+  const title = fm.title || basenameNoExt(filePath);
+  const date = fm.date ? String(fm.date) : null;
+
+  const tags = new Set(normaliseTags(fm.tags));
+  for (const match of body.matchAll(/#([\w/-]+)/g)) {
+    tags.add(match[1].toLowerCase());
+  }
+
+  const wikilinks = [];
+  for (const match of body.matchAll(/\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g)) {
+    wikilinks.push(match[1].trim());
+  }
+
+  const urls = [];
+  for (const match of body.matchAll(/\[[^\]]*\]\((https?:\/\/[^)]+)\)/g)) {
+    urls.push(match[1]);
+  }
+
+  const aliases = normaliseTags(fm.aliases || fm.alias);
+  const wordCount = body.split(/\s+/).filter(Boolean).length;
+
+  return { filePath, title, date, tags: [...tags], wikilinks, urls, wordCount, aliases };
+}
+
+/**
+ * Parse a collection of Markdown files (FileList or array of File) into a
+ * graph of `note` and `tag` nodes plus `LINKS_TO` and `TAGGED` edges.
+ * Mirrors the two-pass logic in scripts/ingest-markdown.mjs.
+ *
+ * @param {FileList|File[]} files
+ * @returns {Promise<{ nodes: object[], edges: object[], sourceId: string }>}
+ */
+export async function parseMarkdownFiles(files) {
+  const SOURCE_ID = 'markdown';
+  const builder = new GraphBuilder();
+  const list = Array.from(files || []).filter((f) => /\.md$/i.test(f.name));
+  if (list.length === 0) return { nodes: [], edges: [], sourceId: SOURCE_ID };
+
+  // First pass: read + parse every file, build wikilink lookup table.
+  const parsedNotes = [];
+  const noteTitleToId = new Map();
+
+  for (const file of list) {
+    const path = file.webkitRelativePath || file.name;
+    let text;
+    try { text = await file.text(); } catch { continue; }
+    const parsed = parseMarkdownText(text, path);
+    if (!parsed) continue;
+    parsedNotes.push(parsed);
+    const id = stableId('note', path);
+    noteTitleToId.set(parsed.title.toLowerCase(), id);
+    const stem = basenameNoExt(path).toLowerCase();
+    if (!noteTitleToId.has(stem)) noteTitleToId.set(stem, id);
+  }
+
+  // Second pass: upsert nodes and edges.
+  for (const note of parsedNotes) {
+    const noteId = stableId('note', note.filePath);
+
+    builder.upsertNode({
+      id: noteId,
+      label: note.title,
+      type: 'note',
+      sourceId: SOURCE_ID,
+      createdAt: note.date || undefined,
+      metadata: {
+        path: note.filePath,
+        wordCount: note.wordCount,
+        tags: note.tags,
+        aliases: note.aliases,
+        outboundLinks: note.urls,
+      },
+    });
+
+    for (const tag of note.tags) {
+      const tagId = stableId('tag', tag);
+      builder.upsertNode({
+        id: tagId,
+        label: `#${tag}`,
+        type: 'tag',
+        sourceId: SOURCE_ID,
+        metadata: { tag },
+      });
+      builder.upsertEdge({ source: noteId, target: tagId, relation: 'TAGGED', weight: 0.5 });
+    }
+
+    for (const link of note.wikilinks) {
+      const targetId = noteTitleToId.get(link.toLowerCase());
+      if (targetId && targetId !== noteId) {
+        builder.upsertEdge({ source: noteId, target: targetId, relation: 'LINKS_TO', weight: 0.6 });
+      }
+    }
+  }
+
+  return { nodes: builder.nodes, edges: builder.edges, sourceId: SOURCE_ID };
+}
+
+// ── Daily-note generator ──────────────────────────────────────────────────────
+
+function formatDateYMD(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function adjustDay(date, delta) {
+  const d = new Date(date);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d;
+}
+
+function longDate(date) {
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/**
+ * Generate today's (or a given date's) daily note as a `note` graph node and
+ * its associated `tag` nodes. Matches the structure produced by
+ * scripts/ingest-daily-note.mjs but skips the filesystem write — the rendered
+ * Markdown body is stored in `metadata.body` instead.
+ *
+ * @param {{ date?: string, tags?: string[]|string }} opts
+ * @returns {{ nodes: object[], edges: object[], sourceId: string }}
+ */
+export function buildDailyNote({ date, tags } = {}) {
+  const SOURCE_ID = 'markdown';
+  const builder = new GraphBuilder();
+
+  let dt;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((date || '').trim());
+  if (m) dt = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`);
+  else dt = new Date();
+
+  const dateStr = formatDateYMD(dt);
+  const prevStr = formatDateYMD(adjustDay(dt, -1));
+  const nextStr = formatDateYMD(adjustDay(dt, 1));
+
+  const tagList = (Array.isArray(tags)
+    ? tags
+    : String(tags || 'daily,journal').split(',')
+  ).map((t) => String(t).trim().toLowerCase()).filter(Boolean);
+
+  const tagsYaml = tagList.map((t) => `  - ${t}`).join('\n');
+  const body = `---
+title: "${longDate(dt)}"
+date: ${dateStr}
+tags:
+${tagsYaml}
+---
+
+# ${longDate(dt)}
+
+[[${prevStr}]] ← today → [[${nextStr}]]
+
+---
+
+## 📅 Meetings & Events
+
+- 
+
+---
+
+## 💡 Ideas
+
+- 
+
+---
+
+## 📓 Journal
+
+> Write freely here…
+
+---
+
+## ✅ Tasks
+
+- [ ] 
+
+---
+
+## 🔗 Links & References
+
+- 
+`;
+
+  const filePath = `daily/${dateStr}.md`;
+  const noteId = stableId('note', filePath);
+  builder.upsertNode({
+    id: noteId,
+    label: longDate(dt),
+    type: 'note',
+    sourceId: SOURCE_ID,
+    createdAt: dt.toISOString(),
+    metadata: {
+      path: filePath,
+      wordCount: body.split(/\s+/).filter(Boolean).length,
+      tags: tagList,
+      daily: true,
+      body,
+    },
+  });
+
+  for (const tag of tagList) {
+    const tagId = stableId('tag', tag);
+    builder.upsertNode({
+      id: tagId,
+      label: `#${tag}`,
+      type: 'tag',
+      sourceId: SOURCE_ID,
+      metadata: { tag },
+    });
+    builder.upsertEdge({ source: noteId, target: tagId, relation: 'TAGGED_WITH', weight: 0.5 });
+  }
+
+  // Wire wikilinks to neighbouring daily notes (if they already exist in the
+  // graph, the Worker-side merge will resolve them; we emit speculative edges
+  // here in case the user is bulk-generating a date range).
+  for (const link of [prevStr, nextStr]) {
+    const targetId = stableId('note', `daily/${link}.md`);
+    builder.upsertEdge({ source: noteId, target: targetId, relation: 'LINKS_TO', weight: 0.6 });
+  }
+
+  return { nodes: builder.nodes, edges: builder.edges, sourceId: SOURCE_ID };
+}
+
+// ── Web-clip ingester (browser fetch) ─────────────────────────────────────────
+
+function extractMetaContent(html, name) {
+  const re = new RegExp(
+    `<meta[^>]+(?:name|property)=["']${name}["'][^>]*content=["']([^"']+)["']`,
+    'i',
+  );
+  const m = re.exec(html) ||
+    new RegExp(
+      `<meta[^>]+content=["']([^"']+)["'][^>]*(?:name|property)=["']${name}["']`,
+      'i',
+    ).exec(html);
+  return m ? m[1].trim() : null;
+}
+
+function stripPageHtml(html) {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script\b)<[^<]*)*<\/script[^>]*>/gi, ' ')
+    .replace(/<style\b[^<]*(?:(?!<\/style\b)<[^<]*)*<\/style[^>]*>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&');
+}
+
+function extractPageBody(html) {
+  const articleMatch =
+    /<article[\s\S]*?>([\s\S]*?)<\/article>/i.exec(html) ||
+    /<main[\s\S]*?>([\s\S]*?)<\/main>/i.exec(html);
+  if (articleMatch) return stripPageHtml(articleMatch[1]);
+  const paragraphs = [];
+  const pRe = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+  let m;
+  while ((m = pRe.exec(html)) !== null) {
+    const text = stripPageHtml(m[1]);
+    if (text.length > 50) paragraphs.push(text);
+  }
+  if (paragraphs.length > 0) return paragraphs.join(' ');
+  return stripPageHtml(html);
+}
+
+/**
+ * Clip a list of URLs by fetching them from the browser. Mirrors
+ * scripts/ingest-webclip.mjs but uses `fetch()` directly — which means the
+ * target site must allow cross-origin reads (or be on the same origin as
+ * the Graph SPA). Sites that don't set permissive CORS headers will fail
+ * for that URL only; other URLs in the same batch still succeed.
+ *
+ * @param {string[]} urls
+ * @returns {Promise<{ nodes: object[], edges: object[], sourceId: string, errors: object[] }>}
+ */
+export async function clipUrls(urls) {
+  const SOURCE_ID = 'web_clip';
+  const MAX_BODY_CHARS = 500;
+  const builder = new GraphBuilder();
+  const errors = [];
+
+  const list = (Array.isArray(urls) ? urls : String(urls || '').split(/[\n,]/))
+    .map((u) => String(u).trim())
+    .filter((u) => u && /^https?:\/\//i.test(u));
+
+  for (const url of [...new Set(list)]) {
+    let html;
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      html = await res.text();
+    } catch (err) {
+      errors.push({ url, error: err.message || String(err) });
+      continue;
+    }
+
+    let title;
+    const ogTitle = extractMetaContent(html, 'og:title');
+    if (ogTitle) {
+      title = ogTitle;
+    } else {
+      const tm = /<title[^>]*>([^<]+)<\/title>/i.exec(html);
+      title = tm ? tm[1].trim() : new URL(url).hostname;
+    }
+
+    const description =
+      extractMetaContent(html, 'og:description') ||
+      extractMetaContent(html, 'description') ||
+      null;
+
+    const keywordsRaw = extractMetaContent(html, 'keywords');
+    const keywords = keywordsRaw
+      ? keywordsRaw
+          .split(',')
+          .map((k) => k.trim().toLowerCase())
+          .filter((k) => k.length > 0 && k.length < 40)
+      : [];
+
+    const bodyText = extractPageBody(html);
+    const excerpt = (description || bodyText).slice(0, MAX_BODY_CHARS);
+
+    const nodeId = stableId(SOURCE_ID, url);
+    builder.upsertNode({
+      id: nodeId,
+      label: (title || url).slice(0, 200),
+      type: 'bookmark',
+      sourceId: SOURCE_ID,
+      sourceUrl: url,
+      createdAt: new Date().toISOString(),
+      metadata: { url, excerpt, keywords },
+    });
+
+    for (const keyword of keywords) {
+      const tagId = stableId('tag', keyword);
+      builder.upsertNode({
+        id: tagId,
+        label: `#${keyword}`,
+        type: 'tag',
+        sourceId: SOURCE_ID,
+        metadata: { tag: keyword },
+      });
+      builder.upsertEdge({ source: nodeId, target: tagId, relation: 'TAGGED_WITH', weight: 0.4 });
+    }
+  }
+
+  return { nodes: builder.nodes, edges: builder.edges, sourceId: SOURCE_ID, errors };
+}
+
+// ── Claude Code session-files parser ──────────────────────────────────────────
+
+function ccExtractFilePaths(input) {
+  const out = [];
+  if (!input || typeof input !== 'object') return out;
+  for (const v of Object.values(input)) {
+    if (typeof v === 'string' && (v.startsWith('/') || /^[A-Za-z]:[\\/]/.test(v))) {
+      out.push(v);
+    }
+  }
+  return out;
+}
+
+function ccSessionLabel(session) {
+  if (session.aiTitle) return String(session.aiTitle).slice(0, 120);
+  if (session.summary) return String(session.summary).slice(0, 120);
+  if (session.firstUserText) return String(session.firstUserText).slice(0, 120);
+  return session.sessionId || 'Claude Code session';
+}
+
+async function ccReadSession(file) {
+  let text;
+  try { text = await file.text(); } catch { return null; }
+  const lines = text.split('\n').filter(Boolean);
+  if (lines.length === 0) return null;
+
+  const tools = new Map();
+  const files = new Map();
+  const models = new Map();
+  let messageCount = 0;
+  let firstTimestamp = null;
+  let lastTimestamp = null;
+  let firstUserText = null;
+  let summary = null;
+  let aiTitle = null;
+  let sessionId = null;
+  let cwd = null;
+  let gitBranch = null;
+
+  for (const line of lines) {
+    let entry;
+    try { entry = JSON.parse(line); } catch { continue; }
+
+    sessionId = sessionId || entry.sessionId;
+    cwd = cwd || entry.cwd;
+    gitBranch = gitBranch || entry.gitBranch;
+
+    if (entry.timestamp) {
+      if (!firstTimestamp || entry.timestamp < firstTimestamp) firstTimestamp = entry.timestamp;
+      if (!lastTimestamp  || entry.timestamp > lastTimestamp)  lastTimestamp  = entry.timestamp;
+    }
+
+    if (entry.type === 'summary' && entry.summary) summary = entry.summary;
+    if (entry.type === 'ai-title' && (entry.title || entry.content)) {
+      aiTitle = entry.title || entry.content;
+    }
+
+    if (entry.type !== 'user' && entry.type !== 'assistant') continue;
+    const msg = entry.message;
+    if (!msg || typeof msg !== 'object') continue;
+    messageCount += 1;
+
+    if (entry.type === 'assistant' && msg.model) {
+      models.set(msg.model, (models.get(msg.model) || 0) + 1);
+    }
+
+    const content = msg.content;
+    if (typeof content === 'string') {
+      if (entry.type === 'user' && !firstUserText) firstUserText = content;
+      continue;
+    }
+    if (!Array.isArray(content)) continue;
+
+    for (const block of content) {
+      if (!block || typeof block !== 'object') continue;
+      if (block.type === 'text' && entry.type === 'user' && !firstUserText) {
+        firstUserText = block.text;
+      }
+      if (block.type === 'tool_use') {
+        const name = block.name;
+        if (name) tools.set(name, (tools.get(name) || 0) + 1);
+        for (const path of ccExtractFilePaths(block.input)) {
+          files.set(path, (files.get(path) || 0) + 1);
+        }
+      }
+    }
+  }
+
+  return {
+    path: file.webkitRelativePath || file.name,
+    sessionId,
+    cwd,
+    gitBranch,
+    messageCount,
+    firstTimestamp,
+    lastTimestamp,
+    firstUserText,
+    summary,
+    aiTitle,
+    tools,
+    files,
+    models,
+  };
+}
+
+/**
+ * Parse a folder of Claude Code session JSONL files (typically uploaded from
+ * `~/.claude/projects/<project>/`).  Mirrors scripts/ingest-claude-code.mjs:
+ * groups sessions by their `cwd` into `project` nodes, and emits
+ * `conversation`, `model`, `tool`, and `file` nodes with the same edge shapes.
+ *
+ * @param {FileList|File[]} files
+ * @returns {Promise<{ nodes: object[], edges: object[], sourceId: string }>}
+ */
+export async function parseClaudeCodeSessions(files) {
+  const SOURCE_ID = 'claude_code';
+  const builder = new GraphBuilder();
+
+  const list = Array.from(files || []).filter((f) => /\.jsonl$/i.test(f.name));
+  if (list.length === 0) return { nodes: [], edges: [], sourceId: SOURCE_ID };
+
+  // Group sessions by their immediate parent folder name (which is what
+  // ~/.claude/projects/<folder>/*.jsonl looks like). Falls back to a single
+  // bucket when uploads come in flat.
+  const buckets = new Map();
+  for (const file of list) {
+    const rel = file.webkitRelativePath || file.name;
+    const parts = rel.split('/');
+    const folder = parts.length > 1 ? parts[parts.length - 2] : '_uploaded';
+    if (!buckets.has(folder)) buckets.set(folder, []);
+    buckets.get(folder).push(file);
+  }
+
+  for (const [folderName, bucketFiles] of buckets) {
+    const sessionsAggregate = [];
+    let projectCwd = null;
+    for (const f of bucketFiles) {
+      const session = await ccReadSession(f);
+      if (!session) continue;
+      if (session.cwd) projectCwd = session.cwd;
+      sessionsAggregate.push(session);
+    }
+    if (sessionsAggregate.length === 0) continue;
+
+    const projectKey = projectCwd || folderName;
+    const projectId = stableId('project', projectKey);
+    const projectLabel = projectCwd
+      ? projectCwd.split('/').filter(Boolean).pop() || projectCwd
+      : folderName.replace(/^-+/, '').replace(/-+/g, '/');
+
+    builder.upsertNode({
+      id: projectId,
+      label: projectLabel,
+      type: 'project',
+      sourceId: SOURCE_ID,
+      metadata: {
+        cwd: projectCwd || null,
+        folder: folderName,
+        sessions: sessionsAggregate.length,
+        messages: sessionsAggregate.reduce((s, x) => s + x.messageCount, 0),
+      },
+    });
+
+    for (const session of sessionsAggregate) {
+      const convId = stableId('conversation', session.sessionId || session.path);
+      builder.upsertNode({
+        id: convId,
+        label: ccSessionLabel(session),
+        type: 'conversation',
+        sourceId: SOURCE_ID,
+        createdAt: session.firstTimestamp,
+        metadata: {
+          sessionId: session.sessionId,
+          messages: session.messageCount,
+          firstTimestamp: session.firstTimestamp,
+          lastTimestamp: session.lastTimestamp,
+          gitBranch: session.gitBranch,
+          cwd: session.cwd,
+          path: session.path,
+        },
+      });
+      builder.upsertEdge({ source: projectId, target: convId, relation: 'CONTAINS', weight: 0.6 });
+
+      for (const [model, count] of session.models) {
+        const modelId = stableId('model', model);
+        builder.upsertNode({
+          id: modelId,
+          label: model,
+          type: 'model',
+          sourceId: SOURCE_ID,
+          metadata: { provider: 'anthropic' },
+        });
+        builder.upsertEdge({
+          source: convId,
+          target: modelId,
+          relation: 'USED_MODEL',
+          weight: Math.min(1, 0.3 + count / 50),
+          metadata: { count },
+        });
+      }
+
+      for (const [tool, count] of session.tools) {
+        const toolId = stableId('tool', tool);
+        builder.upsertNode({
+          id: toolId,
+          label: tool,
+          type: 'tool',
+          sourceId: SOURCE_ID,
+          metadata: { calls: count },
+        });
+        builder.upsertEdge({
+          source: convId,
+          target: toolId,
+          relation: 'USED',
+          weight: Math.min(1, 0.2 + count / 25),
+          metadata: { count },
+        });
+      }
+
+      for (const [path, count] of session.files) {
+        const fileId = stableId('file', path);
+        const fileBase = path.split('/').filter(Boolean).pop() || path;
+        builder.upsertNode({
+          id: fileId,
+          label: fileBase,
+          type: 'file',
+          sourceId: SOURCE_ID,
+          metadata: { path, touches: count },
+        });
+        builder.upsertEdge({
+          source: convId,
+          target: fileId,
+          relation: 'TOUCHED',
+          weight: Math.min(1, 0.2 + count / 10),
+          metadata: { count },
+        });
+        if (projectCwd && path.startsWith(projectCwd)) {
+          builder.upsertEdge({
+            source: fileId,
+            target: projectId,
+            relation: 'PART_OF',
+            weight: 0.4,
+          });
         }
       }
     }

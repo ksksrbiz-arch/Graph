@@ -7,6 +7,10 @@ import {
   parseBookmarks,
   parseEnex,
   parseClaudeExport,
+  parseMarkdownFiles,
+  buildDailyNote,
+  clipUrls,
+  parseClaudeCodeSessions,
   ingestZotero,
   ingestGithub,
 } from '../ingest-client.js';
@@ -25,9 +29,30 @@ const KNOWN_CONNECTORS = [
     icon: '🤖',
     description: 'Conversations from ~/.claude/projects (sessions, tool calls, files touched).',
     enabled: true,
-    localOnly: true,
+    localOnly: false,
     ingestSlug: 'claude-code',
-    wizard: { fields: [] }, // no config — just run it
+    clientIngest: async ({ fileMap }) => {
+      const files = fileMap['_claude_code_files'];
+      if (!files || files.length === 0) {
+        throw new Error('Select your ~/.claude/projects folder (or any .jsonl session files)');
+      }
+      return parseClaudeCodeSessions(files);
+    },
+    wizard: {
+      fields: [
+        {
+          name: '_claude_code_files',
+          envVar: 'CLAUDE_CODE_FILES',
+          label: 'Claude Code session files (.jsonl)',
+          type: 'multifile',
+          accept: '.jsonl',
+          webkitdirectory: true,
+          required: false,
+          dropLabel: 'Drop your ~/.claude/projects folder here, or click to pick .jsonl files',
+          hint: 'Browser-only mode: drop the projects/ folder (or individual .jsonl session files). Local dev server can ingest from disk automatically.',
+        },
+      ],
+    },
   },
   {
     id: 'git',
@@ -45,7 +70,7 @@ const KNOWN_CONNECTORS = [
           label: 'Scan directories',
           type: 'text',
           placeholder: '/home/user/projects:/home/user/work',
-          hint: 'Colon-separated list of directories to scan for git repos. Leave blank to use defaults.',
+          hint: 'Colon-separated list of directories to scan for git repos. Requires the local dev server (the browser cannot read local git history). For cloud-hosted repos, use the GitHub connector instead.',
         },
       ],
     },
@@ -56,17 +81,35 @@ const KNOWN_CONNECTORS = [
     icon: '📝',
     description: 'Notes from an Obsidian vault or any local Markdown directory.',
     enabled: true,
-    localOnly: true,
+    localOnly: false,
     ingestSlug: 'markdown',
+    clientIngest: async ({ fileMap }) => {
+      const files = fileMap['_markdown_files'];
+      if (!files || files.length === 0) {
+        throw new Error('Select a notes folder or one or more .md files');
+      }
+      return parseMarkdownFiles(files);
+    },
     wizard: {
       fields: [
         {
+          name: '_markdown_files',
+          envVar: 'NOTES_FILES',
+          label: 'Markdown files (or vault folder)',
+          type: 'multifile',
+          accept: '.md',
+          webkitdirectory: true,
+          required: false,
+          dropLabel: 'Drop a notes folder or .md files here, or click to browse',
+          hint: 'Browser-only mode: drop your Obsidian vault (or any folder of .md files). Local dev server reads from NOTES_DIR on disk.',
+        },
+        {
           name: 'NOTES_DIR',
           envVar: 'NOTES_DIR',
-          label: 'Notes directory',
+          label: 'Notes directory (local server only)',
           type: 'text',
           placeholder: '~/notes',
-          hint: 'Path to your Markdown notes folder. Leave blank to auto-detect ~/notes, ~/Documents/notes, ~/Obsidian.',
+          hint: 'Used only when running via the local dev server. Leave blank to auto-detect ~/notes, ~/Documents/notes, ~/Obsidian.',
         },
       ],
     },
@@ -129,8 +172,20 @@ const KNOWN_CONNECTORS = [
     icon: '🔖',
     description: 'Clip web pages by URL — strips ads/nav, extracts article body, creates bookmark nodes.',
     enabled: true,
-    localOnly: true,
+    localOnly: false,
     ingestSlug: 'webclip',
+    clientIngest: async ({ env }) => {
+      const raw = env.WEBCLIP_URLS || '';
+      const urls = raw.split(/[\n,]/).map((u) => u.trim()).filter(Boolean);
+      const result = await clipUrls(urls);
+      if (result.errors?.length && result.nodes.length === 0) {
+        throw new Error(
+          `All ${result.errors.length} URL(s) failed to fetch — most likely CORS-blocked. ` +
+          `Try sites that allow cross-origin reads, or run via the local dev server.`,
+        );
+      }
+      return result;
+    },
     wizard: {
       fields: [
         {
@@ -140,7 +195,7 @@ const KNOWN_CONNECTORS = [
           type: 'urls-textarea',
           required: true,
           placeholder: 'https://example.com/article\nhttps://another.com/post',
-          hint: 'One URL per line. Each page will be fetched and ingested as a bookmark node.',
+          hint: 'One URL per line. In browser-only mode, target sites must allow cross-origin reads (CORS); sites that don\'t will be skipped. The local dev server has no CORS limitation.',
         },
       ],
     },
@@ -180,8 +235,12 @@ const KNOWN_CONNECTORS = [
     icon: '📅',
     description: 'Generate a structured daily Markdown note and ingest it immediately.',
     enabled: true,
-    localOnly: true,
+    localOnly: false,
     ingestSlug: 'daily-note',
+    clientIngest: async ({ env }) => buildDailyNote({
+      date: env.DAILY_DATE || undefined,
+      tags: env.DAILY_TAGS || undefined,
+    }),
     wizard: {
       fields: [
         {
@@ -194,10 +253,10 @@ const KNOWN_CONNECTORS = [
         {
           name: 'DAILY_NOTES_DIR',
           envVar: 'DAILY_NOTES_DIR',
-          label: 'Notes directory (optional)',
+          label: 'Notes directory (local server only)',
           type: 'text',
           placeholder: '~/Documents/notes/daily',
-          hint: 'Where to write the daily note. Leave blank to auto-detect.',
+          hint: 'Used only when running via the local dev server (writes the .md file to disk). Browser-only mode emits a graph node directly.',
         },
         {
           name: 'DAILY_TAGS',

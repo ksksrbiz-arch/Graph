@@ -268,8 +268,8 @@ function mountWizard(connector, onSuccess) {
 
     for (const field of fields) {
       if (field.type === 'oauth') continue;
-      if (field.type === 'file') {
-        if (fileMap[field.name]) {
+      if (field.type === 'file' || field.type === 'multifile') {
+        if (fileMap[field.name] && field.type === 'file') {
           fileField = { file: fileMap[field.name], envVar: field.envVar };
         }
         continue;
@@ -367,19 +367,35 @@ function buildField(field, fileMap) {
       placeholder: field.placeholder || '',
     });
     if (field.default) input.value = field.default;
-  } else if (field.type === 'file') {
-    input = el('input', {
+  } else if (field.type === 'file' || field.type === 'multifile') {
+    const isMulti = field.type === 'multifile';
+    const inputAttrs = {
       id: `wiz-field-${field.name}`,
       type: 'file',
       class: 'wiz-input wiz-file-input',
       accept: field.accept || '',
-    });
+    };
+    if (isMulti) inputAttrs.multiple = '';
+    input = el('input', inputAttrs);
+    if (isMulti && field.webkitdirectory) {
+      input.setAttribute('webkitdirectory', '');
+      input.setAttribute('directory', '');
+    }
     input.addEventListener('change', () => {
-      if (input.files?.[0]) fileMap[field.name] = input.files[0];
+      if (!input.files?.length) return;
+      if (isMulti) {
+        fileMap[field.name] = Array.from(input.files);
+        const dz = wrap.querySelector('.wiz-drop-zone span');
+        if (dz) dz.textContent = `✓ ${input.files.length} file(s) selected`;
+      } else {
+        fileMap[field.name] = input.files[0];
+      }
     });
     // Drag-and-drop zone
     const dropZone = el('div', { class: 'wiz-drop-zone', 'aria-hidden': 'true' },
-      el('span', {}, field.dropLabel || `Drop ${field.accept || 'file'} here or click to browse`),
+      el('span', {}, field.dropLabel || (isMulti
+        ? `Drop ${field.accept || 'files'} here or click to browse`
+        : `Drop ${field.accept || 'file'} here or click to browse`)),
     );
     dropZone.addEventListener('click', () => input.click());
     dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
@@ -387,10 +403,14 @@ function buildField(field, fileMap) {
     dropZone.addEventListener('drop', (e) => {
       e.preventDefault();
       dropZone.classList.remove('drag-over');
-      const file = e.dataTransfer?.files?.[0];
-      if (file) {
-        fileMap[field.name] = file;
-        dropZone.querySelector('span').textContent = `✓ ${file.name}`;
+      const dropped = e.dataTransfer?.files;
+      if (!dropped?.length) return;
+      if (isMulti) {
+        fileMap[field.name] = Array.from(dropped);
+        dropZone.querySelector('span').textContent = `✓ ${dropped.length} file(s) selected`;
+      } else {
+        fileMap[field.name] = dropped[0];
+        dropZone.querySelector('span').textContent = `✓ ${dropped[0].name}`;
       }
     });
     wrap.appendChild(dropZone);

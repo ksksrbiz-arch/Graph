@@ -59,7 +59,7 @@
   // Comma-separated user ids that scheduled thinks run for. Same allowlist
   // shape as PUBLIC_INGEST_USER_IDS — typically equal or a subset.
   "vars": {
-    "PUBLIC_INGEST_USER_IDS": "local",
-    "AUTONOMY_USER_IDS": "local"
+    "PUBLIC_INGEST_USER_IDS": "local,ksksrbiz-arch",
+    "AUTONOMY_USER_IDS": "local,ksksrbiz-arch"
   }
 }
