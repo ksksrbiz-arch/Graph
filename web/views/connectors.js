@@ -1,8 +1,9 @@
 import { state, subscribe } from '../state.js';
 import { fmtDate, el, showToast } from '../util.js';
-import { runIngest, loadGraph, localIngestSupported, publicIngestAvailable } from '../data.js';
+import { loadGraph, localIngestSupported, publicIngestAvailable, runIngestWithParams, uploadFileIngest, ingestPublicGraph, scheduleAutoIngest } from '../data.js';
 import { setGraph } from '../state.js';
 import { openWizard } from './ingest-wizard.js';
+import { loadSavedConfig, loadSchedule, saveSchedule, SCHEDULE_OPTIONS } from './connector-config.js';
 import {
   parseBookmarks,
   parseEnex,
@@ -14,6 +15,31 @@ import {
   ingestZotero,
   ingestGithub,
 } from '../ingest-client.js';
+
+/** True when all required text/password/number/date/etc. fields have saved
+ *  values, or the connector has no required non-file non-oauth fields. */
+function isQuickRunnable(connector, saved) {
+  const fields = connector.wizard?.fields || [];
+  const required = fields.filter(
+    (f) => f.required && f.type !== 'file' && f.type !== 'multifile' && f.type !== 'oauth',
+  );
+  if (required.length === 0) return true;
+  return required.every((f) => (saved[f.envVar] || saved[f.name] || '').trim());
+}
+
+/**
+ * True when every *required* field is a file/multifile upload (no text input needed at run time).
+ * Returns false when there are no required fields at all — those connectors are quick-runnable,
+ * not file-only. The two paths are mutually exclusive in buildCard.
+ */
+function isFileOnly(connector) {
+  const fields = connector.wizard?.fields || [];
+  const hasAnyRequired = fields.some((f) => f.required);
+  if (!hasAnyRequired) return false;
+  return fields.every(
+    (f) => !f.required || f.type === 'file' || f.type === 'multifile',
+  );
+}
 
 // ── Connector definitions ─────────────────────────────────────────────────────
 // Each connector may have a `wizard.fields` array that drives the wizard UI.
@@ -407,11 +433,12 @@ async function render() {
 
   for (const c of KNOWN_CONNECTORS) {
     grid.appendChild(buildCard(c, sources.get(c.id), isLocal, isPublic));
+    applySchedule(c, isLocal, isPublic);
   }
 }
 
 function buildCard(connector, source, isLocal, isPublic) {
-  const card = el('div', { class: 'card connector-card' });
+  const card = el('div', { class: 'card connector-card', 'data-connector-id': connector.id });
 
   // Header row
   const cardHead = el('div', { class: 'connector-card-head' });
@@ -440,43 +467,21 @@ function buildCard(connector, source, isLocal, isPublic) {
     card.appendChild(el('div', { class: 'meta connector-never-run' }, 'Not yet ingested'));
   }
 
-  // Log output area (shown during run)
-  const log = el('div', { class: 'log hidden' });
-  card.appendChild(log);
+  // Inline status line (shown during / after inline run)
+  const inlineStatus = el('div', { class: 'connector-inline-status' });
+  card.appendChild(inlineStatus);
 
   // Action buttons
   const actions = el('div', { class: 'actions' });
-
-  const btnRun = el('button', { class: 'primary', type: 'button' }, 'Configure & Run');
-  btnRun.addEventListener('click', () => {
-    openWizard({
-      connector,
-      onSuccess: async () => {
-        try {
-          const fresh = await loadGraph();
-          setGraph(fresh);
-        } catch { /* non-fatal */ }
-      },
-    });
-  });
-
-  // Quick-run button for zero-config connectors (no required fields)
-  const hasRequiredFields = (connector.wizard?.fields || []).some(
-    (f) => f.required && f.type !== 'oauth',
-  );
-  if (!hasRequiredFields && connector.wizard?.fields?.length === 0) {
-    const btnQuick = el('button', { type: 'button' }, 'Quick Run');
-    btnQuick.addEventListener('click', () => quickRun(connector, btnQuick, log));
-    actions.appendChild(btnQuick);
-  }
-
-  actions.appendChild(btnRun);
   card.appendChild(actions);
 
-  // Availability indicator — disable button only when truly unavailable
   const hasClientIngest = typeof connector.clientIngest === 'function';
   const canRun = isLocal || (!connector.localOnly && isPublic && hasClientIngest);
+  const saved = loadSavedConfig(connector.id);
+
   if (!canRun) {
+    // Unavailable — show disabled button + warning
+    const btnRun = el('button', { class: 'primary', type: 'button' }, 'Configure & Run');
     btnRun.disabled = true;
     if (connector.localOnly) {
       btnRun.title = 'Start the local dev server first: npm run start';
@@ -485,40 +490,227 @@ function buildCard(connector, source, isLocal, isPublic) {
       btnRun.title = 'No ingest API available — start the local dev server or configure an online API';
       card.appendChild(el('p', { class: 'meta connector-local-warn' }, '⚠ Requires local dev server or online API'));
     }
+    actions.appendChild(btnRun);
+  } else if (isQuickRunnable(connector, saved)) {
+    // ── 1-click: ▶ Run directly on the card ─────────────────────────────────
+    const btnRun = el('button', { class: 'primary connector-btn-run', type: 'button' }, '▶ Run');
+    btnRun.addEventListener('click', () => inlineRun(connector, btnRun, inlineStatus, isLocal, isPublic));
+    actions.appendChild(btnRun);
+
+    const btnCfg = el('button', { class: 'connector-btn-cfg', type: 'button', title: 'Open configuration wizard' }, '⚙ Configure');
+    btnCfg.addEventListener('click', () => openWizard({ connector }));
+    actions.appendChild(btnCfg);
+
+    // Auto-schedule picker (only for non-interactive connectors)
+    card.appendChild(buildAutoToggle(connector, isLocal, isPublic));
+  } else if (isFileOnly(connector)) {
+    // ── 2-click: pick file → run immediately ────────────────────────────────
+    const fileField = (connector.wizard?.fields || []).find(
+      (f) => f.required && (f.type === 'file' || f.type === 'multifile'),
+    );
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.style.display = 'none';
+    fileInput.accept = fileField?.accept || '';
+    if (fileField?.type === 'multifile') {
+      fileInput.multiple = true;
+      if (fileField.webkitdirectory) {
+        fileInput.setAttribute('webkitdirectory', '');
+        fileInput.setAttribute('directory', '');
+      }
+    }
+    card.appendChild(fileInput);
+
+    const btnRun = el('button', { class: 'primary connector-btn-run', type: 'button' }, '📁 Pick & Run');
+    btnRun.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      if (!fileInput.files?.length) return;
+      const fileMap = {
+        [fileField.name]: fileField.type === 'multifile'
+          ? Array.from(fileInput.files)
+          : fileInput.files[0],
+      };
+      inlineRunWithFiles(connector, btnRun, inlineStatus, fileMap, isLocal, isPublic);
+    });
+    actions.appendChild(btnRun);
+
+    const btnCfg = el('button', { class: 'connector-btn-cfg', type: 'button', title: 'Open configuration wizard' }, '⚙ Configure');
+    btnCfg.addEventListener('click', () => openWizard({ connector }));
+    actions.appendChild(btnCfg);
+  } else {
+    // ── Needs first-time configuration ───────────────────────────────────────
+    const btnRun = el('button', { class: 'primary', type: 'button' }, 'Configure & Run');
+    btnRun.addEventListener('click', () => openWizard({ connector }));
+    actions.appendChild(btnRun);
   }
 
   return card;
 }
 
-// ── Quick-run (no wizard, no config needed) ───────────────────────────────────
+// ── Inline run (no modal, result shown directly on card) ──────────────────────
 
-async function quickRun(connector, btn, log) {
-  const isLocal = await localIngestSupported();
-  if (!isLocal) {
-    showToast('Local dev server not running. Start with: npm run start', 'error');
-    return;
-  }
+/** Run a non-file connector inline using saved/default config. */
+async function inlineRun(connector, btn, statusEl, isLocal, isPublic) {
+  const saved = loadSavedConfig(connector.id);
+  const hasClientIngest = typeof connector.clientIngest === 'function';
+
   btn.disabled = true;
-  const orig = btn.textContent;
+  const origText = btn.textContent;
   btn.textContent = 'Running…';
-  log.classList.remove('hidden');
-  log.textContent = '';
+  statusEl.textContent = '⏳ Running…';
+  statusEl.className = 'connector-inline-status connector-inline-running';
+
+  // Build env from saved config + field defaults
+  const env = {};
+  for (const f of connector.wizard?.fields || []) {
+    if (f.type === 'file' || f.type === 'multifile' || f.type === 'oauth') continue;
+    const val = (saved[f.envVar] || saved[f.name] || f.default || '').trim();
+    if (val && f.envVar) env[f.envVar] = val;
+  }
+
+  let res;
   try {
-    const result = await runIngest(connector.ingestSlug);
-    log.textContent = (result.stdout || '') + (result.stderr ? '\n' + result.stderr : '');
-    if (result.ok) {
-      showToast(`${connector.name} ingest complete`, 'success');
-      const fresh = await loadGraph();
-      setGraph(fresh);
+    if (isLocal) {
+      res = await runIngestWithParams(connector.ingestSlug, env);
+    } else if (!connector.localOnly && isPublic && hasClientIngest) {
+      const parsed = await connector.clientIngest({ env, fileMap: {} });
+      res = await ingestPublicGraph({
+        nodes: parsed.nodes,
+        edges: parsed.edges,
+        sourceId: parsed.sourceId || connector.id,
+      });
     } else {
-      showToast(`${connector.name} ingest failed (${result.status})`, 'error');
+      res = { ok: false, error: 'Ingest unavailable' };
     }
   } catch (err) {
-    log.textContent = String(err);
-    showToast(`Ingest error: ${err.message}`, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = orig;
+    res = { ok: false, error: err.message };
+  }
+
+  btn.disabled = false;
+  btn.textContent = origText;
+  applyInlineResult(connector, statusEl, res);
+}
+
+/** Run a file-only connector inline after the user picks a file. */
+async function inlineRunWithFiles(connector, btn, statusEl, fileMap, isLocal, isPublic) {
+  const hasClientIngest = typeof connector.clientIngest === 'function';
+
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = 'Running…';
+  statusEl.textContent = '⏳ Running…';
+  statusEl.className = 'connector-inline-status connector-inline-running';
+
+  let res;
+  try {
+    if (isLocal) {
+      const fileField = (connector.wizard?.fields || []).find(
+        (f) => f.required && (f.type === 'file' || f.type === 'multifile'),
+      );
+      if (fileField) {
+        const file = Array.isArray(fileMap[fileField.name])
+          ? fileMap[fileField.name][0]
+          : fileMap[fileField.name];
+        res = await uploadFileIngest(connector.ingestSlug, file, fileField.envVar, {});
+      } else {
+        res = await runIngestWithParams(connector.ingestSlug, {});
+      }
+    } else if (!connector.localOnly && isPublic && hasClientIngest) {
+      const parsed = await connector.clientIngest({ env: {}, fileMap });
+      res = await ingestPublicGraph({
+        nodes: parsed.nodes,
+        edges: parsed.edges,
+        sourceId: parsed.sourceId || connector.id,
+      });
+    } else {
+      res = { ok: false, error: 'Ingest unavailable' };
+    }
+  } catch (err) {
+    res = { ok: false, error: err.message };
+  }
+
+  btn.disabled = false;
+  btn.textContent = origText;
+  applyInlineResult(connector, statusEl, res);
+}
+
+function applyInlineResult(connector, statusEl, res) {
+  if (res.ok) {
+    const parts = [
+      res.nodes != null && `${res.nodes} nodes`,
+      res.edges != null && `${res.edges} edges`,
+    ].filter(Boolean);
+    statusEl.textContent = `✓ Done${parts.length ? ` — ${parts.join(', ')}` : ''}`;
+    statusEl.className = 'connector-inline-status connector-inline-ok';
+    showToast(`${connector.name} ingested`, 'success');
+    loadGraph().then(setGraph).catch((err) => console.warn('[ingest] graph reload failed', err));
+  } else {
+    statusEl.textContent = `✗ ${res.error || `Exit ${res.status}`}`;
+    statusEl.className = 'connector-inline-status connector-inline-err';
+    showToast(`${connector.name} failed`, 'error');
   }
 }
 
+// ── Auto-schedule ─────────────────────────────────────────────────────────────
+
+/**
+ * Build a small auto-run schedule picker that sits below the action buttons.
+ * Only shown on quick-runnable connectors (no user input needed at run time).
+ */
+function buildAutoToggle(connector, isLocal, isPublic) {
+  const sched = loadSchedule(connector.id);
+  const currentMs = sched.intervalMs || 0;
+
+  const wrap = el('div', { class: 'connector-auto-wrap' });
+  wrap.appendChild(el('span', { class: 'connector-auto-label' }, '⏱ Auto-run:'));
+
+  const sel = el('select', {
+    class: `connector-auto-select${currentMs ? ' connector-auto-active' : ''}`,
+    title: 'Automatically re-run this connector on a schedule',
+    'aria-label': 'Auto-run schedule',
+  });
+
+  for (const opt of SCHEDULE_OPTIONS) {
+    const o = el('option', { value: String(opt.ms) }, opt.label);
+    if (opt.ms === currentMs) o.selected = true;
+    sel.appendChild(o);
+  }
+
+  sel.addEventListener('change', () => {
+    const ms = Number(sel.value);
+    const cfg = ms > 0 ? { intervalMs: ms } : {};
+    saveSchedule(connector.id, cfg);
+    sel.classList.toggle('connector-auto-active', ms > 0);
+    applySchedule(connector, isLocal, isPublic);
+  });
+
+  wrap.appendChild(sel);
+  return wrap;
+}
+
+/**
+ * Read the saved schedule for a connector and register (or clear) its
+ * auto-ingest timer. Safe to call on every render — idempotent.
+ */
+function applySchedule(connector, isLocal, isPublic) {
+  const sched = loadSchedule(connector.id);
+  scheduleAutoIngest(connector.id, sched.intervalMs || 0, () => {
+    scheduledAutoRun(connector.id, isLocal, isPublic);
+  });
+}
+
+/**
+ * Called by the timer. Finds the live card DOM and runs the connector
+ * inline, skipping if a run is already in progress.
+ */
+function scheduledAutoRun(connectorId, isLocal, isPublic) {
+  const card = document.querySelector(`[data-connector-id="${connectorId}"]`);
+  if (!card) return;
+  const btn = card.querySelector('.connector-btn-run');
+  const statusEl = card.querySelector('.connector-inline-status');
+  if (!btn || btn.disabled || !statusEl) return;
+  const connector = KNOWN_CONNECTORS.find((c) => c.id === connectorId);
+  if (!connector) return;
+  console.info(`[auto-ingest] Scheduled run: ${connector.name}`);
+  inlineRun(connector, btn, statusEl, isLocal, isPublic);
+}

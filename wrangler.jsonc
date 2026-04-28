@@ -61,5 +61,9 @@
   "vars": {
     "PUBLIC_INGEST_USER_IDS": "local,ksksrbiz-arch",
     "AUTONOMY_USER_IDS": "local,ksksrbiz-arch"
+    // GitHub OAuth — set as Worker secrets, not plain vars:
+    //   wrangler secret put GITHUB_CLIENT_ID
+    //   wrangler secret put GITHUB_CLIENT_SECRET
+    // Without these two secrets /api/oauth/github/start returns an error page.
   }
 }
