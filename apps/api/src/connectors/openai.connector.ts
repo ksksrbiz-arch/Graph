@@ -141,6 +141,11 @@ export class OpenAIConnector extends BaseConnector {
         yield { externalId: `file:${f.id}`, raw: { kind: 'file', data: f } };
       }
 
+      if (page === MAX_PAGES - 1 && json.has_more) {
+        this.log.warn(
+          `openai files hit fetch ceiling (${MAX_PAGES * PAGE_SIZE}); remaining items deferred to the next sync`,
+        );
+      }
       if (crossedSince || !json.has_more || !json.last_id) return;
       if (rate.remaining !== undefined && rate.remaining < 5) {
         this.log.warn(`openai rate-limit low (${rate.remaining}); stopping files`);
@@ -189,6 +194,11 @@ export class OpenAIConnector extends BaseConnector {
         };
       }
 
+      if (page === MAX_PAGES - 1 && json.has_more) {
+        this.log.warn(
+          `openai assistants hit fetch ceiling (${MAX_PAGES * PAGE_SIZE}); remaining items deferred to the next sync`,
+        );
+      }
       if (crossedSince || !json.has_more || !json.last_id) return;
       if (rate.remaining !== undefined && rate.remaining < 5) {
         this.log.warn(

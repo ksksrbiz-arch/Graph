@@ -531,7 +531,7 @@ async function readError(res: Response): Promise<Error> {
 }
 
 function optionalMetadata(
-  input: Record<string, string | null>,
+  input: Record<string, string | null | undefined>,
 ): Record<string, string> | undefined {
   const entries = Object.entries(input).filter((entry): entry is [string, string] => Boolean(entry[1]?.trim()));
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;

@@ -558,7 +558,3 @@ export const CONNECTOR_CATALOG = [
     ctaLabel: 'Connect',
   },
 ] as const satisfies readonly ConnectorCatalogEntry[];
-
-export const IMPLEMENTED_CONNECTOR_IDS = CONNECTOR_CATALOG.filter(
-  (connector) => connector.availability === 'available',
-).map((connector) => connector.id);
