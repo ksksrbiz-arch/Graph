@@ -95,6 +95,8 @@ export const CONNECTOR_IDS = [
   'zotero',
   'evernote',
   'web_clip',
+  'openai',
+  'anthropic',
 ] as const;
 
 export type ConnectorId = (typeof CONNECTOR_IDS)[number];

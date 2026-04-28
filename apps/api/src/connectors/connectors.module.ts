@@ -7,11 +7,13 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { OAuthModule } from '../oauth/oauth.module';
 import { SyncModule } from '../sync/sync.module';
+import { AnthropicConnector } from './anthropic.connector';
 import { ConnectorRegistry } from './connector-registry';
 import { ConnectorsController } from './connectors.controller';
 import { GitHubConnector } from './github.connector';
 import { GoogleCalendarConnector } from './google-calendar.connector';
 import { NotionConnector } from './notion.connector';
+import { OpenAIConnector } from './openai.connector';
 import { ZoteroConnector } from './zotero.connector';
 
 @Module({
@@ -22,6 +24,8 @@ import { ZoteroConnector } from './zotero.connector';
     GoogleCalendarConnector,
     NotionConnector,
     ZoteroConnector,
+    OpenAIConnector,
+    AnthropicConnector,
     ConnectorRegistry,
   ],
   exports: [ConnectorRegistry],

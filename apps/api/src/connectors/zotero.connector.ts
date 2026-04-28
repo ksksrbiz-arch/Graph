@@ -82,6 +82,7 @@ export class ZoteroConnector extends BaseConnector {
   private readonly log = new Logger(ZoteroConnector.name);
   readonly id = 'zotero' as const;
   readonly oauthScopes = [] as const; // Zotero uses API keys, not OAuth scopes
+  override readonly authType = 'apikey' as const;
 
   constructor(private readonly oauth: OAuthService) {
     super();
