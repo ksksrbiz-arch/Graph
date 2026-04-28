@@ -258,7 +258,10 @@ export function scheduleAutoIngest(connectorId, intervalMs, runFn) {
 /** Cancel the auto-ingest timer for a specific connector. */
 export function clearAutoIngest(connectorId) {
   const tid = _autoIngestTimers.get(connectorId);
-  if (tid != null) { clearInterval(tid); _autoIngestTimers.delete(connectorId); }
+  if (tid != null) {
+    clearInterval(tid);
+    _autoIngestTimers.delete(connectorId);
+  }
 }
 
 /** Cancel every active auto-ingest timer. */

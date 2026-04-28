@@ -27,7 +27,11 @@ function isQuickRunnable(connector, saved) {
   return required.every((f) => (saved[f.envVar] || saved[f.name] || '').trim());
 }
 
-/** True when every required field is a file/multifile upload (no text fields needed). */
+/**
+ * True when every *required* field is a file/multifile upload (no text input needed at run time).
+ * Returns false when there are no required fields at all — those connectors are quick-runnable,
+ * not file-only. The two paths are mutually exclusive in buildCard.
+ */
 function isFileOnly(connector) {
   const fields = connector.wizard?.fields || [];
   const hasAnyRequired = fields.some((f) => f.required);

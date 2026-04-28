@@ -5,7 +5,9 @@ function configKey(id) { return `graph:cc:${id}`; }
 const SCHEDULE_KEY_PREFIX = 'graph:cs:';
 
 export function loadSavedConfig(id) {
-  try { return JSON.parse(localStorage.getItem(configKey(id)) || '{}'); } catch (err) {
+  try {
+    return JSON.parse(localStorage.getItem(configKey(id)) || '{}');
+  } catch (err) {
     console.warn('[connector-config] Failed to parse saved config for', id, err);
     return {};
   }
