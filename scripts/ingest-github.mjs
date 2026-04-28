@@ -22,8 +22,19 @@
  *   GITHUB_REPOS_LIMIT  — max repos to fetch (default: 50).
  *   GITHUB_ITEMS_LIMIT  — max issues+PRs per repo (default: 30).
  *
+ *   GRAPH_API_URL       — base URL of the deployed Worker. When set the
+ *                         ingested nodes/edges are also pushed to
+ *                         POST {GRAPH_API_URL}/api/v1/public/ingest/graph.
+ *                         Example: https://graph.skdev-371.workers.dev
+ *   GRAPH_USER_ID       — userId passed to the Worker ingest endpoint
+ *                         (default: "local").
+ *
  * Usage:
  *   GITHUB_TOKEN=ghp_... node scripts/ingest-github.mjs
+ *
+ *   # Also push to the live Worker:
+ *   GITHUB_TOKEN=ghp_... GRAPH_API_URL=https://graph.skdev-371.workers.dev \
+ *     node scripts/ingest-github.mjs
  */
 
 import { join, resolve } from 'node:path';
@@ -39,6 +50,10 @@ const TOKEN = process.env.GITHUB_TOKEN;
 const LOGIN = process.env.GITHUB_LOGIN || null;
 const REPOS_LIMIT = Number(process.env.GITHUB_REPOS_LIMIT || 50);
 const ITEMS_LIMIT = Number(process.env.GITHUB_ITEMS_LIMIT || 30);
+
+// Optional: push to the live Worker after local save.
+const GRAPH_API_URL = (process.env.GRAPH_API_URL || '').replace(/\/$/, '');
+const GRAPH_USER_ID = (process.env.GRAPH_USER_ID || 'local').trim();
 
 if (!TOKEN) {
   console.error(
@@ -225,6 +240,71 @@ async function main() {
   );
   console.log(`Graph: ${builder.graph.nodes.length} nodes · ${builder.graph.edges.length} edges`);
   console.log(`Wrote ${GRAPH_PATH}`);
+
+  if (GRAPH_API_URL) {
+    await pushToWorker(builder.graph.nodes, builder.graph.edges);
+  }
+}
+
+/**
+ * Push nodes + edges to the live Worker via
+ * POST {GRAPH_API_URL}/api/v1/public/ingest/graph.
+ *
+ * The Worker caps each snapshot at 5 000 nodes / 20 000 edges.  When the
+ * local graph is larger we chunk the nodes (and their incident edges) into
+ * sequential batches so nothing is silently dropped.
+ */
+async function pushToWorker(nodes, edges) {
+  const endpoint = `${GRAPH_API_URL}/api/v1/public/ingest/graph`;
+  const CHUNK = 4_000; // stay well inside the Worker's 5 000-node cap
+
+  const totalChunks = Math.ceil(nodes.length / CHUNK);
+  console.log(
+    `\nPushing to Worker: ${GRAPH_API_URL} (userId=${GRAPH_USER_ID}, ` +
+    `${nodes.length} nodes in ${totalChunks} batch(es))`,
+  );
+
+  for (let i = 0; i < nodes.length; i += CHUNK) {
+    const chunkNodes = nodes.slice(i, i + CHUNK);
+    const chunkNodeIds = new Set(chunkNodes.map((n) => n.id));
+    const chunkEdges = edges.filter(
+      (e) => chunkNodeIds.has(e.source) && chunkNodeIds.has(e.target),
+    );
+
+    const batchNum = Math.floor(i / CHUNK) + 1;
+    const body = JSON.stringify({
+      userId: GRAPH_USER_ID,
+      sourceId: SOURCE_ID,
+      nodes: chunkNodes,
+      edges: chunkEdges,
+    });
+
+    let res;
+    try {
+      res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      });
+    } catch (err) {
+      console.error(`  batch ${batchNum}/${totalChunks} — network error: ${err.message}`);
+      continue;
+    }
+
+    if (res.ok) {
+      let json;
+      try { json = await res.json(); } catch { json = {}; }
+      console.log(
+        `  batch ${batchNum}/${totalChunks} — ok · ` +
+        `total in Worker: ${json.totalNodes ?? '?'} nodes / ${json.totalEdges ?? '?'} edges`,
+      );
+    } else {
+      const text = await res.text().catch(() => '');
+      console.error(
+        `  batch ${batchNum}/${totalChunks} — HTTP ${res.status}: ${text.slice(0, 200)}`,
+      );
+    }
+  }
 }
 
 main().catch((err) => {
