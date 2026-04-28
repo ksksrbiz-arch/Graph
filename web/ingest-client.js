@@ -939,8 +939,8 @@ function extractMetaContent(html, name) {
 
 function stripPageHtml(html) {
   return html
-    .replace(/<script[\s\S]*?<\/\s*script\s*>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/\s*style\s*>/gi, ' ')
+    .replace(/<script\b[^<]*(?:(?!<\/script\b)<[^<]*)*<\/script[^>]*>/gi, ' ')
+    .replace(/<style\b[^<]*(?:(?!<\/style\b)<[^<]*)*<\/style[^>]*>/gi, ' ')
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
