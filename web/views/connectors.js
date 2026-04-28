@@ -493,7 +493,7 @@ function buildCard(connector, source, isLocal, isPublic) {
     actions.appendChild(btnRun);
 
     const btnCfg = el('button', { class: 'connector-btn-cfg', type: 'button', title: 'Open configuration wizard' }, '⚙ Configure');
-    btnCfg.addEventListener('click', () => openWizard({ connector, onSuccess: () => {} }));
+    btnCfg.addEventListener('click', () => openWizard({ connector }));
     actions.appendChild(btnCfg);
   } else if (isFileOnly(connector)) {
     // ── 2-click: pick file → run immediately ────────────────────────────────
@@ -527,12 +527,12 @@ function buildCard(connector, source, isLocal, isPublic) {
     actions.appendChild(btnRun);
 
     const btnCfg = el('button', { class: 'connector-btn-cfg', type: 'button', title: 'Open configuration wizard' }, '⚙ Configure');
-    btnCfg.addEventListener('click', () => openWizard({ connector, onSuccess: () => {} }));
+    btnCfg.addEventListener('click', () => openWizard({ connector }));
     actions.appendChild(btnCfg);
   } else {
     // ── Needs first-time configuration ───────────────────────────────────────
     const btnRun = el('button', { class: 'primary', type: 'button' }, 'Configure & Run');
-    btnRun.addEventListener('click', () => openWizard({ connector, onSuccess: () => {} }));
+    btnRun.addEventListener('click', () => openWizard({ connector }));
     actions.appendChild(btnRun);
   }
 
@@ -635,7 +635,7 @@ function applyInlineResult(connector, statusEl, res) {
     statusEl.textContent = `✓ Done${parts.length ? ` — ${parts.join(', ')}` : ''}`;
     statusEl.className = 'connector-inline-status connector-inline-ok';
     showToast(`${connector.name} ingested`, 'success');
-    loadGraph().then(setGraph).catch(() => {});
+    loadGraph().then(setGraph).catch((err) => console.warn('[ingest] graph reload failed', err));
   } else {
     statusEl.textContent = `✗ ${res.error || `Exit ${res.status}`}`;
     statusEl.className = 'connector-inline-status connector-inline-err';

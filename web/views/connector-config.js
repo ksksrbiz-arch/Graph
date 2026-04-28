@@ -4,7 +4,10 @@
 function configKey(id) { return `graph:cc:${id}`; }
 
 export function loadSavedConfig(id) {
-  try { return JSON.parse(localStorage.getItem(configKey(id)) || '{}'); } catch { return {}; }
+  try { return JSON.parse(localStorage.getItem(configKey(id)) || '{}'); } catch (err) {
+    console.warn('[connector-config] Failed to parse saved config for', id, err);
+    return {};
+  }
 }
 
 export function saveConfig(id, env) {
