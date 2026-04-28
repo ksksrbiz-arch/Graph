@@ -1100,6 +1100,35 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
 }
 .connector-btn-cfg:hover:not(:disabled) { color: var(--text); border-color: var(--border); }
 
+/* Auto-run schedule picker */
+.connector-auto-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+.connector-auto-label {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.connector-auto-select {
+  flex: 1;
+  padding: 0.22rem 0.45rem;
+  font-size: 0.75rem;
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  appearance: auto;
+}
+.connector-auto-select:focus { outline: 2px solid var(--accent); }
+.connector-auto-select.connector-auto-active {
+  color: var(--accent-hover);
+  border-color: var(--accent);
+}
+
 /* ── Ingest Wizard ────────────────────────────────────────────────── */
 
 /* Scrim */

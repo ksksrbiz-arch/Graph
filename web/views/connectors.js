@@ -1,9 +1,9 @@
 import { state, subscribe } from '../state.js';
 import { fmtDate, el, showToast } from '../util.js';
-import { loadGraph, localIngestSupported, publicIngestAvailable, runIngestWithParams, uploadFileIngest, ingestPublicGraph } from '../data.js';
+import { loadGraph, localIngestSupported, publicIngestAvailable, runIngestWithParams, uploadFileIngest, ingestPublicGraph, scheduleAutoIngest } from '../data.js';
 import { setGraph } from '../state.js';
 import { openWizard } from './ingest-wizard.js';
-import { loadSavedConfig } from './connector-config.js';
+import { loadSavedConfig, loadSchedule, saveSchedule, SCHEDULE_OPTIONS } from './connector-config.js';
 import {
   parseBookmarks,
   parseEnex,
@@ -429,11 +429,12 @@ async function render() {
 
   for (const c of KNOWN_CONNECTORS) {
     grid.appendChild(buildCard(c, sources.get(c.id), isLocal, isPublic));
+    applySchedule(c, isLocal, isPublic);
   }
 }
 
 function buildCard(connector, source, isLocal, isPublic) {
-  const card = el('div', { class: 'card connector-card' });
+  const card = el('div', { class: 'card connector-card', 'data-connector-id': connector.id });
 
   // Header row
   const cardHead = el('div', { class: 'connector-card-head' });
@@ -495,6 +496,9 @@ function buildCard(connector, source, isLocal, isPublic) {
     const btnCfg = el('button', { class: 'connector-btn-cfg', type: 'button', title: 'Open configuration wizard' }, '⚙ Configure');
     btnCfg.addEventListener('click', () => openWizard({ connector }));
     actions.appendChild(btnCfg);
+
+    // Auto-schedule picker (only for non-interactive connectors)
+    card.appendChild(buildAutoToggle(connector, isLocal, isPublic));
   } else if (isFileOnly(connector)) {
     // ── 2-click: pick file → run immediately ────────────────────────────────
     const fileField = (connector.wizard?.fields || []).find(
@@ -643,3 +647,66 @@ function applyInlineResult(connector, statusEl, res) {
   }
 }
 
+// ── Auto-schedule ─────────────────────────────────────────────────────────────
+
+/**
+ * Build a small auto-run schedule picker that sits below the action buttons.
+ * Only shown on quick-runnable connectors (no user input needed at run time).
+ */
+function buildAutoToggle(connector, isLocal, isPublic) {
+  const sched = loadSchedule(connector.id);
+  const currentMs = sched.intervalMs || 0;
+
+  const wrap = el('div', { class: 'connector-auto-wrap' });
+  wrap.appendChild(el('span', { class: 'connector-auto-label' }, '⏱ Auto-run:'));
+
+  const sel = el('select', {
+    class: `connector-auto-select${currentMs ? ' connector-auto-active' : ''}`,
+    title: 'Automatically re-run this connector on a schedule',
+    'aria-label': 'Auto-run schedule',
+  });
+
+  for (const opt of SCHEDULE_OPTIONS) {
+    const o = el('option', { value: String(opt.ms) }, opt.label);
+    if (opt.ms === currentMs) o.selected = true;
+    sel.appendChild(o);
+  }
+
+  sel.addEventListener('change', () => {
+    const ms = Number(sel.value);
+    const cfg = ms > 0 ? { intervalMs: ms } : {};
+    saveSchedule(connector.id, cfg);
+    sel.classList.toggle('connector-auto-active', ms > 0);
+    applySchedule(connector, isLocal, isPublic);
+  });
+
+  wrap.appendChild(sel);
+  return wrap;
+}
+
+/**
+ * Read the saved schedule for a connector and register (or clear) its
+ * auto-ingest timer. Safe to call on every render — idempotent.
+ */
+function applySchedule(connector, isLocal, isPublic) {
+  const sched = loadSchedule(connector.id);
+  scheduleAutoIngest(connector.id, sched.intervalMs || 0, () => {
+    scheduledAutoRun(connector.id, isLocal, isPublic);
+  });
+}
+
+/**
+ * Called by the timer. Finds the live card DOM and runs the connector
+ * inline, skipping if a run is already in progress.
+ */
+function scheduledAutoRun(connectorId, isLocal, isPublic) {
+  const card = document.querySelector(`[data-connector-id="${connectorId}"]`);
+  if (!card) return;
+  const btn = card.querySelector('.connector-btn-run');
+  const statusEl = card.querySelector('.connector-inline-status');
+  if (!btn || btn.disabled || !statusEl) return;
+  const connector = KNOWN_CONNECTORS.find((c) => c.id === connectorId);
+  if (!connector) return;
+  console.info(`[auto-ingest] Scheduled run: ${connector.name}`);
+  inlineRun(connector, btn, statusEl, isLocal, isPublic);
+}

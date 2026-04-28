@@ -239,6 +239,33 @@ export async function runIngest(name, params) {
   return runLocalIngest(name, params);
 }
 
+// ── Per-connector auto-ingest scheduler ───────────────────────────────────────
+
+/** Maps connectorId → setInterval handle for auto-ingest timers. */
+const _autoIngestTimers = new Map();
+
+/**
+ * Register (or replace) a periodic auto-ingest callback for a connector.
+ * Pass intervalMs = 0 or omit runFn to only clear any existing timer.
+ */
+export function scheduleAutoIngest(connectorId, intervalMs, runFn) {
+  clearAutoIngest(connectorId);
+  if (!intervalMs || typeof runFn !== 'function') return;
+  const tid = setInterval(runFn, intervalMs);
+  _autoIngestTimers.set(connectorId, tid);
+}
+
+/** Cancel the auto-ingest timer for a specific connector. */
+export function clearAutoIngest(connectorId) {
+  const tid = _autoIngestTimers.get(connectorId);
+  if (tid != null) { clearInterval(tid); _autoIngestTimers.delete(connectorId); }
+}
+
+/** Cancel every active auto-ingest timer. */
+export function clearAllAutoIngest() {
+  for (const id of [..._autoIngestTimers.keys()]) clearAutoIngest(id);
+}
+
 /**
  * Send a pre-parsed graph (nodes + edges) to the public API for ingestion.
  * Used by the client-side ingest path when the local dev server is unavailable.
