@@ -11,6 +11,7 @@ import {
   Get,
   HttpCode,
   Inject,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -110,13 +111,16 @@ export class ConnectorsController {
     const cid = assertConnectorId(id);
 
     // Only connectors that use API keys (not OAuth) may be configured this way.
-    if (this.registry.has(cid)) {
-      const connector = this.registry.get(cid);
-      if (connector.authType !== 'apikey') {
-        throw new BadRequestException(
-          `connector ${cid} uses OAuth — use POST /oauth/connect/${cid} instead`,
-        );
-      }
+    if (!this.registry.has(cid)) {
+      throw new NotFoundException(
+        `connector ${cid} has no implementation — it cannot be configured via this endpoint`,
+      );
+    }
+    const connector = this.registry.get(cid);
+    if (connector.authType !== 'apikey') {
+      throw new BadRequestException(
+        `connector ${cid} uses OAuth — use POST /oauth/connect/${cid} instead`,
+      );
     }
 
     if (!dto.apiKey?.trim()) {

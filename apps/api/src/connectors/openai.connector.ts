@@ -68,6 +68,10 @@ interface OpenAIListResponse<T> {
 const PAGE_SIZE = 100;
 const MAX_PAGES = 3; // up to 300 files + 300 assistants per sync
 const BASE_URL = 'https://api.openai.com/v1';
+/** Weight assigned to assistant→model RELATED_TO edges — moderate confidence
+ *  since the relationship is structural (the assistant is backed by this model)
+ *  rather than semantic. */
+const ASSISTANT_MODEL_EDGE_WEIGHT = 0.6;
 
 @Injectable()
 export class OpenAIConnector extends BaseConnector {
@@ -239,7 +243,7 @@ export class OpenAIConnector extends BaseConnector {
     // Link assistant → model concept node so the graph shows which model backs
     // which assistant (deterministic model node keeps this idempotent).
     const modelId = deterministicUuid('openai', `model:${a.model}`);
-    edges.push(edgeBetween(node.id, modelId, 'RELATED_TO', 0.6));
+    edges.push(edgeBetween(node.id, modelId, 'RELATED_TO', ASSISTANT_MODEL_EDGE_WEIGHT));
 
     return { node, edges };
   }
