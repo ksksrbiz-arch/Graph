@@ -26,8 +26,11 @@
  *                         ingested nodes/edges are also pushed to
  *                         POST {GRAPH_API_URL}/api/v1/public/ingest/graph.
  *                         Example: https://graph.skdev-371.workers.dev
- *   GRAPH_USER_ID       — userId passed to the Worker ingest endpoint
- *                         (default: "local").
+ *   GRAPH_USER_ID       — userId passed to the Worker ingest endpoint.
+ *                         Defaults to the resolved GitHub login (i.e. your
+ *                         real account, so non-local data lands in its own
+ *                         namespace on the live Worker). Set to "local" to
+ *                         use the shared demo slot.
  *
  * Usage:
  *   GITHUB_TOKEN=ghp_... node scripts/ingest-github.mjs
@@ -53,7 +56,11 @@ const ITEMS_LIMIT = Number(process.env.GITHUB_ITEMS_LIMIT || 30);
 
 // Optional: push to the live Worker after local save.
 const GRAPH_API_URL = (process.env.GRAPH_API_URL || '').replace(/\/$/, '');
-const GRAPH_USER_ID = (process.env.GRAPH_USER_ID || 'local').trim();
+// userId for the Worker ingest endpoint.  When unset we default to the
+// resolved GitHub login (i.e. your real account) so each user's data lands
+// in its own namespace on the live Worker — set to "local" explicitly to
+// land in the shared demo slot instead.
+const GRAPH_USER_ID = (process.env.GRAPH_USER_ID || '').trim();
 
 if (!TOKEN) {
   console.error(
@@ -242,7 +249,8 @@ async function main() {
   console.log(`Wrote ${GRAPH_PATH}`);
 
   if (GRAPH_API_URL) {
-    await pushToWorker(builder.graph.nodes, builder.graph.edges);
+    const userId = GRAPH_USER_ID || login;
+    await pushToWorker(builder.graph.nodes, builder.graph.edges, userId);
   }
 }
 
@@ -254,13 +262,13 @@ async function main() {
  * local graph is larger we chunk the nodes (and their incident edges) into
  * sequential batches so nothing is silently dropped.
  */
-async function pushToWorker(nodes, edges) {
+async function pushToWorker(nodes, edges, userId) {
   const endpoint = `${GRAPH_API_URL}/api/v1/public/ingest/graph`;
   const CHUNK = 4_000; // stay well inside the Worker's 5 000-node cap
 
   const totalChunks = Math.ceil(nodes.length / CHUNK);
   console.log(
-    `\nPushing to Worker: ${GRAPH_API_URL} (userId=${GRAPH_USER_ID}, ` +
+    `\nPushing to Worker: ${GRAPH_API_URL} (userId=${userId}, ` +
     `${nodes.length} nodes in ${totalChunks} batch(es))`,
   );
 
@@ -273,7 +281,7 @@ async function pushToWorker(nodes, edges) {
 
     const batchNum = Math.floor(i / CHUNK) + 1;
     const body = JSON.stringify({
-      userId: GRAPH_USER_ID,
+      userId,
       sourceId: SOURCE_ID,
       nodes: chunkNodes,
       edges: chunkEdges,
