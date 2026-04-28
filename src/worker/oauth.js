@@ -78,7 +78,7 @@ async function handleStart(request, env, url) {
 }
 
 async function handleCallback(request, env, url) {
-  const code  = url.searchParams.get('code');
+  const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
   const error = url.searchParams.get('error');
 
@@ -117,8 +117,8 @@ async function handleCallback(request, env, url) {
     const tokenRes = await fetch(GITHUB_TOKEN_URL, {
       method: 'POST',
       headers: {
-        'content-type': 'application/json',
-        'accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code }),
     });
