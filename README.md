@@ -23,7 +23,31 @@ npm run ingest:claude-code   # build data/graph.json from ~/.claude/projects
 npm start                    # http://localhost:3000
 ```
 
-Zero runtime dependencies. Ingesters available: `claude-code`, `git`, `markdown`.
+Zero runtime dependencies. Ingesters available: `claude-code`, `git`, `markdown`, `code` (via a local [GitNexus](https://github.com/abhigyanpatwari/GitNexus) `gitnexus serve` HTTP server — see [`scripts/ingest-code.mjs`](scripts/ingest-code.mjs) for env vars and usage).
+
+### Expose the graph over MCP
+
+`scripts/mcp-server.mjs` is a stdio [Model Context Protocol](https://modelcontextprotocol.io) server that lets Claude Desktop, Cursor, Codex CLI, and other MCP clients read and search the personal knowledge graph (`data/graph.json`) without any extra plumbing. Zero dependencies — same Node 18+ as the rest of the v1 scripts.
+
+Tools: `search_nodes`, `get_node`, `subgraph`, `list_sources`, `stats`. Resources: `graph://snapshot`, `graph://sources`. See the header of [`scripts/mcp-server.mjs`](scripts/mcp-server.mjs) for the full schema.
+
+```jsonc
+// ~/.config/Claude/claude_desktop_config.json (or your editor's MCP config)
+{
+  "mcpServers": {
+    "graph-pkg": {
+      "command": "node",
+      "args": ["/absolute/path/to/Graph/scripts/mcp-server.mjs"]
+    }
+  }
+}
+```
+
+Or run it manually for debugging:
+
+```bash
+npm run mcp   # speaks JSON-RPC 2.0 over stdio
+```
 
 > `data/graph.json` and `web/data/graph.json` are **generated locally from your own data** and are gitignored. A fresh clone has no graph until you run an ingester.
 
