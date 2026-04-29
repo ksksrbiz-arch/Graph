@@ -34,6 +34,13 @@ const TEXT_MAX_LENGTH = 200_000;
 const TITLE_MAX_LENGTH = 200;
 const SNAPSHOT_MAX_NODES = 5_000;
 const SNAPSHOT_MAX_EDGES = 20_000;
+const GRAPH_ID_MAX_LENGTH = 240;
+const GRAPH_LABEL_MAX_LENGTH = 200;
+const GRAPH_TYPE_MAX_LENGTH = 64;
+const GRAPH_METADATA_MAX_KEYS = 40;
+const GRAPH_METADATA_MAX_ITEMS = 40;
+const GRAPH_METADATA_MAX_DEPTH = 3;
+const GRAPH_METADATA_STRING_MAX_LENGTH = 1_000;
 
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
@@ -207,15 +214,19 @@ async function ingestGraph(request, env, allowed) {
     ? dto.sourceId.trim()
     : 'client';
 
-  // Basic shape validation — each item must at least have an id string.
   const nodes = dto.nodes
-    .filter((n) => n && typeof n.id === 'string' && n.id)
+    .map((node) => sanitizeGraphNode(node, sourceId))
+    .filter(Boolean)
     .slice(0, SNAPSHOT_MAX_NODES);
   const edges = Array.isArray(dto.edges)
     ? dto.edges
-        .filter((e) => e && typeof e.id === 'string' && e.source && e.target)
+        .map((edge) => sanitizeGraphEdge(edge))
+        .filter(Boolean)
         .slice(0, SNAPSHOT_MAX_EDGES)
     : [];
+  if (nodes.length === 0) {
+    return jsonResponse({ error: 'no valid nodes to ingest' }, 400);
+  }
 
   const snapshot = await mergeAndPersist(env.GRAPH_KV, userId, { nodes, edges }, sourceId);
   const evt = await mirrorToD1(env, { userId, sourceId, sourceKind: 'graph', kind: 'graph', parsed: { nodes, edges }, payload: { sourceId, nodes: nodes.length, edges: edges.length } });
@@ -231,6 +242,88 @@ async function ingestGraph(request, env, allowed) {
     totalNodes: snapshot.nodes.length,
     totalEdges: snapshot.edges.length,
   });
+}
+
+function trimGraphString(value, max) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, max);
+}
+
+function sanitizeGraphMetadata(value, depth = 0) {
+  if (value == null) return undefined;
+  if (typeof value === 'string') return value.slice(0, GRAPH_METADATA_STRING_MAX_LENGTH);
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'boolean') return value;
+  if (depth >= GRAPH_METADATA_MAX_DEPTH) return undefined;
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, GRAPH_METADATA_MAX_ITEMS)
+      .map((item) => sanitizeGraphMetadata(item, depth + 1))
+      .filter((item) => item !== undefined);
+  }
+  if (typeof value === 'object') {
+    const out = {};
+    let count = 0;
+    for (const [key, entry] of Object.entries(value)) {
+      if (count >= GRAPH_METADATA_MAX_KEYS) break;
+      const safeKey = trimGraphString(key, GRAPH_TYPE_MAX_LENGTH);
+      const safeValue = sanitizeGraphMetadata(entry, depth + 1);
+      if (safeKey && safeValue !== undefined) {
+        out[safeKey] = safeValue;
+        count += 1;
+      }
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+  return undefined;
+}
+
+function sanitizeGraphNode(node, fallbackSourceId) {
+  if (!node || typeof node !== 'object') return null;
+  const id = trimGraphString(node.id, GRAPH_ID_MAX_LENGTH);
+  if (!id) return null;
+  const label = trimGraphString(node.label, GRAPH_LABEL_MAX_LENGTH) || id;
+  const type = trimGraphString(node.type, GRAPH_TYPE_MAX_LENGTH) || 'note';
+  const sourceId = trimGraphString(node.sourceId, GRAPH_TYPE_MAX_LENGTH)
+    || trimGraphString(fallbackSourceId, GRAPH_TYPE_MAX_LENGTH)
+    || 'client';
+  const sourceUrl = trimGraphString(node.sourceUrl, 2048);
+  const createdAt = trimGraphString(node.createdAt, 64);
+  const updatedAt = trimGraphString(node.updatedAt, 64);
+  const metadata = sanitizeGraphMetadata(node.metadata);
+  return {
+    id,
+    label,
+    type,
+    sourceId,
+    ...(sourceUrl ? { sourceUrl } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function sanitizeGraphEdge(edge) {
+  if (!edge || typeof edge !== 'object') return null;
+  const source = trimGraphString(edge.source, GRAPH_ID_MAX_LENGTH);
+  const target = trimGraphString(edge.target, GRAPH_ID_MAX_LENGTH);
+  const relation = trimGraphString(edge.relation, GRAPH_TYPE_MAX_LENGTH) || 'RELATED_TO';
+  if (!source || !target || source === target) return null;
+  const id = trimGraphString(edge.id, GRAPH_ID_MAX_LENGTH) || `${source}|${relation}|${target}`;
+  const createdAt = trimGraphString(edge.createdAt, 64);
+  const metadata = sanitizeGraphMetadata(edge.metadata);
+  return {
+    id,
+    source,
+    target,
+    relation,
+    ...(Number.isFinite(edge.weight) ? { weight: Math.max(0, Math.min(1, edge.weight)) } : {}),
+    ...(typeof edge.inferred === 'boolean' ? { inferred: edge.inferred } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    ...(metadata ? { metadata } : {}),
+  };
 }
 
 // ── persistence ───────────────────────────────────────────────────────
