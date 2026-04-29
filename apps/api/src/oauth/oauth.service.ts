@@ -17,7 +17,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import type { ConnectorId, ConnectorConfig } from '@pkg/shared';
+import {
+  DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES,
+  type ConnectorId,
+  type ConnectorConfig,
+} from '@pkg/shared';
 import { CredentialCipher } from '../shared/crypto/credential-cipher';
 import { ConnectorConfigStore } from '../connectors/connector-config.store';
 import { loadEnv } from '../config/env';
@@ -60,8 +64,6 @@ interface CredentialPayload {
   grantedScopes?: string[];
   extra?: Record<string, unknown>;
 }
-
-const DEFAULT_SYNC_INTERVAL_MIN = 30;
 
 @Injectable()
 export class OAuthService {
@@ -155,7 +157,7 @@ export class OAuthService {
       enabled: true,
       credentials,
       syncIntervalMinutes:
-        existing?.syncIntervalMinutes ?? DEFAULT_SYNC_INTERVAL_MIN,
+        existing?.syncIntervalMinutes ?? DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES,
     };
     this.configs.upsert(config);
     this.log.log(
