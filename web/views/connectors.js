@@ -103,6 +103,23 @@ let _catalogBusyId = null;
 let _catalogNotice = null; // { type: 'ok'|'err', text: string } | null
 let _catalogGrid = null;   // live reference to the grid element for in-place refresh
 
+/** Width / height for OAuth popup windows. */
+const OAUTH_POPUP_WIDTH = 560;
+const OAUTH_POPUP_HEIGHT = 760;
+
+/** Connector-specific extra metadata prompts, keyed by connector ID. */
+const CONNECTOR_METADATA_PROMPTS = {
+  zotero: () => {
+    const groupId = window.prompt('Optional Zotero group ID (leave blank for personal library)');
+    return groupId?.trim() ? { groupId: groupId.trim() } : undefined;
+  },
+};
+
+/** Return the human-readable name for a connector ID. */
+function catalogConnectorName(connectorId) {
+  return CONNECTOR_CATALOG.find((c) => c.id === connectorId)?.name ?? connectorId;
+}
+
 
 /** True when all required text/password/number/date/etc. fields have saved
  *  values, or the connector has no required non-file non-oauth fields. */
@@ -510,7 +527,7 @@ export function initConnectorsView() {
   window.addEventListener('message', (event) => {
     const data = event.data;
     if (data?.source === 'pkg-oauth') {
-      const name = CONNECTOR_CATALOG.find((c) => c.id === data.connectorId)?.name ?? data.connectorId;
+      const name = catalogConnectorName(data.connectorId);
       _catalogNotice = { type: 'ok', text: `${name} connected. Sync starting…` };
       reloadCatalogStatuses();
     }
@@ -774,7 +791,7 @@ async function catalogOAuth(connector, btn, statusEl) {
     showToast(`${connector.name} OAuth failed`, 'error');
     return;
   }
-  const popup = window.open(res.authorizeUrl, '_blank', 'popup,width=560,height=760');
+  const popup = window.open(res.authorizeUrl, '_blank', `popup,width=${OAUTH_POPUP_WIDTH},height=${OAUTH_POPUP_HEIGHT}`);
   if (!popup) window.location.assign(res.authorizeUrl);
   setCatalogNotice('ok', `Opening ${connector.name} authorization…`);
 }
@@ -784,10 +801,8 @@ async function promptAndConfigureApiKey(connector, btn, statusEl) {
   if (!apiKey?.trim()) return;
 
   let metadata;
-  if (connector.id === 'zotero') {
-    const groupId = window.prompt('Optional Zotero group ID (leave blank for personal library)');
-    if (groupId?.trim()) metadata = { groupId: groupId.trim() };
-  }
+  const metaPromptFn = CONNECTOR_METADATA_PROMPTS[connector.id];
+  if (metaPromptFn) metadata = metaPromptFn();
 
   setCatalogBusy(connector.id, btn, statusEl, '⏳ Configuring…');
   const res = await configureConnectorApiKey(connector.id, apiKey.trim(), metadata);
