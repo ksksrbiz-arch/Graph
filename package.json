@@ -21,6 +21,7 @@
     "ingest:github": "node scripts/ingest-github.mjs && cp data/graph.json web/data/graph.json",
     "ingest:bookmarks": "node scripts/ingest-bookmarks.mjs && cp data/graph.json web/data/graph.json",
     "ingest:claude-export": "node scripts/ingest-claude-export.mjs && cp data/graph.json web/data/graph.json",
+    "ingest:code": "node scripts/ingest-code.mjs && cp data/graph.json web/data/graph.json",
     "deploy": "wrangler deploy",
     "preview": "wrangler dev",
     "lint": "pnpm -r --if-present run lint",

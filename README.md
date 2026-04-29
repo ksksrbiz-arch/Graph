@@ -23,7 +23,7 @@ npm run ingest:claude-code   # build data/graph.json from ~/.claude/projects
 npm start                    # http://localhost:3000
 ```
 
-Zero runtime dependencies. Ingesters available: `claude-code`, `git`, `markdown`.
+Zero runtime dependencies. Ingesters available: `claude-code`, `git`, `markdown`, `code` (via a local [GitNexus](https://github.com/abhigyanpatwari/GitNexus) `gitnexus serve` HTTP server — see [`scripts/ingest-code.mjs`](scripts/ingest-code.mjs) for env vars and usage).
 
 > `data/graph.json` and `web/data/graph.json` are **generated locally from your own data** and are gitignored. A fresh clone has no graph until you run an ingester.
 
