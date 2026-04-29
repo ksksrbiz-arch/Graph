@@ -232,6 +232,7 @@ function isPrivateOrLocalHostname(hostname) {
   if (host === 'localhost' || host === '::1' || host.endsWith('.localhost')) return true;
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
     const parts = host.split('.').map(Number);
+    if (parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
     if (parts[0] === 10 || parts[0] === 127) return true;
     if (parts[0] === 192 && parts[1] === 168) return true;
     if (parts[0] === 169 && parts[1] === 254) return true;
@@ -548,7 +549,9 @@ export async function ingestZotero({ userId, apiKey, groupId, limit = 200 }) {
   const PAGE_SIZE = 50;
 
   const zoteroUserId = requireNumericId(userId, 'ZOTERO_USER_ID');
-  const zoteroGroupId = groupId ? requireNumericId(groupId, 'ZOTERO_GROUP_ID') : undefined;
+  const zoteroGroupId = String(groupId || '').trim()
+    ? requireNumericId(groupId, 'ZOTERO_GROUP_ID')
+    : undefined;
   const zoteroApiKey = String(apiKey || '').trim();
   const safeLimit = clampPositiveInt(limit, 200, 500);
 

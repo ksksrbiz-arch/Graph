@@ -400,6 +400,10 @@ function buildField(field, fileMap, savedValues = {}) {
       : `Drop ${field.accept || 'file'} here or click to browse`);
     const updateSelection = (selectedFiles) => {
       const files = validateSelectedFiles(field, selectedFiles);
+      if (!files.length) {
+        clearSelection();
+        return;
+      }
       fileMap[field.name] = isMulti ? files : files[0];
       const dz = wrap.querySelector('.wiz-drop-zone span');
       if (dz) dz.textContent = isMulti ? `✓ ${files.length} file(s) selected` : `✓ ${files[0].name}`;
