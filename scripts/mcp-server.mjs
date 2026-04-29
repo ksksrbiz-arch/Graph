@@ -92,8 +92,12 @@ function nodeBlurb(node) {
   };
 }
 
-/** Lower-cases and concatenates the searchable text for a node. */
+/** Lower-cases and concatenates the searchable text for a node. Fields are
+ *  joined by U+0001 (SOH) — a control character that cannot appear in real
+ *  user queries — so substring matches can never silently span two fields
+ *  (e.g. matching the tail of `label` plus the head of `type`). */
 function searchableText(node) {
+  const FIELD_SEP = ' \u0001 ';
   const parts = [
     node.label,
     node.type,
@@ -103,7 +107,7 @@ function searchableText(node) {
       ? JSON.stringify(node.metadata)
       : '',
   ];
-  return parts.filter(Boolean).join(' \u0001 ').toLowerCase();
+  return parts.filter(Boolean).join(FIELD_SEP).toLowerCase();
 }
 
 async function toolSearchNodes(args = {}) {
