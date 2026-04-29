@@ -265,10 +265,15 @@ function sanitizeGraphMetadata(value, depth = 0) {
   }
   if (typeof value === 'object') {
     const out = {};
-    for (const [key, entry] of Object.entries(value).slice(0, GRAPH_METADATA_MAX_KEYS)) {
+    let count = 0;
+    for (const [key, entry] of Object.entries(value)) {
+      if (count >= GRAPH_METADATA_MAX_KEYS) break;
       const safeKey = trimGraphString(key, GRAPH_TYPE_MAX_LENGTH);
       const safeValue = sanitizeGraphMetadata(entry, depth + 1);
-      if (safeKey && safeValue !== undefined) out[safeKey] = safeValue;
+      if (safeKey && safeValue !== undefined) {
+        out[safeKey] = safeValue;
+        count += 1;
+      }
     }
     return Object.keys(out).length ? out : undefined;
   }

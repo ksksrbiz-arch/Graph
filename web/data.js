@@ -309,10 +309,15 @@ function clampGraphMetadata(value, depth = 0) {
   }
   if (typeof value === 'object') {
     const out = {};
-    for (const [key, entry] of Object.entries(value).slice(0, GRAPH_INGEST_LIMITS.maxMetadataKeys)) {
+    let count = 0;
+    for (const [key, entry] of Object.entries(value)) {
+      if (count >= GRAPH_INGEST_LIMITS.maxMetadataKeys) break;
       const safeKey = clampGraphString(key, GRAPH_INGEST_LIMITS.maxTypeChars);
       const safeVal = clampGraphMetadata(entry, depth + 1);
-      if (safeKey && safeVal !== undefined) out[safeKey] = safeVal;
+      if (safeKey && safeVal !== undefined) {
+        out[safeKey] = safeVal;
+        count += 1;
+      }
     }
     return Object.keys(out).length ? out : undefined;
   }

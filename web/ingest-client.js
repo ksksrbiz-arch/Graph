@@ -753,14 +753,14 @@ export async function ingestGithub({ token, login, reposLimit = 50, itemsLimit =
 
     if (!repo.fork) {
       let items;
-        try {
-          const data = await ghJson(`/repos/${repo.full_name}/issues`, {
+      try {
+        const data = await ghJson(`/repos/${repo.full_name}/issues`, {
           state: 'all', per_page: Math.min(safeItemsLimit, 100), sort: 'updated',
-          });
-         items = Array.isArray(data) ? data.slice(0, safeItemsLimit) : [];
-        } catch {
-          items = [];
-        }
+        });
+        items = Array.isArray(data) ? data.slice(0, safeItemsLimit) : [];
+      } catch {
+        items = [];
+      }
 
       for (const item of items) {
         const isPr = !!item.pull_request;
