@@ -31,6 +31,7 @@ import {
 import { setGraph } from '../state.js';
 import { showToast, el } from '../util.js';
 import { loadSavedConfig, saveConfig } from './connector-config.js';
+import { validateSelectedFiles } from '../ingest-client.js';
 
 const WIZARD_ID = 'ingest-wizard';
 const SCRIM_ID  = 'ingest-wizard-scrim';
@@ -271,6 +272,12 @@ function mountWizard(connector, onSuccess) {
     for (const field of fields) {
       if (field.type === 'oauth') continue;
       if (field.type === 'file' || field.type === 'multifile') {
+        try {
+          validateSelectedFiles(field, fileMap[field.name]);
+        } catch (err) {
+          showToast(err.message || String(err), 'error');
+          return;
+        }
         if (fileMap[field.name] && field.type === 'file') {
           fileField = { file: fileMap[field.name], envVar: field.envVar };
         }
@@ -388,21 +395,33 @@ function buildField(field, fileMap, savedValues = {}) {
       input.setAttribute('webkitdirectory', '');
       input.setAttribute('directory', '');
     }
+    const defaultDropLabel = field.dropLabel || (isMulti
+      ? `Drop ${field.accept || 'files'} here or click to browse`
+      : `Drop ${field.accept || 'file'} here or click to browse`);
+    const updateSelection = (selectedFiles) => {
+      const files = validateSelectedFiles(field, selectedFiles);
+      fileMap[field.name] = isMulti ? files : files[0];
+      const dz = wrap.querySelector('.wiz-drop-zone span');
+      if (dz) dz.textContent = isMulti ? `✓ ${files.length} file(s) selected` : `✓ ${files[0].name}`;
+    };
+    const clearSelection = () => {
+      delete fileMap[field.name];
+      input.value = '';
+      const dz = wrap.querySelector('.wiz-drop-zone span');
+      if (dz) dz.textContent = defaultDropLabel;
+    };
     input.addEventListener('change', () => {
       if (!input.files?.length) return;
-      if (isMulti) {
-        fileMap[field.name] = Array.from(input.files);
-        const dz = wrap.querySelector('.wiz-drop-zone span');
-        if (dz) dz.textContent = `✓ ${input.files.length} file(s) selected`;
-      } else {
-        fileMap[field.name] = input.files[0];
+      try {
+        updateSelection(isMulti ? Array.from(input.files) : input.files[0]);
+      } catch (err) {
+        clearSelection();
+        showToast(err.message || String(err), 'error');
       }
     });
     // Drag-and-drop zone
     const dropZone = el('div', { class: 'wiz-drop-zone', 'aria-hidden': 'true' },
-      el('span', {}, field.dropLabel || (isMulti
-        ? `Drop ${field.accept || 'files'} here or click to browse`
-        : `Drop ${field.accept || 'file'} here or click to browse`)),
+      el('span', {}, defaultDropLabel),
     );
     dropZone.addEventListener('click', () => input.click());
     dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
@@ -412,12 +431,11 @@ function buildField(field, fileMap, savedValues = {}) {
       dropZone.classList.remove('drag-over');
       const dropped = e.dataTransfer?.files;
       if (!dropped?.length) return;
-      if (isMulti) {
-        fileMap[field.name] = Array.from(dropped);
-        dropZone.querySelector('span').textContent = `✓ ${dropped.length} file(s) selected`;
-      } else {
-        fileMap[field.name] = dropped[0];
-        dropZone.querySelector('span').textContent = `✓ ${dropped[0].name}`;
+      try {
+        updateSelection(isMulti ? Array.from(dropped) : dropped[0]);
+      } catch (err) {
+        clearSelection();
+        showToast(err.message || String(err), 'error');
       }
     });
     wrap.appendChild(dropZone);

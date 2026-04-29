@@ -14,6 +14,7 @@ import {
   parseClaudeCodeSessions,
   ingestZotero,
   ingestGithub,
+  validateSelectedFiles,
 } from '../ingest-client.js';
 
 // ── 59-connector catalog ──────────────────────────────────────────────────────
@@ -938,6 +939,16 @@ function buildCard(connector, source, isLocal, isPublic) {
     btnRun.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => {
       if (!fileInput.files?.length) return;
+      try {
+        validateSelectedFiles(
+          fileField,
+          fileField.type === 'multifile' ? Array.from(fileInput.files) : fileInput.files[0],
+        );
+      } catch (err) {
+        fileInput.value = '';
+        showToast(err.message || String(err), 'error');
+        return;
+      }
       const fileMap = {
         [fileField.name]: fileField.type === 'multifile'
           ? Array.from(fileInput.files)

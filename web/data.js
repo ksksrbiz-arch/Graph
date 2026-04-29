@@ -273,6 +273,110 @@ export function clearAllAutoIngest() {
 
 const API_CONNECTORS_PATH = '/api/v1/connectors';
 const API_OAUTH_CONNECT_PATH = '/api/v1/oauth/connect';
+const GRAPH_INGEST_LIMITS = {
+  maxNodes: 5_000,
+  maxEdges: 20_000,
+  maxIdChars: 240,
+  maxLabelChars: 200,
+  maxTypeChars: 64,
+  maxRelationChars: 64,
+  maxSourceIdChars: 64,
+  maxSourceUrlChars: 2_048,
+  maxMetadataKeys: 40,
+  maxArrayItems: 40,
+  maxStringChars: 1_000,
+  maxDepth: 3,
+};
+
+function clampGraphString(value, max) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, max);
+}
+
+function clampGraphMetadata(value, depth = 0) {
+  if (value == null) return undefined;
+  if (typeof value === 'string') return value.slice(0, GRAPH_INGEST_LIMITS.maxStringChars);
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'boolean') return value;
+  if (depth >= GRAPH_INGEST_LIMITS.maxDepth) return undefined;
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, GRAPH_INGEST_LIMITS.maxArrayItems)
+      .map((item) => clampGraphMetadata(item, depth + 1))
+      .filter((item) => item !== undefined);
+  }
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [key, entry] of Object.entries(value).slice(0, GRAPH_INGEST_LIMITS.maxMetadataKeys)) {
+      const safeKey = clampGraphString(key, GRAPH_INGEST_LIMITS.maxTypeChars);
+      const safeVal = clampGraphMetadata(entry, depth + 1);
+      if (safeKey && safeVal !== undefined) out[safeKey] = safeVal;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+  return undefined;
+}
+
+function sanitizeGraphNode(node, fallbackSourceId) {
+  if (!node || typeof node !== 'object') return null;
+  const id = clampGraphString(node.id, GRAPH_INGEST_LIMITS.maxIdChars);
+  if (!id) return null;
+  const label = clampGraphString(node.label, GRAPH_INGEST_LIMITS.maxLabelChars) || id;
+  const type = clampGraphString(node.type, GRAPH_INGEST_LIMITS.maxTypeChars) || 'note';
+  const sourceId = clampGraphString(node.sourceId, GRAPH_INGEST_LIMITS.maxSourceIdChars)
+    || fallbackSourceId
+    || 'client';
+  const sourceUrl = clampGraphString(node.sourceUrl, GRAPH_INGEST_LIMITS.maxSourceUrlChars);
+  const createdAt = clampGraphString(node.createdAt, 64);
+  const updatedAt = clampGraphString(node.updatedAt, 64);
+  const metadata = clampGraphMetadata(node.metadata);
+  return {
+    id,
+    label,
+    type,
+    sourceId,
+    ...(sourceUrl ? { sourceUrl } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function sanitizeGraphEdge(edge) {
+  if (!edge || typeof edge !== 'object') return null;
+  const source = clampGraphString(edge.source, GRAPH_INGEST_LIMITS.maxIdChars);
+  const target = clampGraphString(edge.target, GRAPH_INGEST_LIMITS.maxIdChars);
+  const relation = clampGraphString(edge.relation, GRAPH_INGEST_LIMITS.maxRelationChars) || 'RELATED_TO';
+  if (!source || !target || source === target) return null;
+  const id = clampGraphString(edge.id, GRAPH_INGEST_LIMITS.maxIdChars) || `${source}|${relation}|${target}`;
+  const createdAt = clampGraphString(edge.createdAt, 64);
+  const metadata = clampGraphMetadata(edge.metadata);
+  return {
+    id,
+    source,
+    target,
+    relation,
+    ...(Number.isFinite(edge.weight) ? { weight: Math.max(0, Math.min(1, edge.weight)) } : {}),
+    ...(typeof edge.inferred === 'boolean' ? { inferred: edge.inferred } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function sanitizeGraphPayload({ nodes, edges, sourceId }) {
+  const safeSourceId = clampGraphString(sourceId, GRAPH_INGEST_LIMITS.maxSourceIdChars) || 'client';
+  const safeNodes = (Array.isArray(nodes) ? nodes : [])
+    .map((node) => sanitizeGraphNode(node, safeSourceId))
+    .filter(Boolean)
+    .slice(0, GRAPH_INGEST_LIMITS.maxNodes);
+  const safeEdges = (Array.isArray(edges) ? edges : [])
+    .map((edge) => sanitizeGraphEdge(edge))
+    .filter(Boolean)
+    .slice(0, GRAPH_INGEST_LIMITS.maxEdges);
+  return { sourceId: safeSourceId, nodes: safeNodes, edges: safeEdges };
+}
 
 /** Fetch configured connector statuses for the current user. Returns [] on error. */
 export async function loadConnectorStatuses() {
@@ -353,6 +457,10 @@ export async function connectOAuthConnector(connectorId) {
 export async function ingestPublicGraph({ nodes, edges, sourceId }) {
   const url = publicApiUrl(API_INGEST_GRAPH_PATH);
   if (!url) return { ok: false, status: 0, error: 'no apiBaseUrl configured' };
+  const payload = sanitizeGraphPayload({ nodes, edges, sourceId });
+  if (payload.nodes.length === 0) {
+    return { ok: false, status: 0, error: 'no valid nodes to ingest' };
+  }
 
   let body = {};
   let res;
@@ -360,7 +468,7 @@ export async function ingestPublicGraph({ nodes, edges, sourceId }) {
     res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ userId: brainUserId(), nodes, edges, sourceId }),
+      body: JSON.stringify({ userId: brainUserId(), ...payload }),
     });
   } catch (err) {
     return { ok: false, status: 0, error: err.message };

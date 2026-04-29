@@ -129,6 +129,157 @@ function decodeXmlEntities(text) {
     .replace(/&amp;/g, '&');
 }
 
+export const BROWSER_INGEST_LIMITS = Object.freeze({
+  maxFilesPerUpload: 200,
+  maxSingleFileBytes: 5 * 1024 * 1024,
+  maxTotalFileBytes: 25 * 1024 * 1024,
+  maxRemoteBytes: 1_500_000,
+  maxRemoteUrls: 25,
+  fetchTimeoutMs: 8_000,
+});
+
+function isFileLike(value) {
+  return Boolean(value)
+    && typeof value.name === 'string'
+    && typeof value.size === 'number'
+    && typeof value.text === 'function';
+}
+
+function acceptedExtensions(field) {
+  return String(field?.accept || '')
+    .split(',')
+    .map((part) => part.trim().toLowerCase())
+    .filter((part) => part.startsWith('.'));
+}
+
+function matchesAcceptedExtension(file, extensions) {
+  if (!extensions.length) return true;
+  const lower = file.name.toLowerCase();
+  return extensions.some((ext) => lower.endsWith(ext));
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+export function validateSelectedFiles(field, inputFiles) {
+  const files = Array.isArray(inputFiles)
+    ? inputFiles
+    : inputFiles
+      ? [inputFiles]
+      : [];
+  const isMulti = field?.type === 'multifile';
+  const exts = acceptedExtensions(field);
+
+  if (field?.required && files.length === 0) {
+    throw new Error(`${field.label || 'File'} is required`);
+  }
+  if (!isMulti && files.length > 1) {
+    throw new Error(`${field.label || 'File'} accepts only one file`);
+  }
+  if (files.length > BROWSER_INGEST_LIMITS.maxFilesPerUpload) {
+    throw new Error(
+      `${field.label || 'File upload'} exceeds the ${BROWSER_INGEST_LIMITS.maxFilesPerUpload}-file limit`,
+    );
+  }
+
+  let totalBytes = 0;
+  for (const file of files) {
+    if (!isFileLike(file)) {
+      throw new Error(`Unsupported file input for ${field.label || 'upload'}`);
+    }
+    if (!matchesAcceptedExtension(file, exts)) {
+      throw new Error(
+        `${file.name} is not an accepted file type for ${field.label || 'this upload'}`,
+      );
+    }
+    if (file.size > BROWSER_INGEST_LIMITS.maxSingleFileBytes) {
+      throw new Error(
+        `${file.name} is too large (${formatBytes(file.size)} > ${formatBytes(BROWSER_INGEST_LIMITS.maxSingleFileBytes)})`,
+      );
+    }
+    totalBytes += file.size;
+  }
+
+  if (totalBytes > BROWSER_INGEST_LIMITS.maxTotalFileBytes) {
+    throw new Error(
+      `${field.label || 'Upload'} is too large (${formatBytes(totalBytes)} > ${formatBytes(BROWSER_INGEST_LIMITS.maxTotalFileBytes)})`,
+    );
+  }
+
+  return files;
+}
+
+function clampPositiveInt(value, fallback, max) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) return fallback;
+  return Math.min(Math.trunc(num), max);
+}
+
+function requireNumericId(value, field) {
+  const raw = String(value || '').trim();
+  if (!raw) throw new Error(`${field} is required`);
+  if (!/^\d+$/.test(raw)) throw new Error(`${field} must be numeric`);
+  return raw;
+}
+
+function isPrivateOrLocalHostname(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  if (!host) return true;
+  if (host === 'localhost' || host === '::1' || host.endsWith('.localhost')) return true;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    const parts = host.split('.').map(Number);
+    if (parts[0] === 10 || parts[0] === 127) return true;
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  }
+  if (/^(?:fc|fd|fe80):/i.test(host)) return true;
+  return false;
+}
+
+function normalizePublicHttpUrl(raw) {
+  let parsed;
+  try {
+    parsed = new URL(String(raw || '').trim());
+  } catch {
+    throw new Error(`Invalid URL: ${raw}`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Only http(s) URLs are allowed: ${raw}`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error(`URLs with embedded credentials are not allowed: ${parsed.hostname}`);
+  }
+  if (isPrivateOrLocalHostname(parsed.hostname)) {
+    throw new Error(`Local/private network URLs are not allowed in browser-only ingest: ${parsed.hostname}`);
+  }
+  parsed.hash = '';
+  return parsed.toString();
+}
+
+async function fetchTextWithLimits(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), BROWSER_INGEST_LIMITS.fetchTimeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    const contentLength = Number(res.headers.get('content-length') || 0);
+    if (contentLength > BROWSER_INGEST_LIMITS.maxRemoteBytes) {
+      throw new Error(`response too large (${formatBytes(contentLength)})`);
+    }
+    const text = await res.text();
+    if (text.length > BROWSER_INGEST_LIMITS.maxRemoteBytes) {
+      throw new Error(`response too large (${formatBytes(text.length)})`);
+    }
+    return { res, text };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ── Bookmarks parser ──────────────────────────────────────────────────────────
 
 /**
@@ -396,27 +547,31 @@ export async function ingestZotero({ userId, apiKey, groupId, limit = 200 }) {
   const API_VERSION = '3';
   const PAGE_SIZE = 50;
 
-  if (!userId || !apiKey) throw new Error('ZOTERO_USER_ID and ZOTERO_API_KEY are required');
+  const zoteroUserId = requireNumericId(userId, 'ZOTERO_USER_ID');
+  const zoteroGroupId = groupId ? requireNumericId(groupId, 'ZOTERO_GROUP_ID') : undefined;
+  const zoteroApiKey = String(apiKey || '').trim();
+  const safeLimit = clampPositiveInt(limit, 200, 500);
 
-  const libraryPath = groupId ? `/groups/${groupId}` : `/users/${userId}`;
+  if (!zoteroApiKey) throw new Error('ZOTERO_API_KEY is required');
+
+  const libraryPath = zoteroGroupId ? `/groups/${zoteroGroupId}` : `/users/${zoteroUserId}`;
 
   async function zoteroFetch(path, params = {}) {
     const url = new URL(`${BASE_URL}${libraryPath}${path}`);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-    const res = await fetch(url.toString(), {
-      headers: { 'Zotero-API-Key': apiKey, 'Zotero-API-Version': API_VERSION },
+    const { res, text } = await fetchTextWithLimits(url.toString(), {
+      headers: { 'Zotero-API-Key': zoteroApiKey, 'Zotero-API-Version': API_VERSION },
     });
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
       throw new Error(`Zotero API ${res.status}: ${text.slice(0, 200)}`);
     }
-    return { json: await res.json(), total: Number(res.headers.get('Total-Results') ?? 0) };
+    return { json: JSON.parse(text), total: Number(res.headers.get('Total-Results') ?? 0) };
   }
 
   const items = [];
   let start = 0;
-  while (items.length < limit) {
-    const fetchLimit = Math.min(PAGE_SIZE, limit - items.length);
+  while (items.length < safeLimit) {
+    const fetchLimit = Math.min(PAGE_SIZE, safeLimit - items.length);
     const { json, total } = await zoteroFetch('/items', {
       itemType: '-attachment',
       start,
@@ -517,14 +672,18 @@ export async function ingestGithub({ token, login, reposLimit = 50, itemsLimit =
   const SOURCE_ID = 'github';
   const GH_API = 'https://api.github.com';
 
-  if (!token) throw new Error('GITHUB_TOKEN is required');
+  const githubToken = String(token || '').trim();
+  const safeReposLimit = clampPositiveInt(reposLimit, 50, 100);
+  const safeItemsLimit = clampPositiveInt(itemsLimit, 30, 100);
+
+  if (!githubToken) throw new Error('GITHUB_TOKEN is required');
 
   function ghFetch(path, params = {}) {
     const url = new URL(`${GH_API}${path}`);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-    return fetch(url.toString(), {
+    return fetchTextWithLimits(url.toString(), {
       headers: {
-        authorization: `Bearer ${token}`,
+        authorization: `Bearer ${githubToken}`,
         accept: 'application/vnd.github+json',
         'x-github-api-version': '2022-11-28',
       },
@@ -532,22 +691,22 @@ export async function ingestGithub({ token, login, reposLimit = 50, itemsLimit =
   }
 
   async function ghJson(path, params = {}) {
-    const res = await ghFetch(path, params);
+    const { res, text } = await ghFetch(path, params);
     if (res.status === 404) return null;
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
       throw new Error(`GitHub API ${res.status}: ${text.slice(0, 200)}`);
     }
-    return res.json();
+    return JSON.parse(text);
   }
 
-  const resolvedLogin = login || (await ghJson('/user'))?.login;
+  const requestedLogin = String(login || '').trim();
+  const resolvedLogin = requestedLogin || (await ghJson('/user'))?.login;
   if (!resolvedLogin) throw new Error('Could not determine GitHub login — check your token');
 
   const allRepos = [];
   let page = 1;
-  while (allRepos.length < reposLimit) {
-    const perPage = Math.min(100, reposLimit - allRepos.length);
+  while (allRepos.length < safeReposLimit) {
+    const perPage = Math.min(100, safeReposLimit - allRepos.length);
     const data = await ghJson(`/users/${resolvedLogin}/repos`, { sort: 'updated', per_page: perPage, page });
     if (!Array.isArray(data) || data.length === 0) break;
     allRepos.push(...data);
@@ -594,14 +753,14 @@ export async function ingestGithub({ token, login, reposLimit = 50, itemsLimit =
 
     if (!repo.fork) {
       let items;
-      try {
-        const data = await ghJson(`/repos/${repo.full_name}/issues`, {
-          state: 'all', per_page: Math.min(itemsLimit, 100), sort: 'updated',
-        });
-        items = Array.isArray(data) ? data.slice(0, itemsLimit) : [];
-      } catch {
-        items = [];
-      }
+        try {
+          const data = await ghJson(`/repos/${repo.full_name}/issues`, {
+          state: 'all', per_page: Math.min(safeItemsLimit, 100), sort: 'updated',
+          });
+         items = Array.isArray(data) ? data.slice(0, safeItemsLimit) : [];
+        } catch {
+          items = [];
+        }
 
       for (const item of items) {
         const isPr = !!item.pull_request;
@@ -985,16 +1144,36 @@ export async function clipUrls(urls) {
   const builder = new GraphBuilder();
   const errors = [];
 
-  const list = (Array.isArray(urls) ? urls : String(urls || '').split(/[\n,]/))
-    .map((u) => String(u).trim())
-    .filter((u) => u && /^https?:\/\//i.test(u));
+  const rawList = Array.isArray(urls) ? urls : String(urls || '').split(/[\n,]/);
+  const deduped = [];
+  const seen = new Set();
+  for (const raw of rawList) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) continue;
+    let normalized;
+    try {
+      normalized = normalizePublicHttpUrl(trimmed);
+    } catch (err) {
+      errors.push({ url: trimmed, error: err.message || String(err) });
+      continue;
+    }
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    deduped.push(normalized);
+    if (deduped.length >= BROWSER_INGEST_LIMITS.maxRemoteUrls) break;
+  }
 
-  for (const url of [...new Set(list)]) {
+  if (deduped.length === 0) {
+    if (errors.length) return { nodes: [], edges: [], sourceId: SOURCE_ID, errors };
+    throw new Error('Provide at least one public http(s) URL');
+  }
+
+  for (const url of deduped) {
     let html;
     try {
-      const res = await fetch(url, { mode: 'cors' });
+      const { res, text } = await fetchTextWithLimits(url, { mode: 'cors' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      html = await res.text();
+      html = text;
     } catch (err) {
       errors.push({ url, error: err.message || String(err) });
       continue;
