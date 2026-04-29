@@ -150,7 +150,7 @@ function buildLabel(label, props) {
   const filePath = props?.filePath || '';
   if (label === 'File' || label === 'Folder') return filePath || name || label;
   if (props?.startLine != null && filePath) {
-    return `${name || label}  (${filePath}:${props.startLine})`;
+    return `${name || label} (${filePath}:${props.startLine})`;
   }
   return name || filePath || label;
 }
