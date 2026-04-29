@@ -1,6 +1,6 @@
 import { state, subscribe } from '../state.js';
 import { fmtDate, el, showToast } from '../util.js';
-import { loadGraph, localIngestSupported, publicIngestAvailable, runIngestWithParams, uploadFileIngest, ingestPublicGraph, scheduleAutoIngest } from '../data.js';
+import { loadGraph, localIngestSupported, publicIngestAvailable, runIngestWithParams, uploadFileIngest, ingestPublicGraph, scheduleAutoIngest, loadConnectorStatuses, configureConnectorApiKey, triggerConnectorSync, connectOAuthConnector } from '../data.js';
 import { setGraph } from '../state.js';
 import { openWizard } from './ingest-wizard.js';
 import { loadSavedConfig, loadSchedule, saveSchedule, SCHEDULE_OPTIONS } from './connector-config.js';
@@ -15,6 +15,94 @@ import {
   ingestZotero,
   ingestGithub,
 } from '../ingest-client.js';
+
+// ── 59-connector catalog ──────────────────────────────────────────────────────
+// Mirrors packages/shared/src/connectors.ts (CONNECTOR_CATALOG).
+
+export const CATALOG_CATEGORIES = [
+  'AI', 'Communication', 'Calendar', 'Knowledge',
+  'Developer Tools', 'Storage', 'CRM & Commerce', 'Media & Social',
+];
+
+export const CONNECTOR_CATALOG = [
+  // AI
+  { id: 'openai',            name: 'OpenAI',            category: 'AI',                description: 'Files and assistants with API-key setup and immediate ingest.',            setupMode: 'apikey', availability: 'available', ctaLabel: 'Add API key' },
+  { id: 'anthropic',         name: 'Anthropic',         category: 'AI',                description: 'Model access roster via API key, ready for future activity ingest.',       setupMode: 'apikey', availability: 'available', ctaLabel: 'Add API key' },
+  { id: 'perplexity',        name: 'Perplexity',        category: 'AI',                description: 'Research sessions, threads, and saved discoveries.',                       setupMode: 'apikey', availability: 'planned',   ctaLabel: 'Add API key' },
+  { id: 'gemini',            name: 'Google Gemini',     category: 'AI',                description: 'Chats, prompts, uploaded files, and workspace context.',                   setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'huggingface',       name: 'Hugging Face',      category: 'AI',                description: 'Models, spaces, datasets, and inference activity.',                        setupMode: 'apikey', availability: 'planned',   ctaLabel: 'Add API key' },
+  // Communication
+  { id: 'gmail',             name: 'Gmail',             category: 'Communication',     description: 'Mail threads, labels, and attachments.',                                   setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'outlook_mail',      name: 'Outlook Mail',      category: 'Communication',     description: 'Messages, folders, attachments, and threads.',                             setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'slack',             name: 'Slack',             category: 'Communication',     description: 'Channels, DMs, files, and mentions.',                                      setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'discord',           name: 'Discord',           category: 'Communication',     description: 'Servers, channels, messages, and shared links.',                           setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'microsoft_teams',   name: 'Microsoft Teams',   category: 'Communication',     description: 'Teams, chats, meetings, and files.',                                       setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'telegram',          name: 'Telegram',          category: 'Communication',     description: 'Chats, channels, media, and saved messages.',                              setupMode: 'apikey', availability: 'planned',   ctaLabel: 'Add API key' },
+  { id: 'whatsapp_business', name: 'WhatsApp Business', category: 'Communication',     description: 'Business conversations and support threads.',                              setupMode: 'apikey', availability: 'planned',   ctaLabel: 'Add API key' },
+  { id: 'intercom',          name: 'Intercom',          category: 'Communication',     description: 'Customer conversations, tickets, and contacts.',                           setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'zendesk',           name: 'Zendesk',           category: 'Communication',     description: 'Support tickets, comments, and customer context.',                         setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'help_scout',        name: 'Help Scout',        category: 'Communication',     description: 'Support inboxes, threads, and notes.',                                     setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  // Calendar
+  { id: 'google_calendar',   name: 'Google Calendar',   category: 'Calendar',          description: 'Primary calendar events with attendee edges.',                             setupMode: 'oauth',  availability: 'available', ctaLabel: 'Connect' },
+  { id: 'outlook_calendar',  name: 'Outlook Calendar',  category: 'Calendar',          description: 'Meetings, invites, and recurring events.',                                 setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'calendly',          name: 'Calendly',          category: 'Calendar',          description: 'Booking links, events, invitees, and follow-ups.',                         setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'google_tasks',      name: 'Google Tasks',      category: 'Calendar',          description: 'Lists, tasks, due dates, and completion state.',                           setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'todoist',           name: 'Todoist',           category: 'Calendar',          description: 'Projects, tasks, labels, and deadlines.',                                  setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  // Knowledge
+  { id: 'notion',            name: 'Notion',            category: 'Knowledge',         description: 'Pages and parent relationships via one-click OAuth.',                      setupMode: 'oauth',  availability: 'available', ctaLabel: 'Connect' },
+  { id: 'obsidian',          name: 'Obsidian',          category: 'Knowledge',         description: 'Vault notes, links, and tags.',                                            setupMode: 'apikey', availability: 'planned',   ctaLabel: 'Add API key' },
+  { id: 'roam',              name: 'Roam Research',     category: 'Knowledge',         description: 'Pages, blocks, backlinks, and graph references.',                          setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'evernote',          name: 'Evernote',          category: 'Knowledge',         description: 'Notebooks, notes, tasks, and attachments.',                                setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'confluence',        name: 'Confluence',        category: 'Knowledge',         description: 'Pages, spaces, comments, and mentions.',                                   setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'coda',              name: 'Coda',              category: 'Knowledge',         description: 'Docs, tables, tasks, and collaborative notes.',                            setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'airtable',          name: 'Airtable',          category: 'Knowledge',         description: 'Bases, tables, linked records, and views.',                                setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'zotero',            name: 'Zotero',            category: 'Knowledge',         description: 'Library items, authors, tags, and collections.',                           setupMode: 'apikey', availability: 'available', ctaLabel: 'Add API key' },
+  { id: 'web_clip',          name: 'Web clipper',       category: 'Knowledge',         description: 'Captured pages, highlights, and source URLs.',                             setupMode: 'apikey', availability: 'planned',   ctaLabel: 'Add API key' },
+  { id: 'bookmarks',         name: 'Bookmarks',         category: 'Knowledge',         description: 'Browser saves, tags, and revisit signals.',                                setupMode: 'apikey', availability: 'planned',   ctaLabel: 'Add API key' },
+  // Developer Tools
+  { id: 'github',            name: 'GitHub',            category: 'Developer Tools',   description: 'Events, commits, issues, and pull requests.',                              setupMode: 'oauth',  availability: 'available', ctaLabel: 'Connect' },
+  { id: 'gitlab',            name: 'GitLab',            category: 'Developer Tools',   description: 'Repos, merge requests, issues, and pipelines.',                            setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'bitbucket',         name: 'Bitbucket',         category: 'Developer Tools',   description: 'Repositories, pull requests, and builds.',                                 setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'linear',            name: 'Linear',            category: 'Developer Tools',   description: 'Issues, projects, cycles, and triage.',                                    setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'jira',              name: 'Jira',              category: 'Developer Tools',   description: 'Issues, epics, sprints, and comments.',                                    setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'asana',             name: 'Asana',             category: 'Developer Tools',   description: 'Projects, tasks, milestones, and comments.',                               setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'trello',            name: 'Trello',            category: 'Developer Tools',   description: 'Boards, lists, cards, and checklists.',                                    setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'clickup',           name: 'ClickUp',           category: 'Developer Tools',   description: 'Spaces, docs, tasks, and goals.',                                          setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'monday',            name: 'Monday.com',        category: 'Developer Tools',   description: 'Boards, items, updates, and timelines.',                                   setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'figma',             name: 'Figma',             category: 'Developer Tools',   description: 'Files, comments, prototypes, and design systems.',                         setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'miro',              name: 'Miro',              category: 'Developer Tools',   description: 'Boards, stickies, diagrams, and brainstorm sessions.',                     setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  // Storage
+  { id: 'google_drive',      name: 'Google Drive',      category: 'Storage',           description: 'Docs, sheets, slides, PDFs, and folder graphs.',                           setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'dropbox',           name: 'Dropbox',           category: 'Storage',           description: 'Files, shared folders, and paper docs.',                                   setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'onedrive',          name: 'OneDrive',          category: 'Storage',           description: 'Files, folders, and collaboration links.',                                 setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'box',               name: 'Box',               category: 'Storage',           description: 'Content, collections, and enterprise documents.',                          setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  // CRM & Commerce
+  { id: 'hubspot',           name: 'HubSpot',           category: 'CRM & Commerce',    description: 'Contacts, companies, deals, and notes.',                                   setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'salesforce',        name: 'Salesforce',        category: 'CRM & Commerce',    description: 'Accounts, opportunities, tasks, and events.',                              setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'pipedrive',         name: 'Pipedrive',         category: 'CRM & Commerce',    description: 'Leads, deals, notes, and follow-up tasks.',                                setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'stripe',            name: 'Stripe',            category: 'CRM & Commerce',    description: 'Customers, subscriptions, invoices, and payments.',                        setupMode: 'apikey', availability: 'planned',   ctaLabel: 'Add API key' },
+  { id: 'quickbooks',        name: 'QuickBooks',        category: 'CRM & Commerce',    description: 'Invoices, vendors, customers, and accounting events.',                     setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'shopify',           name: 'Shopify',           category: 'CRM & Commerce',    description: 'Orders, customers, products, and fulfillment.',                            setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  // Media & Social
+  { id: 'x_twitter',         name: 'X / Twitter',       category: 'Media & Social',    description: 'Tweets, replies, bookmarks, and follows.',                                 setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'linkedin',          name: 'LinkedIn',          category: 'Media & Social',    description: 'Posts, messages, contacts, and profile activity.',                         setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'reddit',            name: 'Reddit',            category: 'Media & Social',    description: 'Posts, comments, saves, and subscribed communities.',                      setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'youtube',           name: 'YouTube',           category: 'Media & Social',    description: 'Videos, playlists, watch history, and subscriptions.',                     setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'spotify',           name: 'Spotify',           category: 'Media & Social',    description: 'Saved tracks, playlists, podcasts, and listening patterns.',               setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'pocket',            name: 'Pocket',            category: 'Media & Social',    description: 'Read-later saves, highlights, and tags.',                                  setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'instapaper',        name: 'Instapaper',        category: 'Media & Social',    description: 'Saved articles, highlights, and reading progress.',                        setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'raindrop',          name: 'Raindrop.io',       category: 'Media & Social',    description: 'Bookmarks, collections, annotations, and tags.',                           setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+];
+
+// ── Catalog UI state ──────────────────────────────────────────────────────────
+
+let _catalogQuery = '';
+let _catalogCategory = 'All';
+let _connectorStatuses = {}; // connectorId → ConnectorSummary
+let _catalogBusyId = null;
+let _catalogNotice = null; // { type: 'ok'|'err', text: string } | null
+let _catalogGrid = null;   // live reference to the grid element for in-place refresh
+
 
 /** True when all required text/password/number/date/etc. fields have saved
  *  values, or the connector has no required non-file non-oauth fields. */
@@ -417,13 +505,23 @@ export function initConnectorsView() {
   subscribe((reason) => {
     if (reason === 'graph-loaded') render();
   });
+
+  // Re-render catalog after OAuth popup completes (postMessage from popup)
+  window.addEventListener('message', (event) => {
+    const data = event.data;
+    if (data?.source === 'pkg-oauth') {
+      const name = CONNECTOR_CATALOG.find((c) => c.id === data.connectorId)?.name ?? data.connectorId;
+      _catalogNotice = { type: 'ok', text: `${name} connected. Sync starting…` };
+      reloadCatalogStatuses();
+    }
+  });
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
 async function render() {
-  const grid = document.getElementById('connectors-list');
-  grid.innerHTML = '';
+  const container = document.getElementById('connectors-list');
+  container.innerHTML = '';
 
   const sources = new Map(
     (state.graph.metadata?.sources || []).map((s) => [s.name, s]),
@@ -431,11 +529,311 @@ async function render() {
 
   const [isLocal, isPublic] = await Promise.all([localIngestSupported(), publicIngestAvailable()]);
 
+  // Load catalog connector statuses (API-backed; returns [] if API unavailable)
+  const statuses = await loadConnectorStatuses();
+  _connectorStatuses = Object.fromEntries(statuses.map((s) => [s.id, s]));
+
+  // ── Catalog section ──────────────────────────────────────────────────────
+  container.appendChild(buildCatalogSection());
+
+  // ── Local ingest tools section ───────────────────────────────────────────
+  const inlineWrap = el('div', { class: 'connector-section' });
+  inlineWrap.appendChild(
+    el('h3', { class: 'connector-section-title' }, 'Local ingest tools'),
+  );
+  const inlineGrid = el('div', { class: 'card-grid' });
   for (const c of KNOWN_CONNECTORS) {
-    grid.appendChild(buildCard(c, sources.get(c.id), isLocal, isPublic));
+    inlineGrid.appendChild(buildCard(c, sources.get(c.id), isLocal, isPublic));
     applySchedule(c, isLocal, isPublic);
   }
+  inlineWrap.appendChild(inlineGrid);
+  container.appendChild(inlineWrap);
 }
+
+// ── Catalog section ───────────────────────────────────────────────────────────
+
+function buildCatalogSection() {
+  const section = el('div', { class: 'connector-section' });
+
+  // Title
+  section.appendChild(el('h3', { class: 'connector-section-title' }, 'Connector catalog'));
+
+  // Stats row
+  const availableCount = CONNECTOR_CATALOG.filter((c) => c.availability === 'available').length;
+  const configuredCount = Object.values(_connectorStatuses).filter((s) => s.configured).length;
+  const statsRow = el('div', { class: 'catalog-stats-row' });
+  [
+    ['Roster', String(CONNECTOR_CATALOG.length)],
+    ['Available', String(availableCount)],
+    ['Configured', String(configuredCount)],
+  ].forEach(([label, value]) => {
+    const stat = el('div', { class: 'catalog-stat' });
+    stat.appendChild(el('div', { class: 'catalog-stat-value' }, value));
+    stat.appendChild(el('div', { class: 'catalog-stat-label' }, label));
+    statsRow.appendChild(stat);
+  });
+  section.appendChild(statsRow);
+
+  // Notice banner (success/error from last action)
+  const noticeBanner = el('div', { class: 'catalog-notice', id: 'catalog-notice', hidden: !_catalogNotice });
+  if (_catalogNotice) {
+    noticeBanner.className = `catalog-notice catalog-notice-${_catalogNotice.type}`;
+    noticeBanner.textContent = _catalogNotice.text;
+    noticeBanner.hidden = false;
+  }
+  section.appendChild(noticeBanner);
+
+  // Controls: search + category filter
+  const controls = el('div', { class: 'catalog-controls' });
+
+  const searchInput = el('input', {
+    type: 'search',
+    class: 'catalog-search',
+    placeholder: 'Search connectors…',
+    'aria-label': 'Search connectors',
+    value: _catalogQuery,
+  });
+  searchInput.addEventListener('input', () => {
+    _catalogQuery = searchInput.value;
+    refreshCatalogGrid();
+  });
+  controls.appendChild(searchInput);
+
+  const cats = el('div', { class: 'catalog-categories' });
+  for (const cat of ['All', ...CATALOG_CATEGORIES]) {
+    const btn = el(
+      'button',
+      {
+        class: `catalog-cat-btn${cat === _catalogCategory ? ' active' : ''}`,
+        type: 'button',
+        'data-cat': cat,
+      },
+      cat,
+    );
+    btn.addEventListener('click', () => {
+      _catalogCategory = cat;
+      // Update active class
+      cats.querySelectorAll('.catalog-cat-btn').forEach((b) =>
+        b.classList.toggle('active', b.dataset.cat === cat),
+      );
+      refreshCatalogGrid();
+    });
+    cats.appendChild(btn);
+  }
+  controls.appendChild(cats);
+  section.appendChild(controls);
+
+  // Grid
+  _catalogGrid = el('div', { class: 'card-grid catalog-grid' });
+  refreshCatalogGrid();
+  section.appendChild(_catalogGrid);
+
+  return section;
+}
+
+function refreshCatalogGrid() {
+  if (!_catalogGrid) return;
+  _catalogGrid.innerHTML = '';
+  const needle = _catalogQuery.trim().toLowerCase();
+  const filtered = CONNECTOR_CATALOG.filter((c) => {
+    if (_catalogCategory !== 'All' && c.category !== _catalogCategory) return false;
+    if (!needle) return true;
+    return (
+      c.name.toLowerCase().includes(needle) ||
+      c.description.toLowerCase().includes(needle) ||
+      c.id.toLowerCase().includes(needle)
+    );
+  });
+  for (const c of filtered) {
+    _catalogGrid.appendChild(buildCatalogCard(c));
+  }
+}
+
+function buildCatalogCard(connector) {
+  const summary = _connectorStatuses[connector.id];
+  const configured = Boolean(summary?.configured);
+  const isAvailable = connector.availability === 'available';
+  const isBusy = _catalogBusyId === connector.id;
+
+  const card = el('div', {
+    class: `card connector-card catalog-card${isAvailable ? '' : ' disabled'}`,
+    'data-catalog-id': connector.id,
+  });
+
+  // Header
+  const head = el('div', { class: 'connector-card-head' });
+  const headText = el('div', { class: 'connector-head-text' });
+  headText.appendChild(el('h3', {}, connector.name));
+  headText.appendChild(el('p', { class: 'meta', style: 'font-size:0.78rem;color:var(--accent);margin:0' }, connector.category));
+  head.appendChild(headText);
+
+  // Availability pill (top-right)
+  const pill = el(
+    'span',
+    { class: `catalog-pill ${isAvailable ? 'catalog-pill-available' : 'catalog-pill-planned'}` },
+    isAvailable ? 'available' : 'planned',
+  );
+  head.appendChild(pill);
+  card.appendChild(head);
+
+  // Description
+  card.appendChild(el('p', { class: 'meta', style: 'margin:0' }, connector.description));
+
+  // Meta pills row
+  const metaRow = el('div', { class: 'catalog-card-meta' });
+  metaRow.appendChild(
+    el('span', { class: 'catalog-pill catalog-pill-mode' }, connector.setupMode === 'oauth' ? 'OAuth' : 'API key'),
+  );
+  if (configured) {
+    metaRow.appendChild(el('span', { class: 'catalog-pill catalog-pill-configured' }, 'configured'));
+  }
+  if (summary?.lastSyncStatus) {
+    metaRow.appendChild(
+      el('span', { class: 'catalog-pill catalog-pill-mode' }, `sync: ${summary.lastSyncStatus}`),
+    );
+  }
+  card.appendChild(metaRow);
+
+  // Sync info
+  if (configured && summary) {
+    const syncInfo = el('div', { class: 'connector-last-run' });
+    syncInfo.textContent = `Last sync: ${summary.lastSyncAt ? fmtDate(summary.lastSyncAt) : 'not yet'}`;
+    card.appendChild(syncInfo);
+  } else if (isAvailable) {
+    card.appendChild(el('div', { class: 'connector-never-run' }, 'Ready for one-click setup.'));
+  } else {
+    card.appendChild(el('div', { class: 'connector-never-run' }, 'Backend ingest not wired yet — visible on the roadmap.'));
+  }
+
+  // Inline status
+  const inlineStatus = el('div', { class: 'connector-inline-status' });
+  card.appendChild(inlineStatus);
+
+  // Actions
+  const actions = el('div', { class: 'actions' });
+
+  if (!isAvailable) {
+    const btn = el('button', { class: 'primary', type: 'button', disabled: true }, 'Coming soon');
+    actions.appendChild(btn);
+  } else {
+    const primaryLabel = configured ? 'Sync now' : connector.ctaLabel;
+    const primaryBtn = el(
+      'button',
+      { class: 'primary catalog-btn-primary', type: 'button', disabled: isBusy },
+      isBusy ? 'Working…' : primaryLabel,
+    );
+    primaryBtn.addEventListener('click', () =>
+      handleCatalogAction(connector, primaryBtn, inlineStatus),
+    );
+    actions.appendChild(primaryBtn);
+
+    if (configured && connector.setupMode === 'apikey') {
+      const updateBtn = el('button', { class: 'connector-btn-cfg', type: 'button', disabled: isBusy }, '🔑 Update key');
+      updateBtn.addEventListener('click', () => promptAndConfigureApiKey(connector, primaryBtn, inlineStatus));
+      actions.appendChild(updateBtn);
+    }
+  }
+
+  card.appendChild(actions);
+  return card;
+}
+
+async function handleCatalogAction(connector, btn, statusEl) {
+  const summary = _connectorStatuses[connector.id];
+  const configured = Boolean(summary?.configured);
+
+  if (configured) {
+    await catalogSync(connector, btn, statusEl);
+  } else if (connector.setupMode === 'oauth') {
+    await catalogOAuth(connector, btn, statusEl);
+  } else {
+    await promptAndConfigureApiKey(connector, btn, statusEl);
+  }
+}
+
+async function catalogSync(connector, btn, statusEl) {
+  setCatalogBusy(connector.id, btn, statusEl, '⏳ Syncing…');
+  const res = await triggerConnectorSync(connector.id);
+  clearCatalogBusy(connector.id, btn);
+  if (res.ok) {
+    setCatalogNotice('ok', `${connector.name} sync enqueued.`);
+    showToast(`${connector.name} sync enqueued`, 'success');
+  } else {
+    setCatalogNotice('err', `${connector.name}: ${res.error || `HTTP ${res.status}`}`);
+    showToast(`${connector.name} sync failed`, 'error');
+  }
+  reloadCatalogStatuses();
+}
+
+async function catalogOAuth(connector, btn, statusEl) {
+  setCatalogBusy(connector.id, btn, statusEl, '⏳ Opening…');
+  const res = await connectOAuthConnector(connector.id);
+  clearCatalogBusy(connector.id, btn);
+  if (!res.ok || !res.authorizeUrl) {
+    setCatalogNotice('err', `${connector.name}: ${res.error || 'OAuth unavailable'}`);
+    showToast(`${connector.name} OAuth failed`, 'error');
+    return;
+  }
+  const popup = window.open(res.authorizeUrl, '_blank', 'popup,width=560,height=760');
+  if (!popup) window.location.assign(res.authorizeUrl);
+  setCatalogNotice('ok', `Opening ${connector.name} authorization…`);
+}
+
+async function promptAndConfigureApiKey(connector, btn, statusEl) {
+  const apiKey = window.prompt(`Paste your ${connector.name} API key`);
+  if (!apiKey?.trim()) return;
+
+  let metadata;
+  if (connector.id === 'zotero') {
+    const groupId = window.prompt('Optional Zotero group ID (leave blank for personal library)');
+    if (groupId?.trim()) metadata = { groupId: groupId.trim() };
+  }
+
+  setCatalogBusy(connector.id, btn, statusEl, '⏳ Configuring…');
+  const res = await configureConnectorApiKey(connector.id, apiKey.trim(), metadata);
+  clearCatalogBusy(connector.id, btn);
+  if (res.ok) {
+    setCatalogNotice('ok', `${connector.name} configured. Initial ingest starting…`);
+    showToast(`${connector.name} configured`, 'success');
+  } else {
+    setCatalogNotice('err', `${connector.name}: ${res.error || `HTTP ${res.status}`}`);
+    showToast(`${connector.name} configuration failed`, 'error');
+  }
+  reloadCatalogStatuses();
+}
+
+function setCatalogBusy(connectorId, btn, statusEl, message) {
+  _catalogBusyId = connectorId;
+  btn.disabled = true;
+  btn.dataset.origText = btn.textContent;
+  btn.textContent = 'Working…';
+  statusEl.textContent = message;
+  statusEl.className = 'connector-inline-status connector-inline-running';
+}
+
+function clearCatalogBusy(connectorId, btn) {
+  if (_catalogBusyId === connectorId) _catalogBusyId = null;
+  btn.disabled = false;
+  btn.textContent = btn.dataset.origText || btn.textContent;
+}
+
+function setCatalogNotice(type, text) {
+  _catalogNotice = { type, text };
+  const banner = document.getElementById('catalog-notice');
+  if (banner) {
+    banner.className = `catalog-notice catalog-notice-${type}`;
+    banner.textContent = text;
+    banner.hidden = false;
+  }
+}
+
+async function reloadCatalogStatuses() {
+  const statuses = await loadConnectorStatuses();
+  _connectorStatuses = Object.fromEntries(statuses.map((s) => [s.id, s]));
+  refreshCatalogGrid();
+}
+
+// ── Inline connector card (existing local ingest tools) ───────────────────────
 
 function buildCard(connector, source, isLocal, isPublic) {
   const card = el('div', { class: 'card connector-card', 'data-connector-id': connector.id });

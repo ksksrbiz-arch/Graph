@@ -269,6 +269,83 @@ export function clearAllAutoIngest() {
   for (const id of [..._autoIngestTimers.keys()]) clearAutoIngest(id);
 }
 
+// ── Connector catalog API ─────────────────────────────────────────────────────
+
+const API_CONNECTORS_PATH = '/api/v1/connectors';
+const API_OAUTH_CONNECT_PATH = '/api/v1/oauth/connect';
+
+/** Fetch configured connector statuses for the current user. Returns [] on error. */
+export async function loadConnectorStatuses() {
+  const url = publicApiUrl(
+    `${API_CONNECTORS_PATH}?userId=${encodeURIComponent(brainUserId())}`,
+  );
+  if (!url) return [];
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    return (await res.json()) || [];
+  } catch {
+    return [];
+  }
+}
+
+/** Configure an API-key connector: stores the encrypted key and enqueues an immediate sync. */
+export async function configureConnectorApiKey(connectorId, apiKey, metadata) {
+  const url = publicApiUrl(
+    `${API_CONNECTORS_PATH}/${encodeURIComponent(connectorId)}/configure?userId=${encodeURIComponent(brainUserId())}`,
+  );
+  if (!url) return { ok: false, error: 'no apiBaseUrl configured' };
+  try {
+    const body = { apiKey, ...(metadata ? { metadata } : {}) };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, ...json };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/** Trigger an immediate sync for a configured connector. */
+export async function triggerConnectorSync(connectorId) {
+  const url = publicApiUrl(
+    `${API_CONNECTORS_PATH}/${encodeURIComponent(connectorId)}/sync?userId=${encodeURIComponent(brainUserId())}`,
+  );
+  if (!url) return { ok: false, error: 'no apiBaseUrl configured' };
+  try {
+    const res = await fetch(url, { method: 'POST' });
+    const json = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, ...json };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * Start an OAuth flow for a catalog connector.
+ * Returns `{ ok: true, authorizeUrl }` on success so the caller can open a popup.
+ */
+export async function connectOAuthConnector(connectorId) {
+  const url = publicApiUrl(
+    `${API_OAUTH_CONNECT_PATH}/${encodeURIComponent(connectorId)}?userId=${encodeURIComponent(brainUserId())}`,
+  );
+  if (!url) return { ok: false, error: 'no apiBaseUrl configured' };
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ returnTo: window.location.href }),
+    });
+    const json = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, ...json };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
 /**
  * Send a pre-parsed graph (nodes + edges) to the public API for ingestion.
  * Used by the client-side ingest path when the local dev server is unavailable.
