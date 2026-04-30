@@ -15,6 +15,7 @@ import { initSearchView } from './views/search.js';
 import { initSettingsView } from './views/settings.js';
 import { initBrainView } from './views/brain.js';
 import { mount as mountCortex } from './views/cortex.js';
+import { mount as mountFinance } from './views/finance.js';
 import { showBootScreen, reportBootProgress } from './hud/boot-screen.js';
 import { mountBrainPreview } from './brain-preview.js';
 
@@ -23,7 +24,7 @@ import { mountBrainPreview } from './brain-preview.js';
 // boots in the background.
 showBootScreen();
 
-const ROUTES = ['#/graph', '#/timeline', '#/connectors', '#/brain', '#/cortex', '#/search', '#/settings'];
+const ROUTES = ['#/graph', '#/timeline', '#/connectors', '#/brain', '#/cortex', '#/finance', '#/search', '#/settings'];
 
 function navigate() {
   let hash = location.hash;
@@ -71,6 +72,8 @@ async function bootstrap() {
   initBrainView();
   const cortexRoot = document.getElementById('view-cortex');
   if (cortexRoot) mountCortex(cortexRoot);
+  const financeRoot = document.getElementById('view-finance');
+  if (financeRoot) mountFinance(financeRoot);
 
   window.addEventListener('hashchange', navigate);
   navigate();

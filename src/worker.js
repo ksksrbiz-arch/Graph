@@ -25,6 +25,7 @@
 import { parseMarkdown, parseText } from './worker/text-parser.js';
 import { handleIngressApi } from './worker/ingress.js';
 import { handleCortexApi } from './worker/cortex/router.js';
+import { handleFinanceApi } from './worker/finance/router.js';
 import { handleOAuthApi } from './worker/oauth.js';
 import { dispatchCron } from './worker/cortex/scheduler.js';
 import { recordEvent, upsertNodesAndEdges } from './worker/d1-store.js';
@@ -90,6 +91,9 @@ async function handleApi(request, env, url) {
   // when null.
   const cortex = await handleCortexApi(request, env, url);
   if (cortex) return cortex;
+
+  const finance = await handleFinanceApi(request, env, url);
+  if (finance) return finance;
 
   const oauth = await handleOAuthApi(request, env, url);
   if (oauth) return oauth;

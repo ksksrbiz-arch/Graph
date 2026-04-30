@@ -27,6 +27,14 @@
   --t-tag: #f9a8d4;
   --t-default: #9aa3b2;
 
+  /* APC — Accounts Payable Cortex node types */
+  --t-vendor: #f0a868;
+  --t-bill: #ff8a8a;
+  --t-payment-proposal: #fbbf24;
+  --t-tax-liability: #cfb1ff;
+  --t-compliance-rule: #9bd1ff;
+  --t-approval-event: #5fd0a4;
+
   --topbar-h: 52px;
   --sidebar-w: 184px;
 }
@@ -158,6 +166,11 @@ input[type="search"]:focus, input[type="text"]:focus {
   background: radial-gradient(circle at 35% 35%, var(--accent), transparent 70%);
   border-color: transparent;
   box-shadow: 0 0 6px rgba(124, 156, 255, 0.55);
+}
+.nav-glyph[data-g="finance"] {
+  border-radius: 3px;
+  background: linear-gradient(135deg, #1f4d33 40%, #2a6b44 100%);
+  border-color: #2a6b44;
 }
 
 .sidebar-spacer { flex: 1; }

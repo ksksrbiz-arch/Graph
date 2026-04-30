@@ -11,12 +11,19 @@
 //   web-fetch       — server fetches a URL, returns extracted readable text
 //   write-note      — persist a note as text → KV graph + D1 event mirror
 //   summarize       — LLM-summarize a chunk of text via Workers AI
+//
+// Finance tools (APC Phase 1):
+//   finance-queue   — fetch the AP approval queue (pending bills + proposals)
+//   list-bills      — list bills filtered by status/vendor
+//   get-vendor      — look up a vendor by name or ID
+//   finance-summary — summarize current AP position (totals, overdue, tax)
 
 import { listEvents, recordEvent, upsertNodesAndEdges } from '../d1-store.js';
 import { parseText } from '../text-parser.js';
 import { recall as vectorRecall } from './vector.js';
 import { speakText } from './sensory.js';
 import { describeMcpTools, dispatchMcpTool } from './mcp-registry.js';
+import { getApprovalQueue, listBills, listVendors, listTaxLiabilities } from '../finance/store.js';
 
 const FETCH_TIMEOUT_MS = 8_000;
 const MAX_URL_BYTES = 1_500_000;
@@ -155,6 +162,81 @@ export const REGISTRY = {
       });
       const summary = (r?.response || '').trim();
       return { ok: true, result: { summary } };
+    },
+  },
+
+  'finance-queue': {
+    intent: 'finance-queue',
+    description: 'Fetch the Accounts Payable approval queue — all pending bills and payment proposals awaiting action. No args required.',
+    async run(env, _args, { userId }) {
+      if (!env.GRAPH_DB) return { ok: false, error: 'GRAPH_DB binding missing' };
+      const queue = await getApprovalQueue(env.GRAPH_DB, { userId });
+      return { ok: true, result: queue };
+    },
+  },
+
+  'list-bills': {
+    intent: 'list-bills',
+    description: 'List AP bills. Args: {status?: "pending"|"approved"|"paid"|"rejected"|"overdue", vendorId?: string, limit?: number}.',
+    async run(env, args, { userId }) {
+      if (!env.GRAPH_DB) return { ok: false, error: 'GRAPH_DB binding missing' };
+      const bills = await listBills(env.GRAPH_DB, {
+        userId,
+        status: args?.status ? String(args.status) : undefined,
+        vendorId: args?.vendorId ? String(args.vendorId) : undefined,
+        limit: args?.limit,
+      });
+      return { ok: true, result: { bills } };
+    },
+  },
+
+  'get-vendor': {
+    intent: 'get-vendor',
+    description: 'Look up vendors by name (partial match) or list all. Args: {name?: string, limit?: number}.',
+    async run(env, args, { userId }) {
+      if (!env.GRAPH_DB) return { ok: false, error: 'GRAPH_DB binding missing' };
+      let vendors;
+      if (args?.name) {
+        // Use graph-query style label search via GRAPH_DB
+        const { results } = await env.GRAPH_DB.prepare(
+          `SELECT id, name, ein, payment_terms, early_pay_discount_pct, contact_email, status
+           FROM apc_vendors WHERE user_id = ? AND name LIKE ? ORDER BY name LIMIT 20`
+        ).bind(userId, `%${String(args.name).slice(0, 80)}%`).all();
+        vendors = results || [];
+      } else {
+        vendors = await listVendors(env.GRAPH_DB, { userId, limit: args?.limit || 20 });
+      }
+      return { ok: true, result: { vendors } };
+    },
+  },
+
+  'finance-summary': {
+    intent: 'finance-summary',
+    description: 'Summarize the current AP position: total pending/overdue amounts, upcoming tax liabilities, and queue depth. No args required.',
+    async run(env, _args, { userId }) {
+      if (!env.GRAPH_DB) return { ok: false, error: 'GRAPH_DB binding missing' };
+      const [billsAll, taxAll] = await Promise.all([
+        listBills(env.GRAPH_DB, { userId, limit: 200 }),
+        listTaxLiabilities(env.GRAPH_DB, { userId, limit: 50 }),
+      ]);
+      const pending = billsAll.filter((b) => b.status === 'pending');
+      const overdue = billsAll.filter((b) => b.status === 'overdue');
+      const pendingTotal = pending.reduce((s, b) => s + (b.amountCents || 0), 0);
+      const overdueTotal = overdue.reduce((s, b) => s + (b.amountCents || 0), 0);
+      const taxEstimated = taxAll.filter((t) => t.status === 'estimated');
+      const taxTotal = taxEstimated.reduce((s, t) => s + (t.estimatedCents || 0), 0);
+      return {
+        ok: true,
+        result: {
+          pendingBills: pending.length,
+          pendingTotalCents: pendingTotal,
+          overdueBills: overdue.length,
+          overdueTotalCents: overdueTotal,
+          taxLiabilities: taxEstimated.length,
+          taxEstimatedTotalCents: taxTotal,
+          summary: `${pending.length} pending bills ($${(pendingTotal / 100).toFixed(2)}), ${overdue.length} overdue ($${(overdueTotal / 100).toFixed(2)}), ${taxEstimated.length} estimated tax liabilities ($${(taxTotal / 100).toFixed(2)}).`,
+        },
+      };
     },
   },
 };
