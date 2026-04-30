@@ -4,6 +4,8 @@
 //
 // Dispatched from web/app.js when the route hash is #/cortex.
 
+import { state } from '../state.js';
+
 const API_PERCEIVE = '/api/v1/cortex/perceive';
 const API_THINK    = '/api/v1/cortex/think';
 const API_STATE    = '/api/v1/cortex/state';
@@ -74,7 +76,13 @@ async function hello() {
     const att = await fetch(api(API_STATE) + `?userId=${encodeURIComponent(userId)}`).then((r) => r.json());
     add('system', `connected · attention focus on ${att?.attention?.focus?.length || 0} nodes · last updated ${rel(att?.attention?.lastUpdated)}`);
   } catch {
-    add('system', 'cortex offline — POST will retry when you send.');
+    const localNodes = state.graph?.nodes?.length ?? 0;
+    const localEdges = state.graph?.edges?.length ?? 0;
+    if (localNodes > 0) {
+      add('system', `cortex offline — local graph has ${localNodes} nodes · ${localEdges} edges. Start the backend API to enable Think/Perceive.`);
+    } else {
+      add('system', 'cortex offline — no graph data yet. Ingest content first, then start the backend API to enable Think/Perceive.');
+    }
   }
 }
 
