@@ -164,7 +164,9 @@ export function initGraphView() {
     getMode: () => brain?.mode || 'idle',
     onStart: () => {
       setConfig({ spikes: true });
-      brain?.start();
+      // setConfig triggers applyConfig() which calls brain.start() if idle.
+      // No need to call brain.start() here directly — doing so would create
+      // two concurrent start() calls before the first one can update the mode.
     },
     onPause: () => {
       setConfig({ spikes: false });
@@ -177,13 +179,23 @@ export function initGraphView() {
       const nodes = state.graph?.nodes || [];
       if (nodes.length === 0) return;
       const pick = nodes[Math.floor(Math.random() * nodes.length)];
-      brain?.stimulate?.(pick.id, 22);
       const text = `forced spike on “${truncate(pick.label || pick.id, 40)}”`;
       brainControlsApi?.pushInsight(text);
       statsBarApi?.pushInsight(text);
       // Visual Spec Part 3 §12 — trigger the insight burst at the canvas
       // center; it draws on its own overlay canvas above the graph.
       triggerInsightBurst({ text });
+      // Ensure the brain is running so the spike animates across the graph.
+      // If the brain was paused, start it before injecting the stimulus.
+      if (brain) {
+        if (brain.mode === 'idle') {
+          // Only stimulate if the brain successfully entered a running mode
+          // (stop() called mid-start would leave mode 'idle' and localSim null).
+          brain.start().then(() => { if (brain.mode !== 'idle') brain.stimulate(pick.id, 22); });
+        } else {
+          brain.stimulate(pick.id, 22);
+        }
+      }
     },
   });
   initMiniMap({ getRenderer: () => renderer });
@@ -276,7 +288,9 @@ function rebuildRenderer() {
     },
     onWeight: () => {},
   });
-  if (state.config.spikes !== false) brain.start();
+  if (state.config.spikes !== false) {
+    brain.start().then(() => brainControlsApi?.syncFromState());
+  }
   updateModeHud();
 }
 
@@ -367,7 +381,9 @@ function applyConfig() {
     renderer.stopSpikes?.();
     brain?.stop();
   } else {
-    if (brain && brain.mode === 'idle') brain.start();
+    if (brain && brain.mode === 'idle') {
+      brain.start().then(() => brainControlsApi?.syncFromState());
+    }
     renderer.startSpikes?.();
   }
 }
