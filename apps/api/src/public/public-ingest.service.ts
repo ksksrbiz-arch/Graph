@@ -114,6 +114,32 @@ export class PublicIngestService {
     };
   }
 
+  /** Nodes + edges added since `sinceIso`. Drives the SPA's live ticker
+   *  (poll loop in graph-live.js) — clients send back the `ts` we return so
+   *  the next poll only fetches what's new since this one served. */
+  async snapshotDelta(
+    userId: string,
+    sinceIso: string,
+    limit = 5_000,
+  ): Promise<{
+    schemaVersion: number;
+    metadata: { ts: string; userId: string; since: string };
+    nodes: KGNode[];
+    edges: KGEdge[];
+  }> {
+    if (!this.allowedUserIds.has(userId)) {
+      throw new ForbiddenException(`userId=${userId} is not on the public allowlist`);
+    }
+    const ts = new Date().toISOString();
+    const { nodes, edges } = await this.graph.snapshotDeltaForUser(userId, sinceIso, limit);
+    return {
+      schemaVersion: 1,
+      metadata: { ts, userId, since: sinceIso },
+      nodes,
+      edges,
+    };
+  }
+
   /** Snapshot the demo user's full graph back out so the website can render
    *  it. Cursor-based pagination is overkill at this scale (Phase 0 target is
    *  a few thousand nodes); we cap with a hard limit instead. */

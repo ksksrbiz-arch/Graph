@@ -87,6 +87,12 @@ export class GraphService {
     return this.repo.snapshotForUser(userId, limit);
   }
 
+  /** Nodes + edges added strictly after `sinceIso`. Drives the SPA's poll
+   *  loop in web/graph-live.js — passthrough to the repository. */
+  snapshotDeltaForUser(userId: string, sinceIso: string, limit = 5_000) {
+    return this.repo.snapshotDeltaForUser(userId, sinceIso, limit);
+  }
+
   private emitDelta(userId: string, event: GraphDeltaEvent): void {
     this.gateway?.emitDelta(userId, event);
   }

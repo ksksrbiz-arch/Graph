@@ -143,6 +143,40 @@ Without a KV binding the Worker still serves the static SPA, but the public inge
 
 Keyboard: `Esc` closes panel / clears focus, `f` fits the graph to the viewport.
 
+## Brain ingest features
+
+The graph view ships with a docked **Brain ingest** panel (top-right) and an
+animation overlay that lights up freshly-arrived nodes in real time.
+
+**Ingest paths** — both call the existing public ingest API:
+
+| Tab  | What it sends                                                                    |
+| ---- | -------------------------------------------------------------------------------- |
+| URL  | `fetch(url)` in your browser, strips tags, posts cleaned text to `/api/v1/public/ingest/text`. CORS will block many sites — the panel surfaces that as a clear error and falls back to "paste the text yourself". |
+| Text | Pastes text or markdown directly. Auto-detects markdown (headings or `[[wikilinks]]`) and routes to `/markdown` accordingly. |
+| Log  | In-memory history of recent ingestion attempts with status + node counts.        |
+
+Backend wiring:
+
+- `POST /api/v1/public/ingest/text` and `POST /api/v1/public/ingest/markdown` — parse text into `KGNode`s + `KGEdge`s, persist via Neo4j, perceive into the running brain, and queue a debounced connectome reload.
+- `GET /api/v1/public/graph/delta?userId=…&since=<ISO|epoch_ms>` — returns nodes + edges with `createdAt > since`. Drives the SPA poll loop (`web/graph-live.js`, default 3s cadence).
+
+**Live animations** (overlay over `force-graph`, 2D mode):
+
+- **Procedural spawn** — each newly-arrived node scales in with an axon-style particle stream from a random existing neighbour.
+- **Query trace** — focusing a node (search → click, or a graph click → ego-network) ripples a BFS wave through up to 5 hops of neighbours, raising heat on touched nodes.
+- **Inference arc** — `brainAnimation.inferenceArc(from, to, reason)` is exposed for future use (long-distance reasoning hops); not auto-fired yet.
+
+**Required env on the API** (already set on Fly demo deploy):
+
+```ini
+PUBLIC_INGEST_USER_IDS = "local"        # allowlist for the demo userId
+PUBLIC_INGEST_MAX_BYTES = 262144        # 256 KB default per request
+BRAIN_AUTO_START_USER_IDS = "local"     # so spike-stream + STDP run on boot
+```
+
+The 3D / 4D renderers don't draw the overlay yet — particles and glow are 2D-only for now. The animation engine still tracks state in 3D, so the panel and log update; only the canvas projection is gated to `renderer.kind === '2d'`.
+
 ## v1 ingesters
 
 `scripts/ingest-*.mjs` write to `data/graph.json` via `scripts/lib/graph-store.mjs` (schema-aligned with §5 of the spec — same `KGNode` / `KGEdge` shape the v2 API will store).
