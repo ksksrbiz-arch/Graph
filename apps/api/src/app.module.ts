@@ -1,7 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { GraphQLModule } from '@nestjs/graphql';
+import { ApolloDriver, type ApolloDriverConfig } from '@nestjs/apollo';
+import { join } from 'node:path';
+import { AgentModule } from './agent/agent.module';
 import { AuditModule } from './audit/audit.module';
+import { ArcModule } from './arc/arc.module';
 import { AuthModule } from './auth/auth.module';
 import { BrainModule } from './brain/brain.module';
 import { ConnectorConfigsModule } from './connectors/connector-configs.module';
@@ -25,12 +30,22 @@ import { RedisModule } from './shared/redis/redis.module';
     ConfigModule.forRoot({ isGlobal: true }),
     // Spec §10.1: 100 req/min/user.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    GraphQLModule.forRoot<ApolloDriverConfig>({
+      driver: ApolloDriver,
+      // Write the generated schema to a file so it can be committed and used
+      // by clients without connecting to a live server.
+      autoSchemaFile: join(process.cwd(), 'schema.gql'),
+      sortSchema: true,
+      // Context is used by resolvers to access the HTTP request (for JWT user).
+      context: ({ req }: { req: unknown }) => ({ req }),
+    }),
     CryptoModule,
     IdempotencyModule,
     Neo4jModule,
     PostgresModule,
     RedisModule,
     HealthModule,
+    ArcModule,
     AuthModule,
     UsersModule,
     AuditModule,
@@ -38,6 +53,7 @@ import { RedisModule } from './shared/redis/redis.module';
     BrainModule,
     MotorModule,
     ReasoningModule,
+    AgentModule,
     ConnectorConfigsModule,
     OAuthModule,
     ConnectorsModule,

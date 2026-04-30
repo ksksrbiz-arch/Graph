@@ -21,6 +21,9 @@ export interface TransformResult {
 export abstract class BaseConnector {
   abstract readonly id: ConnectorId;
   abstract readonly oauthScopes: readonly string[];
+  /** How this connector authenticates. 'oauth' uses the OAuth flow; 'apikey'
+   *  is configured via POST /connectors/:id/configure with a plain API key. */
+  readonly authType: 'oauth' | 'apikey' = 'oauth';
 
   /**
    * Yield raw items created or updated since `since`. Implementations MUST be

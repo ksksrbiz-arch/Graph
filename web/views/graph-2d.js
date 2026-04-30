@@ -7,6 +7,7 @@ import { state } from '../state.js';
 import { colorForType, srcId, tgtId, truncate } from '../util.js';
 import { regionForNode, styleForRegion } from '../cortex.js';
 import { createSpikeRenderer } from '../spike-render.js';
+import { createBrainConstruction } from '../brain-construction.js';
 
 export function create2DRenderer({ container, callbacks }) {
   container.innerHTML = '';
@@ -38,6 +39,7 @@ export function create2DRenderer({ container, callbacks }) {
   fg.width(container.clientWidth).height(container.clientHeight);
 
   const spikes = createSpikeRenderer(fg, state);
+  const construction = createBrainConstruction(fg, state);
 
   function drawNode(node, ctx, scale) {
     const r = nodeRadius(node);
@@ -154,7 +156,12 @@ export function create2DRenderer({ container, callbacks }) {
   return {
     kind: '2d',
     fg,
-    setData(graph) { fg.graphData(graph); },
+    setData(graph) {
+      fg.graphData(graph);
+      // Diff against the previous sync and queue construction animations
+      // for any node/edge that just appeared.
+      construction.syncFromGraph();
+    },
     applyConfig,
     refresh() { fg.refresh?.(); },
     fit(ms = 500, pad = 60) { fg.zoomToFit(ms, pad); },
@@ -168,10 +175,14 @@ export function create2DRenderer({ container, callbacks }) {
     },
     screen2GraphCoords(x, y) { return fg.screen2GraphCoords(x, y); },
     spikeNode(neuronId) { spikes.onSpike(neuronId); },
-    startSpikes() { spikes.start(); },
-    stopSpikes() { spikes.stop(); spikes.clear(); },
+    startSpikes() { spikes.start(); construction.start(); },
+    stopSpikes() { spikes.stop(); spikes.clear(); construction.stop(); construction.clear(); },
+    bornNode(neuronId) { construction.spawnBirth(neuronId); },
+    grewEdge(edge) { construction.spawnGrowth(edge); },
+    thinkWave(rootId, color) { construction.spawnThinkWave(rootId, color); },
     destroy() {
       try { spikes.stop(); } catch {}
+      try { construction.stop(); } catch {}
       try { ro.disconnect(); } catch {}
       try { fg._destructor?.(); } catch {}
       container.innerHTML = '';

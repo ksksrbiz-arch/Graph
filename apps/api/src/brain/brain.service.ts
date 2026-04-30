@@ -48,6 +48,7 @@ const DEFAULT_NOISE_RATE = 0.002;
 type SpikeListener = (userId: string, e: SpikeEvent) => void;
 type WeightListener = (userId: string, e: WeightChangeEvent) => void;
 type PerUserSpikeListener = (e: SpikeEvent) => void;
+type StopListener = (userId: string) => void;
 
 @Injectable()
 export class BrainService implements OnModuleDestroy {
@@ -55,6 +56,7 @@ export class BrainService implements OnModuleDestroy {
   private readonly running = new Map<string, RunningBrain>();
   private readonly spikeListeners = new Set<SpikeListener>();
   private readonly weightListeners = new Set<WeightListener>();
+  private readonly stopListeners = new Set<StopListener>();
 
   constructor(
     private readonly loader: ConnectomeLoader,
@@ -145,8 +147,23 @@ export class BrainService implements OnModuleDestroy {
       this.log.warn(`final checkpoint failed: ${(e as Error).message}`),
     );
     this.running.delete(userId);
+    for (const fn of this.stopListeners) {
+      try {
+        fn(userId);
+      } catch (err) {
+        this.log.warn(`stop listener crashed: ${(err as Error).message}`);
+      }
+    }
     this.log.log(`brain stopped user=${userId}`);
     return true;
+  }
+
+  /** Observe brain-stop events. Other services (cerebral stream, agent
+   *  caches, attention focus) hook in here so per-user state evicts when
+   *  the simulator powers down. */
+  onStop(fn: StopListener): () => void {
+    this.stopListeners.add(fn);
+    return () => this.stopListeners.delete(fn);
   }
 
   isRunning(userId: string): boolean {

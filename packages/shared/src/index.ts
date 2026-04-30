@@ -2,5 +2,7 @@
 // module only, never from internal paths — keeps the public contract stable.
 
 export * from './types.js';
+export * from './connectors.js';
 export * from './schemas.js';
 export * as Mocks from './mocks/index.js';
+export * from './financial.js';

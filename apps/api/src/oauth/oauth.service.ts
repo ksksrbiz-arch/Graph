@@ -17,7 +17,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import type { ConnectorId, ConnectorConfig } from '@pkg/shared';
+import {
+  DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES,
+  type ConnectorId,
+  type ConnectorConfig,
+} from '@pkg/shared';
 import { CredentialCipher } from '../shared/crypto/credential-cipher';
 import { ConnectorConfigStore } from '../connectors/connector-config.store';
 import { loadEnv } from '../config/env';
@@ -49,6 +53,7 @@ export interface CallbackRequest {
   connectorId: ConnectorId;
   code: string;
   state: string;
+  /** Derived callback URI from inbound request (kept for diagnostics). */
   redirectUri: string;
 }
 
@@ -59,8 +64,6 @@ interface CredentialPayload {
   grantedScopes?: string[];
   extra?: Record<string, unknown>;
 }
-
-const DEFAULT_SYNC_INTERVAL_MIN = 30;
 
 @Injectable()
 export class OAuthService {
@@ -83,6 +86,7 @@ export class OAuthService {
       state,
       userId: req.userId,
       connectorId: req.connectorId,
+      redirectUri: req.redirectUri,
       createdAt: Date.now(),
       ...(req.returnTo ? { returnTo: req.returnTo } : {}),
     };
@@ -129,11 +133,17 @@ export class OAuthService {
         `state/connector mismatch: ${entry.connectorId} vs ${req.connectorId}`,
       );
     }
+    if (req.redirectUri !== entry.redirectUri) {
+      this.log.warn(
+        `oauth callback redirect_uri mismatch connector=${req.connectorId}: ` +
+          `callback=${req.redirectUri} authorize=${entry.redirectUri}`,
+      );
+    }
 
     const tokens = await this.exchangeCode({
       provider,
       code: req.code,
-      redirectUri: req.redirectUri,
+      redirectUri: entry.redirectUri,
       ...(entry.codeVerifier ? { codeVerifier: entry.codeVerifier } : {}),
     });
 
@@ -147,7 +157,7 @@ export class OAuthService {
       enabled: true,
       credentials,
       syncIntervalMinutes:
-        existing?.syncIntervalMinutes ?? DEFAULT_SYNC_INTERVAL_MIN,
+        existing?.syncIntervalMinutes ?? DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES,
     };
     this.configs.upsert(config);
     this.log.log(

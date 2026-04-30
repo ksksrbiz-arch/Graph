@@ -16,7 +16,7 @@ import type { ConnectorId } from '@pkg/shared';
 import { CONNECTOR_IDS } from '@pkg/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { loadEnv } from '../config/env';
-import { stripTrailingSlash } from '../config/env-utils';
+import { splitCsvEnv, stripTrailingSlash } from '../config/env-utils';
 import { OAuthService } from './oauth.service';
 
 interface AuthedRequest extends Request {
@@ -24,7 +24,6 @@ interface AuthedRequest extends Request {
 }
 
 class ConnectDto {
-  redirectUri!: string;
   scopes?: string[];
   returnTo?: string;
 }
@@ -47,15 +46,16 @@ export class OAuthController {
     @Body() dto: ConnectDto,
   ): { authorizeUrl: string; state: string } {
     const id = this.assertConnectorId(connectorId);
-    if (!dto?.redirectUri) {
-      throw new BadRequestException('redirectUri is required');
-    }
+    // The redirect URI is derived server-side from API_PUBLIC_URL. Allowing the
+    // client to supply it would (a) make `connect` and `callback` disagree
+    // about the value sent to the provider — OAuth requires they match — and
+    // (b) let an attacker steer the provider to redirect anywhere.
     return this.oauth.authorize({
       userId: req.user.sub,
       connectorId: id,
-      redirectUri: dto.redirectUri,
-      ...(dto.scopes && dto.scopes.length > 0 ? { scopes: dto.scopes } : {}),
-      ...(dto.returnTo ? { returnTo: dto.returnTo } : {}),
+      redirectUri: this.callbackUri(req, id),
+      ...(dto?.scopes && dto.scopes.length > 0 ? { scopes: dto.scopes } : {}),
+      ...(dto?.returnTo ? { returnTo: dto.returnTo } : {}),
     });
   }
 
@@ -99,7 +99,7 @@ export class OAuthController {
     // refresh its connector list. Phase 1 may swap this for a redirect to
     // `state.returnTo`.
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(connectedPage(id, config.userId));
+    res.send(connectedPage(id, config.userId, splitCsvEnv(loadEnv().CORS_ORIGINS)));
   }
 
   private assertConnectorId(value: string): ConnectorId {
@@ -114,13 +114,30 @@ export class OAuthController {
     if (env.API_PUBLIC_URL) {
       return `${stripTrailingSlash(env.API_PUBLIC_URL)}/api/v1/oauth/callback/${connectorId}`;
     }
-    const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+    // Outside of dev/test, refuse to derive the redirect URI from request
+    // headers — `Host` and `x-forwarded-proto` are attacker-controlled and
+    // would let the provider redirect to a host of their choosing.
+    if (env.NODE_ENV === 'production') {
+      throw new BadRequestException(
+        'API_PUBLIC_URL must be configured for OAuth in production',
+      );
+    }
     const host = req.headers.host;
-    return `${proto}://${host}/api/v1/oauth/callback/${connectorId}`;
+    if (!host) {
+      throw new BadRequestException('cannot derive oauth callback uri: missing Host header');
+    }
+    return `${req.protocol}://${host}/api/v1/oauth/callback/${connectorId}`;
   }
 }
 
-function connectedPage(connectorId: string, userId: string): string {
+function connectedPage(
+  connectorId: string,
+  userId: string,
+  allowedOrigins: readonly string[],
+): string {
+  // postMessage to each configured SPA origin individually — never `'*'`,
+  // which would leak userId to any page that has a handle to this window.
+  const targets = JSON.stringify(allowedOrigins);
   return `<!doctype html>
 <html lang="en">
 <meta charset="utf-8" />
@@ -130,12 +147,15 @@ function connectedPage(connectorId: string, userId: string): string {
   <p>You can close this window.</p>
   <script>
     try {
-      window.opener && window.opener.postMessage(
-        { source: 'pkg-oauth', connectorId: ${JSON.stringify(connectorId)}, userId: ${JSON.stringify(userId)} },
-        '*'
-      );
+      var msg = { source: 'pkg-oauth', connectorId: ${JSON.stringify(connectorId)}, userId: ${JSON.stringify(userId)} };
+      var targets = ${targets};
+      if (window.opener) {
+        for (var i = 0; i < targets.length; i++) {
+          try { window.opener.postMessage(msg, targets[i]); } catch (e) {}
+        }
+      }
     } catch (e) {}
-    setTimeout(() => window.close(), 800);
+    setTimeout(function () { window.close(); }, 800);
   </script>
 </body>
 </html>`;

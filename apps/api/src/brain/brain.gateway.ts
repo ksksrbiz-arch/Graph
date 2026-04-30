@@ -30,6 +30,22 @@ export interface DreamEvt {
 
 const INSIGHT_PUSH_INTERVAL_MS = 5_000;
 
+type DreamListener = (userId: string, evt: DreamEvt) => void;
+
+export interface ThoughtEmitPayload {
+  trigger: string;
+  reason: string;
+  triggeredAt: number;
+  thought: {
+    question: string;
+    conclusion: string;
+    confidence: number;
+    seeds: Array<{ id: string; label?: string }>;
+    memories: Array<{ id: string; label?: string }>;
+    actions: unknown[];
+  };
+}
+
 @WebSocketGateway({
   namespace: '/brain',
   cors: { origin: true, credentials: true },
@@ -50,8 +66,39 @@ export class BrainGateway
     private readonly insights: InsightsService,
   ) {}
 
+  private readonly dreamListeners = new Set<DreamListener>();
+
   emitDream(userId: string, evt: DreamEvt): void {
     this.server?.to(this.roomFor(userId)).emit('dream', evt);
+    for (const fn of this.dreamListeners) {
+      try {
+        fn(userId, evt);
+      } catch (err) {
+        this.log.warn(`dream listener crashed: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  /** Subscribe to dream phase transitions. The cerebral stream uses this to
+   *  trigger a consolidation thought when the brain enters sleep. */
+  onDream(fn: DreamListener): () => void {
+    this.dreamListeners.add(fn);
+    return () => this.dreamListeners.delete(fn);
+  }
+
+  /** Broadcast a cerebral-stream thought to subscribed clients. */
+  emitThought(userId: string, evt: ThoughtEmitPayload): void {
+    this.server?.to(this.roomFor(userId)).emit('thought', {
+      trigger: evt.trigger,
+      reason: evt.reason,
+      triggeredAt: evt.triggeredAt,
+      question: evt.thought.question,
+      conclusion: evt.thought.conclusion,
+      confidence: evt.thought.confidence,
+      seeds: evt.thought.seeds.map((s) => ({ id: s.id, ...(s.label ? { label: s.label } : {}) })),
+      memories: evt.thought.memories.map((m) => ({ id: m.id, ...(m.label ? { label: m.label } : {}) })),
+      actionCount: evt.thought.actions.length,
+    });
   }
 
   onModuleInit(): void {

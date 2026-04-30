@@ -104,8 +104,13 @@ export function createBrainClient({ getGraph, getUserId, onSpike, onWeight }) {
   return {
     async start() {
       if (mode !== 'idle') return mode;
+      // Set mode to 'starting' immediately so concurrent calls see a non-idle
+      // mode and return early, preventing two simultaneous simulation loops.
+      mode = 'starting';
       const ok = await tryConnectSocket();
-      if (!ok) startLocal();
+      // If stop() was called while we were connecting, mode will have been
+      // reset to 'idle' — in that case do NOT start a local simulation.
+      if (!ok && mode === 'starting') startLocal();
       return mode;
     },
     stop() {

@@ -5,9 +5,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { ConnectorId } from '@pkg/shared';
 import type { BaseConnector } from './base.connector';
+import { AnthropicConnector } from './anthropic.connector';
 import { GitHubConnector } from './github.connector';
 import { GoogleCalendarConnector } from './google-calendar.connector';
 import { NotionConnector } from './notion.connector';
+import { OpenAIConnector } from './openai.connector';
+import { ZoteroConnector } from './zotero.connector';
 
 @Injectable()
 export class ConnectorRegistry {
@@ -17,10 +20,16 @@ export class ConnectorRegistry {
     github: GitHubConnector,
     googleCalendar: GoogleCalendarConnector,
     notion: NotionConnector,
+    zotero: ZoteroConnector,
+    openai: OpenAIConnector,
+    anthropic: AnthropicConnector,
   ) {
     this.byId.set(github.id, github);
     this.byId.set(googleCalendar.id, googleCalendar);
     this.byId.set(notion.id, notion);
+    this.byId.set(zotero.id, zotero);
+    this.byId.set(openai.id, openai);
+    this.byId.set(anthropic.id, anthropic);
   }
 
   get(id: ConnectorId): BaseConnector {

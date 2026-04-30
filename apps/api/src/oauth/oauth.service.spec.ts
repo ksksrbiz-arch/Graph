@@ -94,3 +94,43 @@ describe('OAuthService.authorize', () => {
     ).toThrow(/notion/i);
   });
 });
+
+describe('OAuthService.handleCallback', () => {
+  it('reuses authorize-time redirect_uri during code exchange', async () => {
+    const { service } = makeService();
+    const authorizeRedirectUri =
+      'http://localhost:3001/api/v1/oauth/callback/github';
+    const result = service.authorize({
+      userId: 'u1',
+      connectorId: 'github',
+      redirectUri: authorizeRedirectUri,
+    });
+
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        access_token: 'gh-token',
+        scope: 'read:user,repo',
+        token_type: 'bearer',
+      }),
+    });
+    (global as { fetch: typeof fetch }).fetch = fetchMock as typeof fetch;
+
+    try {
+      await service.handleCallback({
+        connectorId: 'github',
+        code: 'code-123',
+        state: result.state,
+        redirectUri: 'http://127.0.0.1:3001/api/v1/oauth/callback/github',
+      });
+    } finally {
+      (global as { fetch: typeof fetch }).fetch = originalFetch;
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, req] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = new URLSearchParams(String(req.body));
+    expect(body.get('redirect_uri')).toBe(authorizeRedirectUri);
+  });
+});

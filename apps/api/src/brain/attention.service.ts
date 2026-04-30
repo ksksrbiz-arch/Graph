@@ -29,15 +29,26 @@ interface RunningFocus extends AttentionFocus {
   endTimer: NodeJS.Timeout;
 }
 
+type FocusListener = (focus: AttentionFocus) => void;
+
 @Injectable()
 export class AttentionService {
   private readonly logger = new Logger(AttentionService.name);
   private readonly active = new Map<string, RunningFocus>();
+  private readonly focusListeners = new Set<FocusListener>();
 
   constructor(
     @Inject(NEO4J_DRIVER) private readonly driver: Driver,
     private readonly brain: BrainService,
   ) {}
+
+  /** Observe every successful focus(). The cerebral stream uses this to fire
+   *  a cortex pass on whatever the user (or a service) just asked the brain
+   *  to think about. */
+  onFocus(fn: FocusListener): () => void {
+    this.focusListeners.add(fn);
+    return () => this.focusListeners.delete(fn);
+  }
 
   /**
    * Focus the user's brain on neurons matching `query`.
@@ -87,6 +98,13 @@ export class AttentionService {
     this.logger.log(
       `attention: user=${userId} query="${query}" → ${neuronIds.length} neurons for ${durationMs}ms`,
     );
+    for (const fn of this.focusListeners) {
+      try {
+        fn(focus);
+      } catch (err) {
+        this.logger.warn(`focus listener crashed: ${(err as Error).message}`);
+      }
+    }
     return focus;
   }
 

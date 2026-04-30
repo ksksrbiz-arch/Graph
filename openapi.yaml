@@ -184,14 +184,12 @@ paths:
           required: true
           schema: { $ref: '#/components/schemas/ConnectorId' }
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
               type: object
-              required: [redirectUri]
               properties:
-                redirectUri: { type: string, format: uri }
                 scopes:
                   type: array
                   items: { type: string }

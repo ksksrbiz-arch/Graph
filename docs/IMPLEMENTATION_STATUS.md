@@ -20,21 +20,21 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 
 | DoD item                                              | Status | Notes |
 | ----------------------------------------------------- | ------ | ----- |
-| JWT authentication (login, refresh, logout)           | 🟡 | Strategy + module wired; login throws 401 |
-| OAuth2 integration scaffold                           | ⬜ | |
-| User table in PostgreSQL; profile CRUD                | 🟡 | Table in `infra/postgres/init/001-schema.sql`; CRUD pending |
-| Audit log table + middleware wired                    | 🟡 | Table + immutability rules in place; interceptor pending |
-| Unit tests: 90% coverage on auth module               | ⬜ | |
+| JWT authentication (login, refresh, logout)           | ✅ | `AuthService.login/register/refresh/logout` with bcrypt + SHA-256 token hashing; `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` |
+| OAuth2 integration scaffold                           | ✅ | `OAuthService` + providers (GitHub, Google Calendar, Notion); PKCE support; in-memory `ConnectorConfigStore` (Postgres migration Phase 4) |
+| User table in PostgreSQL; profile CRUD                | ✅ | `UsersService` wraps `pg.Pool`; `GET/PATCH/DELETE /users/me` in `UsersController` |
+| Audit log table + middleware wired                    | ✅ | `AuditService.record()` writes to `audit_events`; `AuditInterceptor` auto-logs all mutating routes globally (via `APP_INTERCEPTOR`) |
+| Unit tests: 90% coverage on auth module               | ✅ | `auth.service.spec.ts` (14 tests), `users.service.spec.ts` (10 tests), `audit.service.spec.ts` (3 tests) — 101 total passing |
 
 ## Phase 2 — Graph Core (Week 4–5)
 
 | DoD item                                                | Status | Notes |
 | ------------------------------------------------------- | ------ | ----- |
 | Neo4j connection provider + repository pattern          | ✅ | |
-| REST + GraphQL endpoints for nodes/edges/subgraph       | 🟡 | REST `/subgraph` and `DELETE /nodes/:id` only; GraphQL pending |
-| Meilisearch node indexing + search endpoint             | ⬜ | |
-| WebSocket gateway (Socket.IO) for `graph:delta` events  | ⬜ | |
-| Unit + integration tests for graph repository           | 🟡 | Service-level mock tests; integration tests pending |
+| REST + GraphQL endpoints for nodes/edges/subgraph       | ✅ | REST: `GET /graph/nodes` (cursor-paged), `GET /graph/nodes/:id`, `GET /graph/subgraph`, `GET /graph/search`, `DELETE /nodes/:id`. GraphQL (code-first, Apollo): `nodes`, `node`, `subgraph`, `searchNodes` queries via `GraphResolver` |
+| Meilisearch node indexing + search endpoint             | ✅ | `SearchService` in `src/shared/meilisearch/`; nodes indexed on upsert, removed on delete; `GET /graph/search?q=` endpoint |
+| WebSocket gateway (Socket.IO) for `graph:delta` events  | ✅ | `GraphGateway` in `/graph` namespace; emits `graph:delta` (NODES_ADDED/UPDATED/DELETED, EDGES_ADDED/DELETED) on every write via `GraphService` |
+| Unit + integration tests for graph repository           | ✅ | `graph.repository.spec.ts` (16 tests: idempotency + subgraph + snapshotForUser + listNodes + getNode), `graph.service.spec.ts` (7 tests incl. search+delta), `graph.controller.spec.ts` (7 tests) |
 
 ## Brain layer follow-ups (post-LIF/STDP merge)
 

@@ -12,7 +12,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import type { Driver, Record as Neo4jRecord } from 'neo4j-driver';
-import type { KGEdge, KGNode, Subgraph } from '@pkg/shared';
+import type { CursorPage, KGEdge, KGNode, NodeType, Subgraph } from '@pkg/shared';
 import { NEO4J_DRIVER } from '../shared/neo4j/neo4j.module';
 
 const FINGERPRINT_CACHE_MAX = 4_096;
@@ -80,6 +80,67 @@ export class GraphRepository {
     }
     this.rememberFingerprint(cacheKey, fp);
     return true;
+  }
+
+  /** Cursor-based page of nodes for a user. Cursor is a base64url-encoded
+   *  ISO-8601 createdAt timestamp (the last item on the previous page).
+   *  Returns items created strictly after the cursor, sorted by createdAt ASC,
+   *  id ASC (tie-breaker). */
+  async listNodes(
+    userId: string,
+    cursor?: string,
+    limit = 100,
+    type?: NodeType,
+  ): Promise<CursorPage<KGNode>> {
+    const safeLimit = Math.max(1, Math.min(500, Math.floor(limit)));
+    const cursorDate = cursor ? decodeCursor(cursor) : null;
+
+    const session = this.driver.session();
+    try {
+      const params: Record<string, unknown> = { userId, limit: safeLimit + 1 };
+      let cypher =
+        `MATCH (n:KGNode {userId: $userId})
+         WHERE n.deletedAt IS NULL`;
+      if (cursorDate) {
+        cypher += `\n         AND n.createdAt > $cursorDate`;
+        params.cursorDate = cursorDate;
+      }
+      if (type) {
+        cypher += `\n         AND n.type = $type`;
+        params.type = type;
+      }
+      cypher += `\n         RETURN n ORDER BY n.createdAt ASC, n.id ASC LIMIT $limit`;
+
+      const result = await session.run(cypher, params);
+      const rows = result.records;
+      const hasMore = rows.length > safeLimit;
+      const items = rows.slice(0, safeLimit).map((r) => this.mapNode(r.get('n')));
+      const nextCursor =
+        hasMore && items.length > 0
+          ? encodeCursor(items[items.length - 1]!.createdAt)
+          : null;
+      return { items, nextCursor };
+    } finally {
+      await session.close();
+    }
+  }
+
+  /** Fetch a single node by id scoped to the user. Returns null if not found
+   *  or if the node has been soft-deleted. */
+  async getNode(userId: string, nodeId: string): Promise<KGNode | null> {
+    const session = this.driver.session();
+    try {
+      const result = await session.run(
+        `MATCH (n:KGNode {id: $nodeId, userId: $userId})
+         WHERE n.deletedAt IS NULL
+         RETURN n`,
+        { nodeId, userId },
+      );
+      if (!result.records[0]) return null;
+      return this.mapNode(result.records[0].get('n'));
+    } finally {
+      await session.close();
+    }
   }
 
   /** Ego-network of `rootId` up to `depth` hops. Spec §8.2 query 2.
@@ -320,4 +381,20 @@ function stableStringify(value: unknown): string {
   const obj = value as Record<string, unknown>;
   const keys = Object.keys(obj).sort();
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`;
+}
+
+// ── cursor helpers ────────────────────────────────────────────────────────────
+
+function encodeCursor(createdAt: string): string {
+  return Buffer.from(createdAt, 'utf8').toString('base64url');
+}
+
+function decodeCursor(cursor: string): string | null {
+  try {
+    const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+    if (isNaN(Date.parse(decoded))) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
 }

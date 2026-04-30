@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sharing to Graph…</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; font:16px/1.4 system-ui,-apple-system,sans-serif; background:#0b1320; color:#e6eef9; padding:24px; }
+    .card { max-width:520px; margin:8vh auto; background:#101a2c; border:1px solid #1d2b44; border-radius:14px; padding:24px; }
+    h1 { margin:0 0 8px; font-size:18px; color:#9bd1ff; }
+    p  { margin:6px 0; word-break:break-word; }
+    .ok  { color:#7ee787; }
+    .err { color:#ff8a8a; }
+    a    { color:#9bd1ff; }
+    .url { font:13px monospace; opacity:.8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 id="title">Pulling page into Graph…</h1>
+    <p class="url" id="src">—</p>
+    <p id="status">Working…</p>
+    <p><a href="./">← Back to Graph</a></p>
+  </div>
+<script type="module">
+import './config.js';
+
+const params = new URL(window.location).searchParams;
+// Browsers pick whichever field has the actual URL — sniff in priority order.
+const target = params.get('url') || pickUrl(params.get('text')) || pickUrl(params.get('title'));
+const title  = params.get('title') || (target ? new URL(target).hostname : 'Shared item');
+const text   = params.get('text')  || '';
+
+document.getElementById('src').textContent = target || '(no URL detected)';
+
+const userId = window.GRAPH_CONFIG?.brainUserId || 'local';
+const apiBase = window.GRAPH_CONFIG?.apiBaseUrl || window.location.origin;
+
+(async () => {
+  if (!target) {
+    fail('No URL found in shared payload.');
+    return;
+  }
+  try {
+    const res = await fetch(new URL('/api/v1/public/ingest/url', apiBase), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userId, url: target, title, selection: text }),
+    });
+    const body = await res.json();
+    if (!res.ok || body.error) throw new Error(body.error || ('HTTP ' + res.status));
+    ok(`Added <strong>${escape(title)}</strong> — ${body.nodes} nodes, ${body.edges} edges<br>Total graph: ${body.totalNodes} / ${body.totalEdges}`);
+  } catch (err) {
+    fail(err.message);
+  }
+})();
+
+function pickUrl(s) {
+  if (!s) return null;
+  const m = s.match(/https?:\/\/\S+/);
+  return m ? m[0] : null;
+}
+function ok(msg)   { const el = document.getElementById('status'); el.className = 'ok';  el.innerHTML = msg; document.getElementById('title').textContent = 'Added to Graph'; }
+function fail(msg) { const el = document.getElementById('status'); el.className = 'err'; el.textContent = '⚠ ' + msg; document.getElementById('title').textContent = 'Failed'; }
+function escape(s) { return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+</script>
+</body>
+</html>

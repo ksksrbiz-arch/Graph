@@ -23,7 +23,31 @@ npm run ingest:claude-code   # build data/graph.json from ~/.claude/projects
 npm start                    # http://localhost:3000
 ```
 
-Zero runtime dependencies. Ingesters available: `claude-code`, `git`, `markdown`.
+Zero runtime dependencies. Ingesters available: `claude-code`, `git`, `markdown`, `code` (via a local [GitNexus](https://github.com/abhigyanpatwari/GitNexus) `gitnexus serve` HTTP server — see [`scripts/ingest-code.mjs`](scripts/ingest-code.mjs) for env vars and usage).
+
+### Expose the graph over MCP
+
+`scripts/mcp-server.mjs` is a stdio [Model Context Protocol](https://modelcontextprotocol.io) server that lets Claude Desktop, Cursor, Codex CLI, and other MCP clients read and search the personal knowledge graph (`data/graph.json`) without any extra plumbing. Zero dependencies — same Node 18+ as the rest of the v1 scripts.
+
+Tools: `search_nodes`, `get_node`, `subgraph`, `list_sources`, `stats`. Resources: `graph://snapshot`, `graph://sources`. See the header of [`scripts/mcp-server.mjs`](scripts/mcp-server.mjs) for the full schema.
+
+```jsonc
+// ~/.config/Claude/claude_desktop_config.json (or your editor's MCP config)
+{
+  "mcpServers": {
+    "graph-pkg": {
+      "command": "node",
+      "args": ["/absolute/path/to/Graph/scripts/mcp-server.mjs"]
+    }
+  }
+}
+```
+
+Or run it manually for debugging:
+
+```bash
+npm run mcp   # speaks JSON-RPC 2.0 over stdio
+```
 
 > `data/graph.json` and `web/data/graph.json` are **generated locally from your own data** and are gitignored. A fresh clone has no graph until you run an ingester.
 
@@ -60,6 +84,24 @@ Bring everything down with `pnpm stack:down`.
 - Set `BRAIN_AUTO_START_USER_IDS` to the user ids whose brains should resume automatically after deploys/restarts.
 - Set `PUBLIC_INGEST_USER_IDS` to the demo user ids that may write through the anonymous `/api/v1/public/ingest/*` endpoints — the Cloudflare-hosted website uses this to live-ingest pasted text/markdown directly into the public brain.
 - Keep `wrangler.jsonc`/`web/` for the static frontend and set `web/config.js` during deployment so the SPA connects to the hosted API.
+
+### Cloudflare Worker (same-origin online API)
+
+The `wrangler.jsonc` Worker fronts the SPA **and** implements the public ingest API on the same origin (`/api/v1/public/*`), so the deploy at `https://graph.skdev-371.workers.dev/` persists graph nodes across visits without requiring the Fly.io Nest API. Persistence uses a Workers KV namespace (binding `GRAPH_KV`); the local dev server (`pnpm start`) and the static `data/graph.json` are used as fallbacks when the online API is unreachable.
+
+```bash
+# 1. Create a KV namespace (one-time per environment)
+pnpm exec wrangler kv namespace create GRAPH_KV
+pnpm exec wrangler kv namespace create GRAPH_KV --preview
+
+# 2. Paste the returned `id` and `preview_id` into `wrangler.jsonc`
+#    (replace REPLACE_WITH_KV_NAMESPACE_ID / REPLACE_WITH_KV_PREVIEW_ID).
+
+# 3. Deploy
+pnpm run deploy
+```
+
+Without a KV binding the Worker still serves the static SPA, but the public ingest endpoints respond with `{ enabled: false }` and the SPA falls back to read-only mode.
 
 ---
 

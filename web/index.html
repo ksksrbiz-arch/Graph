@@ -3,9 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="build-id" content="1777254679056252055" />
+  <meta name="build-id" content="1777321426876275259" />
   <title>Graph — Personal Knowledge Graph</title>
+  <link rel="stylesheet" href="/src/styles/design-tokens.scss" />
+  <link rel="stylesheet" href="/src/styles/hud-panel.scss" />
+  <link rel="stylesheet" href="/src/styles/animations.scss" />
+  <link rel="stylesheet" href="/src/styles/cursor.scss" />
+  <link rel="stylesheet" href="/src/styles/boot-screen.scss" />
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="manifest" href="./manifest.webmanifest" />
 </head>
 <body>
   <header class="topbar">
@@ -38,6 +44,8 @@
       <a href="#/timeline"   data-route="#/timeline"   class="nav-item"><span class="nav-glyph" data-g="timeline"></span><span>Timeline</span></a>
       <a href="#/connectors" data-route="#/connectors" class="nav-item"><span class="nav-glyph" data-g="connectors"></span><span>Connectors</span></a>
       <a href="#/brain"      data-route="#/brain"      class="nav-item"><span class="nav-glyph" data-g="brain"></span><span>Brain</span></a>
+      <a href="#/cortex"     data-route="#/cortex"     class="nav-item"><span class="nav-glyph" data-g="brain"></span><span>Cortex</span></a>
+      <a href="#/finance"    data-route="#/finance"    class="nav-item"><span class="nav-glyph" data-g="finance"></span><span>Finance</span></a>
       <a href="#/search"     data-route="#/search"     class="nav-item"><span class="nav-glyph" data-g="search"></span><span>Search</span></a>
       <a href="#/settings"   data-route="#/settings"   class="nav-item"><span class="nav-glyph" data-g="settings"></span><span>Settings</span></a>
       <div class="sidebar-spacer"></div>
@@ -86,17 +94,54 @@
           <span>Ego-network: <b id="focus-banner-label"></b></span>
           <button id="focus-banner-close" type="button">clear</button>
         </div>
-        <aside id="panel" class="panel hidden" aria-label="Node details">
-          <button class="panel-close" id="panel-close" aria-label="Close panel">×</button>
-          <h2 id="panel-title">Node</h2>
-          <p class="panel-type" id="panel-type"></p>
-          <div class="panel-actions">
-            <button id="panel-focus" type="button">Focus ego-network</button>
-            <button id="panel-open" type="button">Open source</button>
+
+        <!-- Visual-spec Part 2 HUD overlays. Mounted by web/hud/*.js. -->
+        <div id="hud-stats-bar" class="stats-bar hud-panel" aria-label="Graph stats"></div>
+        <div id="hud-brain-controls" class="brain-controls hud-panel" aria-label="Brain controls"></div>
+        <div id="hud-mini-map" class="mini-map hud-panel" aria-label="Mini-map">
+          <span class="mm-label">MAP</span>
+          <canvas></canvas>
+        </div>
+
+        <aside id="panel" class="node-inspector hud-panel" aria-label="Node details">
+          <button class="ni-close" id="panel-close" aria-label="Close panel">×</button>
+          <div class="ni-header">
+            <span class="ni-badge" id="panel-type">—</span>
+            <span class="ni-label" id="panel-title">Node</span>
           </div>
-          <dl id="panel-meta"></dl>
-          <h3>Connections <span id="panel-edge-count"></span></h3>
-          <ul id="panel-edges" class="panel-edges"></ul>
+          <hr class="ni-rule" />
+          <div class="ni-row">
+            <span class="k">CONFIDENCE</span>
+            <span class="v">
+              <span class="confidence-bar">
+                <span class="track"><span class="fill" id="panel-confidence-fill"></span></span>
+                <span class="num" id="panel-confidence-num">—</span>
+              </span>
+            </span>
+          </div>
+          <div class="ni-row"><span class="k">SOURCE</span><span class="v" id="panel-source">—</span></div>
+          <div class="ni-row"><span class="k">CREATED</span><span class="v" id="panel-created">—</span></div>
+          <hr class="ni-rule" />
+          <div class="ni-section-title">CONNECTIONS <span class="count" id="panel-edge-count">0</span></div>
+          <ul id="panel-edges" class="ni-connections"></ul>
+          <div id="panel-insight-wrap" hidden>
+            <hr class="ni-rule" />
+            <div class="ni-insight">
+              <span class="insight-tag">INSIGHT</span>
+              <span id="panel-insight">—</span>
+            </div>
+          </div>
+          <hr class="ni-rule" />
+          <div class="ni-section-title">ACTIONS</div>
+          <div class="ni-actions">
+            <button type="button" id="panel-action-trace" title="Focus this node's ego-network">🔥 Trace</button>
+            <button type="button" id="panel-action-remove" title="Hide this node from the current view">✕ Remove</button>
+            <button type="button" id="panel-action-pin" title="Pin this node so the layout won't move it">📌 Pin</button>
+          </div>
+          <details class="ni-meta-extra" style="margin-top:10px">
+            <summary style="cursor:pointer;font-family:var(--text-mono);font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em">Raw metadata</summary>
+            <dl id="panel-meta" style="margin-top:6px;display:grid;grid-template-columns:max-content 1fr;gap:0.25rem 0.7rem;font-size:0.78rem"></dl>
+          </details>
         </aside>
         <div id="context-menu" class="context-menu hidden" role="menu"></div>
       </section>
@@ -117,11 +162,17 @@
           <h2>Connectors</h2>
           <p class="view-sub">Sources the graph is built from. Run a connector to refresh the graph.</p>
         </div>
-        <div id="connectors-list" class="card-grid"></div>
+        <div id="connectors-list"></div>
       </section>
 
       <!-- Brain view -->
       <section id="view-brain" class="view" aria-label="Brain insights"></section>
+
+      <!-- Cortex view (JARVIS-style ReAct loop) -->
+      <section id="view-cortex" class="view" aria-label="Cortex"></section>
+
+      <!-- Finance view (Accounts Payable Cortex) -->
+      <section id="view-finance" class="view" aria-label="Finance"></section>
 
       <!-- Search view -->
       <section id="view-search" class="view" aria-label="Search">
@@ -281,6 +332,12 @@
   </div>
 
   <div id="toast" class="toast hidden" role="status"></div>
+
+  <!-- Visual-spec Part 2 §11: holo-cursor host (positioned by JS). -->
+  <div id="holo-cursor" class="holo-cursor" aria-hidden="true">
+    <div class="ring"></div>
+    <div class="crosshair"></div>
+  </div>
 
   <script src="./vendor/force-graph.min.js"></script>
   <script src="./vendor/3d-force-graph.min.js"></script>

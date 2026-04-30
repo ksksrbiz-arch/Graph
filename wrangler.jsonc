@@ -1,14 +1,69 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "graph",
+  "main": "src/worker.js",
   "compatibility_date": "2026-04-25",
   "observability": {
     "enabled": true
   },
+  // The Worker fronts the static SPA and exposes a `/api/v1/public/*` API on
+  // the same origin so the brain + graph nodes persist across visits without
+  // depending on the Fly-hosted Nest API or any local dev server.
   "assets": {
-    "directory": "web"
+    "directory": "web",
+    "binding": "ASSETS"
   },
   "compatibility_flags": [
     "nodejs_compat"
+  ],
+  // KV namespace storing per-user graph snapshots — the rendered
+  // {nodes, edges} that the SPA reads on first paint. O(1) GET, no SQL.
+  "kv_namespaces": [
+    {
+      "binding": "GRAPH_KV",
+      "id": "83580c10784342ba94a81c6726957d0f",
+      "preview_id": "558dc07635c24d55a7acbf45b5bfcd28"
+    }
+  ],
+  // D1 (SQLite) — append-only event log + flat node/edge projection +
+  // registered ingestion sources + webhook tokens. Lets us answer
+  // "what did Stripe push last week" via SQL without rehydrating the
+  // graph snapshot.
+  "d1_databases": [
+    {
+      "binding": "GRAPH_DB",
+      "database_name": "datab_1",
+      "database_id": "50cf79c6-37a6-4d83-9990-f601ef0e59da"
+    }
   ]
+,
+  // Workers AI — Llama 3.x for the Cortex ReAct loop. Free tier,
+  // billed against the account; no API keys required.
+  "ai": { "binding": "AI" },
+  // Vectorize — semantic recall over the connectome. Indexed via the
+  // BGE-base-en-v1.5 Workers-AI model; queried by the cortex 'recall' tool
+  // and pre-fetched into every think() prompt as RAG context.
+  "vectorize": [
+    { "binding": "VECTORS", "index_name": "cortex-embeddings" }
+  ],
+  // Cron-driven autonomy. Each cadence maps to a system-authored question
+  // that calls cortex.think() with a tight budget. See src/worker/cortex/scheduler.js
+  // for the cron→prompt mapping. Crons fire UTC.
+  "triggers": {
+    "crons": [
+      "*/15 * * * *",   // pulse — has anything new arrived I should notice?
+      "0 * * * *",      // hourly — what theme is forming this hour?
+      "0 7 * * *"       // daily 07:00 UTC — synthesize yesterday into a note
+    ]
+  },
+  // Comma-separated user ids that scheduled thinks run for. Same allowlist
+  // shape as PUBLIC_INGEST_USER_IDS — typically equal or a subset.
+  "vars": {
+    "PUBLIC_INGEST_USER_IDS": "local,ksksrbiz-arch",
+    "AUTONOMY_USER_IDS": "local,ksksrbiz-arch"
+    // GitHub OAuth — set as Worker secrets, not plain vars:
+    //   wrangler secret put GITHUB_CLIENT_ID
+    //   wrangler secret put GITHUB_CLIENT_SECRET
+    // Without these two secrets /api/oauth/github/start returns an error page.
+  }
 }

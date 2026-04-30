@@ -1,9 +1,12 @@
 // Data plane for the SPA. Knows about three sources, in priority order:
-//   1. The hosted API (apiBaseUrl from web/config.js) — exposes a public
-//      ingest + snapshot pair so the Cloudflare deploy can mutate the graph
-//      live without a filesystem dev server.
+//   1. The hosted online API (apiBaseUrl from web/config.js, or — when
+//      apiBaseUrl is blank — the same origin as the page). On the Cloudflare
+//      deploy this is the Worker in src/worker.js, which exposes the public
+//      ingest + snapshot pair backed by Workers KV so paste-in actions
+//      persist across visits.
 //   2. The local dev server (scripts/serve.mjs) — exposes /api/ingest/* that
-//      shells out to the v1 ingester scripts.
+//      shells out to the v1 ingester scripts. Used as a fallback when the
+//      online API is unreachable or not configured for this user id.
 //   3. The static `data/graph.json` file — used in either case as a fallback
 //      and to seed first paint.
 
@@ -12,6 +15,7 @@ const API_GRAPH_DELTA_PATH = '/api/v1/public/graph/delta';
 const API_HEALTH_PATH = '/api/v1/public/ingest/health';
 const API_INGEST_TEXT_PATH = '/api/v1/public/ingest/text';
 const API_INGEST_MARKDOWN_PATH = '/api/v1/public/ingest/markdown';
+const API_INGEST_GRAPH_PATH = '/api/v1/public/ingest/graph';
 
 const ENDPOINT_LOCAL_INGEST = '/api/ingest';
 
@@ -19,8 +23,7 @@ let _localIngestSupported = null;
 let _publicApiAvailable = null;
 
 function publicApiUrl(path) {
-  const base = (window.GRAPH_CONFIG?.apiBaseUrl || '').trim();
-  if (!base) return null;
+  const base = (window.GRAPH_CONFIG?.apiBaseUrl || '').trim() || window.location.origin;
   try {
     return new URL(path, base).toString();
   } catch {
@@ -133,16 +136,104 @@ export async function loadGraphDelta(since) {
 
 export async function loadStaticGraph() {
   const res = await fetch(`./data/graph.json?ts=${Date.now()}`, { cache: 'no-store' });
+  if (res.status === 404) return { schemaVersion: 1, metadata: {}, nodes: [], edges: [] };
   if (!res.ok) throw new Error(`Failed to load graph (${res.status})`);
   return res.json();
 }
 
-/** Run a v1 (filesystem-based) ingester via the local dev server. */
-export async function runLocalIngest(name) {
-  const res = await fetch(`${ENDPOINT_LOCAL_INGEST}/${encodeURIComponent(name)}`, { method: 'POST' });
-  let body = {};
-  try { body = await res.json(); } catch {}
-  return { ok: res.ok, status: res.status, ...body };
+/** Run a v1 (filesystem-based) ingester via the local dev server.
+ *  Accepts an optional `params` object:
+ *    params.env  — { KEY: value } object of env var overrides forwarded to the script.
+ *    params.file — { name, content (base64 string), field } for uploading a file.
+ */
+export async function runLocalIngest(name, params = {}) {
+  const body = {};
+  if (params.env && Object.keys(params.env).length) body.env = params.env;
+  if (params.file) body.file = params.file;
+
+  const res = await fetch(`${ENDPOINT_LOCAL_INGEST}/${encodeURIComponent(name)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  let bodyOut = {};
+  try { bodyOut = await res.json(); } catch {}
+  return { ok: res.ok, status: res.status, ...bodyOut };
+}
+
+/** Run a local ingester with environment variable overrides. */
+export async function runIngestWithParams(name, env = {}) {
+  return runLocalIngest(name, { env });
+}
+
+/** Run a local ingester with a file upload (File object from an <input type="file">). */
+export async function uploadFileIngest(name, file, envField, extraEnv = {}) {
+  const content = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // reader.result is a data URL like "data:...;base64,<data>"
+      const b64 = reader.result.split(',')[1];
+      resolve(b64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  return runLocalIngest(name, {
+    env: extraEnv,
+    file: { name: file.name, content, field: envField },
+  });
+}
+
+/** Check whether GitHub is connected (token held by the local dev server). */
+export async function githubOAuthStatus() {
+  try {
+    const res = await fetch('/api/oauth/github/status');
+    if (!res.ok) return { connected: false };
+    return res.json();
+  } catch {
+    return { connected: false };
+  }
+}
+
+/** Disconnect GitHub OAuth token from the local dev server. */
+export async function githubOAuthDisconnect() {
+  try {
+    await fetch('/api/oauth/github/status', { method: 'DELETE' });
+  } catch { /* ignore */ }
+}
+
+/** Max polling attempts before giving up on the OAuth popup (1 attempt/second). */
+const OAUTH_POLL_MAX_ATTEMPTS = 180;
+
+/** Open a popup to start the GitHub OAuth flow and return a Promise that
+ *  resolves to true when the token appears on the server (polling). */
+export function startGitHubOAuth() {
+  return new Promise((resolve) => {
+    const popup = window.open(
+      '/api/oauth/github/start',
+      'github-oauth',
+      'width=700,height=600,scrollbars=yes',
+    );
+
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      attempts += 1;
+      try {
+        const status = await githubOAuthStatus();
+        if (status.connected) {
+          clearInterval(interval);
+          try { popup?.close(); } catch { /* ignore */ }
+          resolve(true);
+          return;
+        }
+      } catch { /* ignore */ }
+      // Closed popup before completing, or timeout
+      if (popup?.closed || attempts > OAUTH_POLL_MAX_ATTEMPTS) {
+        clearInterval(interval);
+        resolve(false);
+      }
+    }, 1000);
+  });
 }
 
 /** Send a free-text or markdown blob to the public API for ingestion. */
@@ -171,6 +262,249 @@ export async function ingestPublicText({ text, title, format = 'text' }) {
 }
 
 /** Back-compat shim used by the "Ingest Claude Code" button. */
-export async function runIngest(name) {
-  return runLocalIngest(name);
+export async function runIngest(name, params) {
+  return runLocalIngest(name, params);
+}
+
+// ── Per-connector auto-ingest scheduler ───────────────────────────────────────
+
+/** Maps connectorId → setInterval handle for auto-ingest timers. */
+const _autoIngestTimers = new Map();
+
+/**
+ * Register (or replace) a periodic auto-ingest callback for a connector.
+ * Pass intervalMs = 0 or omit runFn to only clear any existing timer.
+ */
+export function scheduleAutoIngest(connectorId, intervalMs, runFn) {
+  clearAutoIngest(connectorId);
+  if (!intervalMs || typeof runFn !== 'function') return;
+  const tid = setInterval(runFn, intervalMs);
+  _autoIngestTimers.set(connectorId, tid);
+}
+
+/** Cancel the auto-ingest timer for a specific connector. */
+export function clearAutoIngest(connectorId) {
+  const tid = _autoIngestTimers.get(connectorId);
+  if (tid != null) {
+    clearInterval(tid);
+    _autoIngestTimers.delete(connectorId);
+  }
+}
+
+/** Cancel every active auto-ingest timer. */
+export function clearAllAutoIngest() {
+  for (const id of [..._autoIngestTimers.keys()]) clearAutoIngest(id);
+}
+
+// ── Connector catalog API ─────────────────────────────────────────────────────
+
+const API_CONNECTORS_PATH = '/api/v1/connectors';
+const API_OAUTH_CONNECT_PATH = '/api/v1/oauth/connect';
+const GRAPH_INGEST_LIMITS = {
+  maxNodes: 5_000,
+  maxEdges: 20_000,
+  maxIdChars: 240,
+  maxLabelChars: 200,
+  maxTypeChars: 64,
+  maxRelationChars: 64,
+  maxSourceIdChars: 64,
+  maxSourceUrlChars: 2_048,
+  maxMetadataKeys: 40,
+  maxArrayItems: 40,
+  maxStringChars: 1_000,
+  maxDepth: 3,
+};
+
+function clampGraphString(value, max) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, max);
+}
+
+function clampGraphMetadata(value, depth = 0) {
+  if (value == null) return undefined;
+  if (typeof value === 'string') return value.slice(0, GRAPH_INGEST_LIMITS.maxStringChars);
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'boolean') return value;
+  if (depth >= GRAPH_INGEST_LIMITS.maxDepth) return undefined;
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, GRAPH_INGEST_LIMITS.maxArrayItems)
+      .map((item) => clampGraphMetadata(item, depth + 1))
+      .filter((item) => item !== undefined);
+  }
+  if (typeof value === 'object') {
+    const out = {};
+    let count = 0;
+    for (const [key, entry] of Object.entries(value)) {
+      if (count >= GRAPH_INGEST_LIMITS.maxMetadataKeys) break;
+      const safeKey = clampGraphString(key, GRAPH_INGEST_LIMITS.maxTypeChars);
+      const safeVal = clampGraphMetadata(entry, depth + 1);
+      if (safeKey && safeVal !== undefined) {
+        out[safeKey] = safeVal;
+        count += 1;
+      }
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+  return undefined;
+}
+
+function sanitizeGraphNode(node, fallbackSourceId) {
+  if (!node || typeof node !== 'object') return null;
+  const id = clampGraphString(node.id, GRAPH_INGEST_LIMITS.maxIdChars);
+  if (!id) return null;
+  const label = clampGraphString(node.label, GRAPH_INGEST_LIMITS.maxLabelChars) || id;
+  const type = clampGraphString(node.type, GRAPH_INGEST_LIMITS.maxTypeChars) || 'note';
+  const sourceId = clampGraphString(node.sourceId, GRAPH_INGEST_LIMITS.maxSourceIdChars)
+    || fallbackSourceId
+    || 'client';
+  const sourceUrl = clampGraphString(node.sourceUrl, GRAPH_INGEST_LIMITS.maxSourceUrlChars);
+  const createdAt = clampGraphString(node.createdAt, 64);
+  const updatedAt = clampGraphString(node.updatedAt, 64);
+  const metadata = clampGraphMetadata(node.metadata);
+  return {
+    id,
+    label,
+    type,
+    sourceId,
+    ...(sourceUrl ? { sourceUrl } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function sanitizeGraphEdge(edge) {
+  if (!edge || typeof edge !== 'object') return null;
+  const source = clampGraphString(edge.source, GRAPH_INGEST_LIMITS.maxIdChars);
+  const target = clampGraphString(edge.target, GRAPH_INGEST_LIMITS.maxIdChars);
+  const relation = clampGraphString(edge.relation, GRAPH_INGEST_LIMITS.maxRelationChars) || 'RELATED_TO';
+  if (!source || !target || source === target) return null;
+  const id = clampGraphString(edge.id, GRAPH_INGEST_LIMITS.maxIdChars) || `${source}|${relation}|${target}`;
+  const createdAt = clampGraphString(edge.createdAt, 64);
+  const metadata = clampGraphMetadata(edge.metadata);
+  return {
+    id,
+    source,
+    target,
+    relation,
+    ...(Number.isFinite(edge.weight) ? { weight: Math.max(0, Math.min(1, edge.weight)) } : {}),
+    ...(typeof edge.inferred === 'boolean' ? { inferred: edge.inferred } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function sanitizeGraphPayload({ nodes, edges, sourceId }) {
+  const safeSourceId = clampGraphString(sourceId, GRAPH_INGEST_LIMITS.maxSourceIdChars) || 'client';
+  const safeNodes = (Array.isArray(nodes) ? nodes : [])
+    .map((node) => sanitizeGraphNode(node, safeSourceId))
+    .filter(Boolean)
+    .slice(0, GRAPH_INGEST_LIMITS.maxNodes);
+  const safeEdges = (Array.isArray(edges) ? edges : [])
+    .map((edge) => sanitizeGraphEdge(edge))
+    .filter(Boolean)
+    .slice(0, GRAPH_INGEST_LIMITS.maxEdges);
+  return { sourceId: safeSourceId, nodes: safeNodes, edges: safeEdges };
+}
+
+/** Fetch configured connector statuses for the current user. Returns [] on error. */
+export async function loadConnectorStatuses() {
+  const url = publicApiUrl(
+    `${API_CONNECTORS_PATH}?userId=${encodeURIComponent(brainUserId())}`,
+  );
+  if (!url) return [];
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    return (await res.json()) || [];
+  } catch {
+    return [];
+  }
+}
+
+/** Configure an API-key connector: stores the encrypted key and enqueues an immediate sync. */
+export async function configureConnectorApiKey(connectorId, apiKey, metadata) {
+  const url = publicApiUrl(
+    `${API_CONNECTORS_PATH}/${encodeURIComponent(connectorId)}/configure?userId=${encodeURIComponent(brainUserId())}`,
+  );
+  if (!url) return { ok: false, error: 'no apiBaseUrl configured' };
+  try {
+    const body = { apiKey, ...(metadata ? { metadata } : {}) };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, ...json };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/** Trigger an immediate sync for a configured connector. */
+export async function triggerConnectorSync(connectorId) {
+  const url = publicApiUrl(
+    `${API_CONNECTORS_PATH}/${encodeURIComponent(connectorId)}/sync?userId=${encodeURIComponent(brainUserId())}`,
+  );
+  if (!url) return { ok: false, error: 'no apiBaseUrl configured' };
+  try {
+    const res = await fetch(url, { method: 'POST' });
+    const json = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, ...json };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * Start an OAuth flow for a catalog connector.
+ * Returns `{ ok: true, authorizeUrl }` on success so the caller can open a popup.
+ */
+export async function connectOAuthConnector(connectorId) {
+  const url = publicApiUrl(
+    `${API_OAUTH_CONNECT_PATH}/${encodeURIComponent(connectorId)}?userId=${encodeURIComponent(brainUserId())}`,
+  );
+  if (!url) return { ok: false, error: 'no apiBaseUrl configured' };
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ returnTo: window.location.href }),
+    });
+    const json = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, ...json };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * Send a pre-parsed graph (nodes + edges) to the public API for ingestion.
+ * Used by the client-side ingest path when the local dev server is unavailable.
+ */
+export async function ingestPublicGraph({ nodes, edges, sourceId }) {
+  const url = publicApiUrl(API_INGEST_GRAPH_PATH);
+  if (!url) return { ok: false, status: 0, error: 'no apiBaseUrl configured' };
+  const payload = sanitizeGraphPayload({ nodes, edges, sourceId });
+  if (payload.nodes.length === 0) {
+    return { ok: false, status: 0, error: 'no valid nodes to ingest' };
+  }
+
+  let body = {};
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userId: brainUserId(), ...payload }),
+    });
+  } catch (err) {
+    return { ok: false, status: 0, error: err.message };
+  }
+  try { body = await res.json(); } catch {}
+  return { ok: res.ok, status: res.status, ...body };
 }

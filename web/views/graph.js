@@ -15,6 +15,14 @@ import { createIngestPanel } from '../ingest-panel.js';
 import { create2DRenderer } from './graph-2d.js';
 import { create3DRenderer } from './graph-3d.js';
 import { createBrainOverlay } from './brain-overlay.js';
+import { startBackdrop } from '../brain-backdrop.js';
+import { mountBrainPreview } from '../brain-preview.js';
+import { initStatsBar } from '../hud/stats-bar.js';
+import { initBrainControls } from '../hud/brain-controls.js';
+import { initMiniMap } from '../hud/mini-map.js';
+import { initHoloCursor } from '../hud/holo-cursor.js';
+import { ensureQualityTierInit } from '../hud/quality.js';
+import { triggerInsightBurst } from '../hud/insight-burst.js';
 
 let renderer = null;
 let brain = null;
@@ -25,6 +33,8 @@ let brainAnimation = null;
 let brainOverlay = null;
 let graphLive = null;
 let ingestPanel = null;
+let statsBarApi = null;
+let brainControlsApi = null;
 
 export function initGraphView() {
   const canvas = document.getElementById('canvas');
@@ -65,13 +75,32 @@ export function initGraphView() {
   });
 
   document.getElementById('panel-close').addEventListener('click', () => setSelected(null));
-  document.getElementById('panel-focus').addEventListener('click', () => {
+  document.getElementById('panel-action-trace').addEventListener('click', () => {
     if (state.selectedId) setFocusRoot(state.selectedId);
   });
-  document.getElementById('panel-open').addEventListener('click', () => {
+  document.getElementById('panel-action-remove').addEventListener('click', () => {
+    if (!state.selectedId) return;
+    // "Remove" = hide from the current view by toggling its type filter
+    // off. Cheaper than mutating the source data and reversible from the
+    // type filter UI.
     const n = state.byId.get(state.selectedId);
-    const url = n?.metadata?.sourceUrl || n?.sourceUrl || n?.metadata?.url;
-    if (url) window.open(url, '_blank', 'noopener');
+    if (n) toggleFilterType(n.type, false);
+    setSelected(null);
+  });
+  document.getElementById('panel-action-pin').addEventListener('click', () => {
+    if (!state.selectedId) return;
+    const n = state.byId.get(state.selectedId);
+    if (!n) return;
+    // Toggle pinned state by fixing the node at its current coordinates.
+    if (n.fx == null && n.fy == null) {
+      n.fx = n.x; n.fy = n.y; if (n.z != null) n.fz = n.z;
+      n.__pinned = true;
+    } else {
+      delete n.fx; delete n.fy; if (!fourDActive()) delete n.fz;
+      n.__pinned = false;
+    }
+    document.getElementById('panel-action-pin').classList.toggle('active', !!n.__pinned);
+    renderer?.refresh?.();
   });
 
   canvas.addEventListener('click', (e) => {
@@ -98,6 +127,88 @@ export function initGraphView() {
   startHud();
   setupBrainAnimationPipeline();
 
+  // Ambient wireframe backdrop — sits behind the force-graph canvas and
+  // gives the graph the "brain in a halo" feel from the reference photos.
+  // Mounted on #view-graph so it survives renderer rebuilds (the renderer
+  // clears #canvas.innerHTML on each setup).
+  try { startBackdrop({ container: document.getElementById('view-graph') }); } catch {}
+
+  // Cortex thinking events — the cortex view dispatches these on
+  // `window` whenever a /think request starts/ends so the graph can render
+  // a BFS ripple across the network for the duration of reasoning. When
+  // the live graph has too little data to produce a meaningful ripple, we
+  // mount the looping preview animation instead so the user sees what
+  // thinking *will* look like once they ingest content.
+  window.addEventListener('cortex-thinking-start', (e) => {
+    if (!hasEnoughDataForThinking()) {
+      showThinkFallback();
+      return;
+    }
+    const rootId = e?.detail?.rootId
+      || state.selectedId
+      || state.focusRootId
+      || null;
+    renderer?.thinkWave?.(rootId);
+  });
+  window.addEventListener('cortex-thinking-tick', (e) => {
+    if (!hasEnoughDataForThinking()) return;
+    const rootId = e?.detail?.rootId
+      || state.selectedId
+      || state.focusRootId
+      || null;
+    renderer?.thinkWave?.(rootId, e?.detail?.color);
+  });
+  window.addEventListener('cortex-thinking-end', () => {
+    hideThinkFallback();
+  });
+
+  // Visual Spec Part 2 §5/§7/§9/§10/§11: HUD overlays. These mount into
+  // anchor elements declared in index.html (#hud-stats-bar,
+  // #hud-brain-controls, #hud-mini-map, #holo-cursor) and stay live for
+  // the rest of the session.
+  ensureQualityTierInit();
+  initHoloCursor();
+  statsBarApi = initStatsBar({ getBrainMode: () => brain?.mode || 'idle' });
+  brainControlsApi = initBrainControls({
+    getMode: () => brain?.mode || 'idle',
+    onStart: () => {
+      setConfig({ spikes: true });
+      // setConfig triggers applyConfig() which calls brain.start() if idle.
+      // No need to call brain.start() here directly — doing so would create
+      // two concurrent start() calls before the first one can update the mode.
+    },
+    onPause: () => {
+      setConfig({ spikes: false });
+      brain?.stop();
+    },
+    onForceCycle: () => {
+      // Without a real cognitive cycle we approximate "force a cycle" by
+      // stimulating a random node and broadcasting an insight tick to the
+      // HUD so users get visual feedback.
+      const nodes = state.graph?.nodes || [];
+      if (nodes.length === 0) return;
+      const pick = nodes[Math.floor(Math.random() * nodes.length)];
+      const text = `forced spike on “${truncate(pick.label || pick.id, 40)}”`;
+      brainControlsApi?.pushInsight(text);
+      statsBarApi?.pushInsight(text);
+      // Visual Spec Part 3 §12 — trigger the insight burst at the canvas
+      // center; it draws on its own overlay canvas above the graph.
+      triggerInsightBurst({ text });
+      // Ensure the brain is running so the spike animates across the graph.
+      // If the brain was paused, start it before injecting the stimulus.
+      if (brain) {
+        if (brain.mode === 'idle') {
+          // Only stimulate if the brain successfully entered a running mode
+          // (stop() called mid-start would leave mode 'idle' and localSim null).
+          brain.start().then(() => { if (brain.mode !== 'idle') brain.stimulate(pick.id, 22); });
+        } else {
+          brain.stimulate(pick.id, 22);
+        }
+      }
+    },
+  });
+  initMiniMap({ getRenderer: () => renderer });
+
   subscribe((reason) => {
     if (reason === 'graph-loaded') {
       buildOrUpdate();
@@ -109,6 +220,7 @@ export function initGraphView() {
     else if (reason === 'config-changed') {
       reflectBrainButton();
       applyConfig();
+      brainControlsApi?.syncFromState();
     } else if (reason === 'dimensions-changed') {
       reflectModeButtons();
       rebuildRenderer();
@@ -230,10 +342,13 @@ function rebuildRenderer() {
       if (now - lastSpikeAt < 1000) spikeCount1s += 1;
       else { spikeCount1s = 1; lastSpikeAt = now; }
       renderer?.spikeNode?.(e.neuronId);
+      statsBarApi?.markActive();
     },
     onWeight: () => {},
   });
-  if (state.config.spikes !== false) brain.start();
+  if (state.config.spikes !== false) {
+    brain.start().then(() => brainControlsApi?.syncFromState());
+  }
   updateModeHud();
 }
 
@@ -324,7 +439,9 @@ function applyConfig() {
     renderer.stopSpikes?.();
     brain?.stop();
   } else {
-    if (brain && brain.mode === 'idle') brain.start();
+    if (brain && brain.mode === 'idle') {
+      brain.start().then(() => brainControlsApi?.syncFromState());
+    }
     renderer.startSpikes?.();
   }
 }
@@ -432,16 +549,85 @@ function buildLegend(visibleIds) {
 
 function renderPanel() {
   const panel = document.getElementById('panel');
-  if (!state.selectedId) { panel.classList.add('hidden'); return; }
+  if (!state.selectedId) { panel.classList.remove('open'); return; }
   const node = state.byId.get(state.selectedId);
-  if (!node) { panel.classList.add('hidden'); return; }
-  panel.classList.remove('hidden');
+  if (!node) { panel.classList.remove('open'); return; }
+  panel.classList.add('open');
+
+  // Header — type badge + label.
   document.getElementById('panel-title').textContent = node.label || node.id;
-  document.getElementById('panel-type').textContent = node.type;
+  const badge = document.getElementById('panel-type');
+  badge.textContent = node.type || 'node';
+  badge.style.color = colorForType(node.type);
+  badge.style.borderColor = colorForType(node.type);
 
-  const url = node.sourceUrl || node.metadata?.sourceUrl || node.metadata?.url;
-  document.getElementById('panel-open').disabled = !url;
+  // Confidence — accept node.confidence or node.metadata.confidence,
+  // fall back to a degree-derived heuristic so the bar always has something.
+  const rawConf = node.confidence ?? node.metadata?.confidence;
+  const conf = typeof rawConf === 'number' && Number.isFinite(rawConf)
+    ? Math.max(0, Math.min(1, rawConf))
+    : Math.max(0.2, Math.min(1, 0.4 + Math.log2((node.__degree || 0) + 1) * 0.12));
+  const fill = document.getElementById('panel-confidence-fill');
+  const num = document.getElementById('panel-confidence-num');
+  // Reset width so the CSS transition replays.
+  fill.style.width = '0%';
+  // Force a layout reflow so the CSS width transition replays from 0
+  // every time the inspector opens on a new node.
+  void fill.offsetWidth;
+  fill.style.width = `${(conf * 100).toFixed(1)}%`;
+  num.textContent = conf.toFixed(2);
 
+  // Source line.
+  const isAuto = node.autonomous === true || (node.source || node.metadata?.source) === 'autonomous';
+  document.getElementById('panel-source').textContent = isAuto ? 'autonomous' : (node.sourceId || node.source || node.metadata?.source || 'manual');
+
+  // Created (relative).
+  document.getElementById('panel-created').textContent = relTime(node.createdAt) || fmtDate(node.createdAt) || '—';
+
+  // Connections (max 8).
+  const ul = document.getElementById('panel-edges');
+  ul.innerHTML = '';
+  const incident = state.graph.edges.filter((e) => srcId(e) === node.id || tgtId(e) === node.id);
+  document.getElementById('panel-edge-count').textContent = String(incident.length);
+  const limit = Math.min(8, incident.length);
+  for (let i = 0; i < limit; i++) {
+    const e = incident[i];
+    const otherId = srcId(e) === node.id ? tgtId(e) : srcId(e);
+    const other = state.byId.get(otherId);
+    if (!other) continue;
+    const li = el('li');
+    li.style.setProperty('--c', colorForType(other.type));
+    li.innerHTML = `
+      <span class="swatch"></span>
+      <span class="lbl">${escape(other.label || other.id)}</span>
+    `;
+    li.addEventListener('click', () => {
+      setSelected(other.id);
+      focusOn(other.id);
+    });
+    ul.appendChild(li);
+  }
+  if (incident.length > limit) {
+    const more = el('li');
+    more.style.cursor = 'default';
+    more.textContent = `+${incident.length - limit} more…`;
+    ul.appendChild(more);
+  }
+
+  // Autonomous insight (only shown for autonomous nodes that have one).
+  const insightWrap = document.getElementById('panel-insight-wrap');
+  const insightText = node.cycleInsight || node.metadata?.cycleInsight || node.metadata?.insight;
+  if (isAuto && insightText) {
+    insightWrap.hidden = false;
+    document.getElementById('panel-insight').textContent = String(insightText);
+  } else {
+    insightWrap.hidden = true;
+  }
+
+  // Pin button reflects pinned state.
+  document.getElementById('panel-action-pin').classList.toggle('active', !!node.__pinned);
+
+  // Raw metadata (collapsed) — preserves the older debug surface for power users.
   const meta = document.getElementById('panel-meta');
   meta.innerHTML = '';
   const region = node.region || regionForNode(node);
@@ -470,26 +656,25 @@ function renderPanel() {
     }
     meta.append(el('dt', {}, k), dd);
   }
+}
 
-  const ul = document.getElementById('panel-edges');
-  ul.innerHTML = '';
-  const incident = state.graph.edges.filter((e) => srcId(e) === node.id || tgtId(e) === node.id);
-  document.getElementById('panel-edge-count').textContent = String(incident.length);
-  for (const e of incident) {
-    const otherId = srcId(e) === node.id ? tgtId(e) : srcId(e);
-    const other = state.byId.get(otherId);
-    if (!other) continue;
-    const li = el('li');
-    li.innerHTML = `
-      <span class="lbl"><span class="swatch" style="--c:${colorForType(other.type)}"></span><span>${escape(other.label || other.id)}</span></span>
-      <span class="rel">${e.relation}</span>
-    `;
-    li.addEventListener('click', () => {
-      setSelected(other.id);
-      focusOn(other.id);
-    });
-    ul.appendChild(li);
-  }
+function fourDActive() {
+  return state.config.dimensions === 4;
+}
+
+function relTime(iso) {
+  if (!iso) return '';
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '';
+  const diff = Date.now() - t;
+  const sec = Math.round(diff / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  return `${day}d ago`;
 }
 
 function focusOn(id) {
@@ -584,6 +769,58 @@ function updateModeHud() {
     if (d === 4) detail.textContent = `t-axis: ${state.config.temporalField}`;
     else if (d === 3) detail.textContent = 'volumetric · bloom';
     else detail.textContent = 'canvas · 2D';
+  }
+}
+
+// ── Thinking fallback (insufficient-data) ──────────────────────────
+//
+// Shown when the cortex emits `cortex-thinking-start` but the graph has
+// fewer nodes/edges than would produce a visible BFS ripple. Mounts the
+// brain-preview loop in a small toast over the graph so the user still
+// gets a "thinking" visualisation even when there's nothing to traverse.
+
+const MIN_NODES_FOR_THINKING = 3;
+const MIN_EDGES_FOR_THINKING = 1;
+let thinkFallbackEl = null;
+let thinkFallbackHandle = null;
+
+function hasEnoughDataForThinking() {
+  const nodes = state.graph?.nodes?.length || 0;
+  const edges = state.graph?.edges?.length || 0;
+  return nodes >= MIN_NODES_FOR_THINKING && edges >= MIN_EDGES_FOR_THINKING;
+}
+
+function showThinkFallback() {
+  if (thinkFallbackEl) return; // already mounted
+  const view = document.getElementById('view-graph');
+  if (!view) return;
+  thinkFallbackEl = document.createElement('div');
+  thinkFallbackEl.className = 'brain-think-fallback';
+  thinkFallbackEl.innerHTML = `
+    <button type="button" class="bf-close" aria-label="Dismiss">×</button>
+    <span class="bf-tag">Thinking · preview</span>
+    <div class="bf-host"></div>
+    <span class="bf-hint">
+      Your graph is too small to traverse yet — here's what thinking will
+      look like once you've ingested content.
+    </span>
+  `;
+  view.appendChild(thinkFallbackEl);
+  thinkFallbackEl.querySelector('.bf-close').addEventListener('click', hideThinkFallback);
+  const host = thinkFallbackEl.querySelector('.bf-host');
+  if (host) {
+    try { thinkFallbackHandle = mountBrainPreview(host); } catch {}
+  }
+}
+
+function hideThinkFallback() {
+  if (thinkFallbackHandle) {
+    try { thinkFallbackHandle.stop(); } catch {}
+    thinkFallbackHandle = null;
+  }
+  if (thinkFallbackEl) {
+    try { thinkFallbackEl.remove(); } catch {}
+    thinkFallbackEl = null;
   }
 }
 

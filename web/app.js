@@ -14,8 +14,17 @@ import { initConnectorsView } from './views/connectors.js';
 import { initSearchView } from './views/search.js';
 import { initSettingsView } from './views/settings.js';
 import { initBrainView } from './views/brain.js';
+import { mount as mountCortex } from './views/cortex.js';
+import { mount as mountFinance } from './views/finance.js';
+import { showBootScreen, reportBootProgress } from './hud/boot-screen.js';
+import { mountBrainPreview } from './brain-preview.js';
 
-const ROUTES = ['#/graph', '#/timeline', '#/connectors', '#/brain', '#/search', '#/settings'];
+// Visual Spec Part 3 §13 — show the boot splash as early as possible, before
+// any view init runs, so users see the hex logo while the rest of the app
+// boots in the background.
+showBootScreen();
+
+const ROUTES = ['#/graph', '#/timeline', '#/connectors', '#/brain', '#/cortex', '#/finance', '#/search', '#/settings'];
 
 function navigate() {
   let hash = location.hash;
@@ -61,6 +70,10 @@ async function bootstrap() {
   initSearchView();
   initSettingsView();
   initBrainView();
+  const cortexRoot = document.getElementById('view-cortex');
+  if (cortexRoot) mountCortex(cortexRoot);
+  const financeRoot = document.getElementById('view-finance');
+  if (financeRoot) mountFinance(financeRoot);
 
   window.addEventListener('hashchange', navigate);
   navigate();
@@ -150,8 +163,11 @@ async function relabelIngestButton() {
 
 async function refresh() {
   try {
+    reportBootProgress(0.1);
     const data = await loadGraph();
+    reportBootProgress(0.9);
     setGraph(data);
+    reportBootProgress(1.0);
     if (data.metadata?.updatedAt) {
       document.getElementById('sidebar-foot').textContent = `data: ${fmtDate(data.metadata.updatedAt)}`;
     } else {
@@ -168,9 +184,22 @@ function renderEmpty(reason) {
   const canvas = document.getElementById('canvas');
   canvas.innerHTML = `
     <div class="empty">
-      <div>${reason || 'Graph is empty.'}</div>
-      <div>Click <b>Ingest Claude Code</b> in the top bar, or run <code>npm run ingest:claude-code</code>.</div>
+      <div id="empty-preview" class="empty-preview"></div>
+      <div class="empty-copy">
+        <div>${reason || 'Graph is empty.'}</div>
+        <div>Click <b>Ingest Claude Code</b> in the top bar, or run <code>npm run ingest:claude-code</code>.</div>
+      </div>
     </div>`;
+  // Mount the looping preview animation so users see what the brain will
+  // look like once it has data. Self-contained — no dependency on the
+  // force-graph renderer, so it works even if the live renderer hasn't
+  // initialised yet (offline / cold-start).
+  const host = document.getElementById('empty-preview');
+  if (host) {
+    try { mountBrainPreview(host); } catch (err) {
+      console.warn('[app] brain preview failed to mount', err);
+    }
+  }
 }
 
 bootstrap();
