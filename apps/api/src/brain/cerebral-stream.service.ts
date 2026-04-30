@@ -23,6 +23,16 @@ import { CortexService, type CortexThinkResult } from './cortex.service';
 import { InsightsService } from './insights.service';
 import { SensoryService } from './sensory.service';
 
+/** Hook the AgentModule installs at runtime so the cerebral stream can ask
+ *  the agent to enact each autonomous thought. Optional — when absent, the
+ *  cerebral stream still produces thoughts, just without taking action. */
+export interface CerebralAgentBridge {
+  hasPermission(userId: string, scope: string): boolean;
+  run(userId: string, opts: { question?: string; maxSteps?: number }): Promise<unknown>;
+}
+
+export const CEREBRAL_AGENT_BRIDGE = Symbol('CEREBRAL_AGENT_BRIDGE');
+
 const DEFAULT_MIN_INTERVAL_MS = 4_000;
 const DEFAULT_PERCEIVE_BURST = 5;
 const DEFAULT_PERCEIVE_DEBOUNCE_MS = 1_500;
@@ -78,6 +88,15 @@ export class CerebralStreamService implements OnModuleInit, OnModuleDestroy {
   private unsubPerceive?: () => void;
   private unsubAttention?: () => void;
   private unsubDream?: () => void;
+
+  /** Optional agent bridge — installed at runtime by AgentModule via
+   *  setAgentBridge(). When present, autonomous thoughts also run a
+   *  permission-gated agent cycle so the brain can act on its conclusions. */
+  private agentBridge: CerebralAgentBridge | null = null;
+
+  setAgentBridge(bridge: CerebralAgentBridge | null): void {
+    this.agentBridge = bridge;
+  }
 
   constructor(
     @Inject(forwardRef(() => CortexService))
@@ -249,6 +268,24 @@ export class CerebralStreamService implements OnModuleInit, OnModuleDestroy {
       this.log.log(
         `cerebral think user=${userId} trigger=${pending.trigger} confidence=${thought.confidence.toFixed(2)} reason="${pending.reason}"`,
       );
+
+      // If the agent bridge is installed AND the user has granted the agent
+      // motor enactment, hand the thought back so it can take action. The
+      // bridge handles its own permission checks per-tool — this top-level
+      // gate just keeps autonomous agent cycles off by default.
+      if (this.agentBridge?.hasPermission(userId, 'agent:enact-motor')) {
+        try {
+          await this.agentBridge.run(userId, {
+            ...(pending.question ? { question: pending.question } : {}),
+            maxSteps: 4,
+          });
+        } catch (err) {
+          this.log.warn(
+            `cerebral agent run failed user=${userId}: ${(err as Error).message}`,
+          );
+        }
+      }
+
       return event;
     } catch (err) {
       this.log.warn(`cerebral think failed user=${userId}: ${(err as Error).message}`);
