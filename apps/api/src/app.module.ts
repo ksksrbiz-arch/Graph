@@ -5,6 +5,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, type ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'node:path';
 import { AuditModule } from './audit/audit.module';
+import { ArcModule } from './arc/arc.module';
 import { AuthModule } from './auth/auth.module';
 import { BrainModule } from './brain/brain.module';
 import { ConnectorConfigsModule } from './connectors/connector-configs.module';
@@ -43,6 +44,7 @@ import { RedisModule } from './shared/redis/redis.module';
     PostgresModule,
     RedisModule,
     HealthModule,
+    ArcModule,
     AuthModule,
     UsersModule,
     AuditModule,

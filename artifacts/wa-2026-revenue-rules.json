@@ -1,0 +1,27 @@
+{
+  "version": "2026.04",
+  "jurisdiction": "WA",
+  "rules": [
+    {
+      "code": "WA_BO_SERVICE",
+      "description": "Washington B&O tax for service and other activities.",
+      "rateBps": 180,
+      "collectible": false,
+      "effectiveFrom": "2025-10-01T00:00:00.000Z"
+    },
+    {
+      "code": "WA_BO_RETAILING",
+      "description": "Washington B&O tax for retailing activities.",
+      "rateBps": 471,
+      "collectible": false,
+      "effectiveFrom": "2025-10-01T00:00:00.000Z"
+    },
+    {
+      "code": "WA_RETAIL_SALES_TAX_DIGITAL",
+      "description": "Washington retail sales tax on taxable digital / IT / custom software services.",
+      "rateBps": 650,
+      "collectible": true,
+      "effectiveFrom": "2025-10-01T00:00:00.000Z"
+    }
+  ]
+}

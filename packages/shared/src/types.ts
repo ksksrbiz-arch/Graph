@@ -38,6 +38,18 @@ export const NODE_TYPES = [
   'bookmark',
   'note',
   'concept',
+  'vendor',
+  'bill',
+  'payment_proposal',
+  'tax_liability',
+  'compliance_rule',
+  'approval_event',
+  'revenue_inflow',
+  'client',
+  'contract',
+  'tax_classification',
+  'deposit_proposal',
+  'reconciliation_event',
 ] as const;
 
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -74,6 +86,11 @@ export const EDGE_RELATIONS = [
   'COMMITS_TO',
   'CLOSES',
   'REFERENCES',
+  'BILLED_TO',
+  'CLASSIFIED_AS',
+  'FUNDS',
+  'PROPOSES',
+  'RECONCILES',
 ] as const;
 
 export type EdgeRelation = (typeof EDGE_RELATIONS)[number];

@@ -22,6 +22,7 @@
     "ingest:bookmarks": "node scripts/ingest-bookmarks.mjs && cp data/graph.json web/data/graph.json",
     "ingest:claude-export": "node scripts/ingest-claude-export.mjs && cp data/graph.json web/data/graph.json",
     "ingest:code": "node scripts/ingest-code.mjs && cp data/graph.json web/data/graph.json",
+    "ingest:bank-csv": "node scripts/ingest-bank-csv.mjs",
     "mcp": "node scripts/mcp-server.mjs",
     "deploy": "wrangler deploy",
     "preview": "wrangler dev",

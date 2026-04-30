@@ -71,6 +71,18 @@ const NODE_TYPE_TO_REGION: Record<NodeType, Region> = {
   event: 'motor',
   repository: 'association',
   person: 'limbic',
+  vendor: 'association',
+  bill: 'executive',
+  payment_proposal: 'executive',
+  tax_liability: 'association',
+  compliance_rule: 'memory',
+  approval_event: 'motor',
+  revenue_inflow: 'sensory',
+  client: 'limbic',
+  contract: 'association',
+  tax_classification: 'memory',
+  deposit_proposal: 'executive',
+  reconciliation_event: 'motor',
 };
 
 const CONNECTOR_BIAS: Partial<Record<ConnectorId, Region>> = {
