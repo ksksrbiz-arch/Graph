@@ -78,17 +78,30 @@ export function initBrainControls({
   const toggleBtn = root.querySelector('[data-action="toggle"]');
   const cycleBtn = root.querySelector('[data-action="cycle"]');
 
+  // The toggle reflects the user's *intent* (state.config.spikes) rather than
+  // the brain client's current mode. brain.mode lags behind clicks because:
+  //   1. The brain client is null until rebuildRenderer() runs (after the
+  //      first graph load), so before then mode is always 'idle' and the
+  //      label would never flip — leaving Start/Pause looking dead.
+  //   2. Even after the brain exists, start() goes through an async
+  //      'starting' phase, so basing the label on mode causes flicker.
+  // spikes=true means "the user wants the loop on"; that's what the label
+  // should show.
+  function isRunning() {
+    if (state.config.spikes === false) return false;
+    if (state.config.spikes === true) return true;
+    return (getMode?.() ?? 'idle') !== 'idle';
+  }
   function reflectToggle() {
-    const running = (getMode?.() ?? 'idle') !== 'idle' && state.config.spikes !== false;
+    const running = isRunning();
     toggleBtn.textContent = running ? '⏸ PAUSE' : '▶ START LOOP';
     toggleBtn.classList.toggle('active', running);
   }
 
   toggleBtn.addEventListener('click', () => {
-    const running = (getMode?.() ?? 'idle') !== 'idle' && state.config.spikes !== false;
-    if (running) onPause?.();
+    if (isRunning()) onPause?.();
     else onStart?.();
-    setTimeout(reflectToggle, 50);
+    reflectToggle();
   });
 
   cycleBtn.addEventListener('click', () => {

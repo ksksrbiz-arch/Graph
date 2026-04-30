@@ -184,11 +184,14 @@ export function initGraphView() {
     onForceCycle: () => {
       // Without a real cognitive cycle we approximate "force a cycle" by
       // stimulating a random node and broadcasting an insight tick to the
-      // HUD so users get visual feedback.
+      // HUD so users get visual feedback. Even if the graph hasn't loaded
+      // yet (no nodes / brain still null), we still emit the insight + burst
+      // so the button feels responsive instead of silently no-op'ing.
       const nodes = state.graph?.nodes || [];
-      if (nodes.length === 0) return;
-      const pick = nodes[Math.floor(Math.random() * nodes.length)];
-      const text = `forced spike on “${truncate(pick.label || pick.id, 40)}”`;
+      const pick = nodes.length ? nodes[Math.floor(Math.random() * nodes.length)] : null;
+      const text = pick
+        ? `forced spike on “${truncate(pick.label || pick.id, 40)}”`
+        : 'forced cycle (load a graph to see spikes)';
       brainControlsApi?.pushInsight(text);
       statsBarApi?.pushInsight(text);
       // Visual Spec Part 3 §12 — trigger the insight burst at the canvas
@@ -196,7 +199,7 @@ export function initGraphView() {
       triggerInsightBurst({ text });
       // Ensure the brain is running so the spike animates across the graph.
       // If the brain was paused, start it before injecting the stimulus.
-      if (brain) {
+      if (brain && pick) {
         if (brain.mode === 'idle') {
           // Only stimulate if the brain successfully entered a running mode
           // (stop() called mid-start would leave mode 'idle' and localSim null).

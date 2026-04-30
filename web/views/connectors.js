@@ -520,6 +520,12 @@ const KNOWN_CONNECTORS = [
 // ── View init ─────────────────────────────────────────────────────────────────
 
 export function initConnectorsView() {
+  // Render once immediately so the catalog and local-tools cards are visible
+  // even when the graph loader fails (404 on /data/graph.json, no API,
+  // offline static deploy, etc.) — otherwise the 'graph-loaded' event never
+  // fires and the page stays blank.
+  render();
+
   subscribe((reason) => {
     if (reason === 'graph-loaded') render();
   });

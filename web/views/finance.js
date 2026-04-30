@@ -481,9 +481,33 @@ async function apiFetch(path, method = 'GET', body) {
   if (body) {
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(url, opts);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch (err) {
+    throw new Error(`Network error: ${err.message}`);
+  }
+
+  const text = await res.text();
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  const looksJson = ct.includes('application/json') ||
+    (text.length > 0 && (text[0] === '{' || text[0] === '['));
+
+  let data = null;
+  if (looksJson) {
+    try { data = JSON.parse(text); }
+    catch { /* fall through with data=null */ }
+  }
+
+  if (!res.ok) {
+    const msg = (data && (data.error || data.message)) ||
+      (looksJson ? `HTTP ${res.status}` : `HTTP ${res.status} — ${path} did not return JSON (got ${ct || 'unknown content-type'}). The Finance API may not be deployed at this origin.`);
+    throw new Error(msg);
+  }
+
+  if (data === null) {
+    throw new Error(`${path} returned a non-JSON response (${ct || 'unknown content-type'}). The Finance API may not be deployed at this origin.`);
+  }
   return data;
 }
 
