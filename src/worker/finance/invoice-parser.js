@@ -1,6 +1,6 @@
 // Accounts Payable Cortex — AI-powered invoice extraction.
 //
-// Uses Workers AI (LLaVA for images, llama for text) to extract structured
+// Uses Workers AI (LLaVA for images, LLaMA for text) to extract structured
 // invoice fields from raw text or image payloads.
 //
 // Returns a normalized InvoiceData object. All amounts are in cents (integer).
