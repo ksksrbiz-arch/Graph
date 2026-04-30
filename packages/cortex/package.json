@@ -2,7 +2,7 @@
   "name": "@pkg/cortex",
   "version": "0.1.0",
   "private": true,
-  "description": "Cortical region tagging — assigns each KGNode to a functional region for the spiking layer (motor / sensory / association / memory / executive / limbic).",
+  "description": "Cortical regions + per-region cognitive modules. Tags KGNodes with a functional region for the spiking layer, then composes deterministic recall / association / executive / motor pipelines so the brain can reason over its own graph without an LLM.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,14 +15,15 @@
     }
   },
   "scripts": {
-    "pretype-check": "pnpm --filter @pkg/shared run build",
+    "pretype-check": "pnpm --filter @pkg/shared run build && pnpm --filter @pkg/reasoning run build",
     "build": "tsc -p tsconfig.build.json",
     "type-check": "tsc --noEmit",
     "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
-    "pretest": "pnpm --filter @pkg/shared run build",
+    "pretest": "pnpm --filter @pkg/shared run build && pnpm --filter @pkg/reasoning run build",
     "test": "vitest run"
   },
   "dependencies": {
+    "@pkg/reasoning": "workspace:*",
     "@pkg/shared": "workspace:*"
   },
   "devDependencies": {

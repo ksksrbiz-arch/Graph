@@ -6,6 +6,8 @@ import { ReasoningService } from './reasoning.service';
 @Module({
   controllers: [ReasoningController],
   providers: [ReasoningService, ReasoningRepository],
-  exports: [ReasoningService],
+  // Export ReasoningRepository so BrainModule's CortexService can load the
+  // user graph snapshot directly without re-implementing the Cypher loader.
+  exports: [ReasoningService, ReasoningRepository],
 })
 export class ReasoningModule {}

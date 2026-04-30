@@ -250,6 +250,9 @@ importers:
 
   packages/cortex:
     dependencies:
+      '@pkg/reasoning':
+        specifier: workspace:*
+        version: link:../reasoning
       '@pkg/shared':
         specifier: workspace:*
         version: link:../shared
