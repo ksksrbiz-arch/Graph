@@ -419,3 +419,39 @@ id then POST the new one (or update the URL via re-register).
   scheduler.js's CRON_PLAYBOOK if desired.
 - mcp:* intents could be filtered or scoped per user; today they're flat.
 
+
+
+## 15 · NestJS deterministic cortex (Layer 13 reference)
+
+The Worker `/cortex/think` route is LLM-driven (Llama 3.x via Workers AI) and
+lives entirely in `src/worker/cortex/*`. The hosted NestJS API gets a
+**parallel, deterministic** cortex pipeline — same six regions, no model
+dependency, runs on the brain we already have. Think of it as the "what would
+the brain conclude if it could only use what's in the graph and what it's
+been spiking about?" path. The Worker cortex remains the LLM-powered front
+door; this layer is the offline, auditable second opinion.
+
+Implementation:
+
+- `packages/cortex/src/cortex/*` — six-phase pure-data pipeline
+  - `sensory.ts` — embed question, resolve seeds (focus → label → vector)
+  - `memory.ts` — semantic + declarative + episodic recall over the graph
+  - `limbic.ts` — social / recency / co-fire salience boost
+  - `association.ts` — Dijkstra reasoning paths + Adamic-Adar link prediction
+  - `executive.ts` — template-grounded one-sentence conclusion + confidence
+  - `motor.ts` — proposes attend / stimulate / propose-edge / investigate
+  - `compositor.ts` — orchestrates the six phases and emits a `Thought`
+- `apps/api/src/brain/cortex.service.ts` — loads the user's
+  `ReasoningGraph` from Neo4j, snapshots `BrainState` from
+  `AttentionService` + `RecallService`, calls the compositor, and (when
+  `enact=true`) dispatches the proposed motor actions back into the
+  spiking layer.
+- `apps/api/src/brain/cortex.controller.ts` — `POST /api/v1/brain/cortex/think`,
+  JWT-guarded, idempotent.
+
+Guarantees:
+- Pure-data: same `(graph, brain state, question)` always yields the same
+  `Thought`. No LLM, no network, no clock-dependent state.
+- Provenance: every conclusion comes with the reasoning path that produced
+  it; the SPA can render the path on the canvas as a literal "this is why".
+- Cheap: ~5k-node graphs run end-to-end in under 100 ms on a single core.
