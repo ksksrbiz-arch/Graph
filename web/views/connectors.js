@@ -547,12 +547,14 @@ async function render() {
 
   const [isLocal, isPublic] = await Promise.all([localIngestSupported(), publicIngestAvailable()]);
 
-  // Load catalog connector statuses (API-backed; returns [] if API unavailable)
-  const statuses = await loadConnectorStatuses();
-  _connectorStatuses = Object.fromEntries(statuses.map((s) => [s.id, s]));
-
   // ── Catalog section ──────────────────────────────────────────────────────
+  // Render cards immediately (with current, possibly empty, statuses) so the
+  // page is never blank while the status network request is in-flight.
   container.appendChild(buildCatalogSection());
+
+  // Capture the catalog grid reference so we can update it in-place once the
+  // status data arrives, without re-clearing the whole page.
+  const catalogGridSnapshot = _catalogGrid;
 
   // ── Local ingest tools section ───────────────────────────────────────────
   const inlineWrap = el('div', { class: 'connector-section' });
@@ -566,6 +568,19 @@ async function render() {
   }
   inlineWrap.appendChild(inlineGrid);
   container.appendChild(inlineWrap);
+
+  // Load catalog connector statuses (API-backed; returns [] if API unavailable)
+  // and refresh the catalog grid in-place with real status badges.
+  const statuses = await loadConnectorStatuses();
+  // Guard: skip stale update if a newer render() has already replaced the grid.
+  if (!catalogGridSnapshot || !catalogGridSnapshot.isConnected) {
+    console.debug('[connectors] skipping stale catalog status update');
+    return;
+  }
+  _connectorStatuses = Object.fromEntries(
+    (Array.isArray(statuses) ? statuses : []).map((s) => [s.id, s]),
+  );
+  refreshCatalogGrid();
 }
 
 // ── Catalog section ───────────────────────────────────────────────────────────
@@ -845,7 +860,9 @@ function setCatalogNotice(type, text) {
 
 async function reloadCatalogStatuses() {
   const statuses = await loadConnectorStatuses();
-  _connectorStatuses = Object.fromEntries(statuses.map((s) => [s.id, s]));
+  _connectorStatuses = Object.fromEntries(
+    (Array.isArray(statuses) ? statuses : []).map((s) => [s.id, s]),
+  );
   refreshCatalogGrid();
 }
 
