@@ -92,6 +92,34 @@ export class PublicController {
     if (!userId) throw new BadRequestException('userId query param is required');
     return this.ingest.snapshot(userId);
   }
+
+  @Get('graph/delta')
+  @ApiOperation({
+    summary: 'Nodes + edges added since `since` (ISO-8601 or epoch ms)',
+  })
+  graphDelta(
+    @Query('userId') userId?: string,
+    @Query('since') since?: string,
+  ): Promise<unknown> {
+    if (!userId) throw new BadRequestException('userId query param is required');
+    return this.ingest.snapshotDelta(userId, normalizeSince(since));
+  }
+}
+
+/** Accept either an ISO-8601 string or a numeric epoch (ms) and return the ISO
+ *  form Cypher compares against. Defaults to epoch — a missing `since` is
+ *  treated as "give me everything", same as a fresh client. */
+function normalizeSince(raw: string | undefined): string {
+  if (!raw) return new Date(0).toISOString();
+  if (/^\d+$/.test(raw)) {
+    const ms = Number(raw);
+    if (Number.isFinite(ms)) return new Date(ms).toISOString();
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new BadRequestException('since must be ISO-8601 or epoch milliseconds');
+  }
+  return parsed.toISOString();
 }
 
 function requireString(dto: Record<string, unknown>, field: string): void {

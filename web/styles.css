@@ -966,3 +966,127 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
 .ingest-status.warn { color: #f5b942; }
 .ingest-status.err  { color: var(--danger); }
 .ingest-status.info { color: var(--accent-hover, var(--accent)); }
+
+/* ── Brain ingest panel (docked, top-right of #/graph view) ── */
+.ingest-panel {
+  position: absolute;
+  top: 4.2rem;
+  right: 1rem;
+  z-index: 5;
+  width: 320px;
+  background: rgba(11, 13, 18, 0.86);
+  border: 1px solid rgba(124, 156, 255, 0.28);
+  border-radius: 8px;
+  backdrop-filter: blur(12px);
+  font-family: inherit;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.ingest-panel.hidden { display: none; }
+
+.ingest-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid rgba(124, 156, 255, 0.18);
+}
+.ingest-panel-title {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.ingest-panel-tabs { display: flex; gap: 0.2rem; flex: 1; justify-content: center; }
+.ingest-panel-tabs button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-dim, rgba(255, 255, 255, 0.6));
+  padding: 0.18rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.ingest-panel-tabs button.active {
+  background: rgba(124, 156, 255, 0.16);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ingest-panel-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim, rgba(255, 255, 255, 0.5));
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0 0.2rem;
+}
+.ingest-panel-close:hover { color: var(--text); }
+
+.ingest-panel-body { padding: 0.7rem; }
+.ingest-tab { display: flex; flex-direction: column; gap: 0.45rem; }
+.ingest-tab.hidden { display: none; }
+
+.ingest-row { display: flex; gap: 0.4rem; }
+.ingest-url, .ingest-text {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 0.4rem 0.55rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 120ms;
+}
+.ingest-url:focus, .ingest-text:focus { border-color: var(--accent); }
+.ingest-text { resize: vertical; width: 100%; box-sizing: border-box; }
+
+.ingest-btn {
+  background: linear-gradient(135deg, rgba(124, 156, 255, 0.18), rgba(0, 212, 255, 0.18));
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 0.4rem 0.85rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms, box-shadow 120ms;
+}
+.ingest-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(124, 156, 255, 0.32), rgba(0, 212, 255, 0.32));
+  box-shadow: 0 0 14px rgba(124, 156, 255, 0.32);
+}
+.ingest-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.ingest-btn.full-width { width: 100%; }
+
+.ingest-hint { color: var(--text-faint, rgba(255, 255, 255, 0.45)); font-size: 0.72rem; margin: 0; }
+
+.ingest-log { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+.ingest-log-empty { color: var(--text-faint, rgba(255, 255, 255, 0.4)); font-size: 0.78rem; padding: 0.6rem; text-align: center; }
+.ingest-log-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.72rem;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+  background: rgba(255, 255, 255, 0.02);
+  margin-bottom: 0.2rem;
+}
+.ingest-log-row.ok  { border-left-color: var(--success); }
+.ingest-log-row.err { border-left-color: var(--danger); }
+.ingest-log-row .src { flex: 1; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ingest-log-row .cnt { color: var(--accent); font-weight: 600; }
+.ingest-log-row.ok  .cnt { color: var(--success); }
+.ingest-log-row.err .cnt { color: var(--danger); }
+.ingest-log-row .ts { color: var(--text-faint, rgba(255, 255, 255, 0.4)); font-size: 0.68rem; }
+
+/* Brain animation overlay — sits above force-graph's canvas. Pointer events
+ * stay off so drag/zoom passes straight through. */
+.brain-overlay-canvas {
+  pointer-events: none;
+}

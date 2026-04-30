@@ -9,14 +9,22 @@ import {
 import { colorForType, escape, fmtDate, srcId, tgtId, truncate, el } from '../util.js';
 import { regionForNode, styleForRegion } from '../cortex.js';
 import { createBrainClient } from '../brain.js';
+import { createBrainAnimation } from '../brain-animation.js';
+import { createGraphLive } from '../graph-live.js';
+import { createIngestPanel } from '../ingest-panel.js';
 import { create2DRenderer } from './graph-2d.js';
 import { create3DRenderer } from './graph-3d.js';
+import { createBrainOverlay } from './brain-overlay.js';
 
 let renderer = null;
 let brain = null;
 let regionForce = null; // d3-force callback installed for region clustering
 let lastSpikeAt = 0;
 let spikeCount1s = 0;
+let brainAnimation = null;
+let brainOverlay = null;
+let graphLive = null;
+let ingestPanel = null;
 
 export function initGraphView() {
   const canvas = document.getElementById('canvas');
@@ -88,6 +96,7 @@ export function initGraphView() {
   reflectModeButtons();
   reflectBrainButton();
   startHud();
+  setupBrainAnimationPipeline();
 
   subscribe((reason) => {
     if (reason === 'graph-loaded') {
@@ -109,6 +118,45 @@ export function initGraphView() {
 
 function isTyping(t) {
   return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+}
+
+function setupBrainAnimationPipeline() {
+  if (brainAnimation) return;
+  brainAnimation = createBrainAnimation();
+  graphLive = createGraphLive();
+
+  // Each delta tick: trigger a spawn animation for every freshly-arrived
+  // node. Pick a parent from the existing population so the axon stream has
+  // somewhere to flow from — the renderer hasn't laid out the new node yet,
+  // but force-graph will give it a position by the time the stream lands.
+  graphLive.subscribe((delta) => {
+    const existingIds = state.graph.nodes.map((n) => n.id);
+    delta.nodes.forEach((node, i) => {
+      const parent = existingIds[Math.floor(Math.random() * existingIds.length)];
+      setTimeout(() => brainAnimation.spawnNode(node.id, parent), i * 120);
+    });
+  });
+
+  // The graph view is the only consumer for now, so start polling whenever
+  // it's the active hash and stop otherwise. Same pattern as the brain
+  // insights view in views/brain.js.
+  const sync = () => {
+    if (location.hash === '#/graph') graphLive.startPolling();
+    else graphLive.stopPolling();
+  };
+  window.addEventListener('hashchange', sync);
+  sync();
+
+  const view = document.getElementById('view-graph') || document.body;
+  ingestPanel = createIngestPanel({
+    container: view,
+    onIngested: () => {
+      // After a successful ingest, accelerate the next poll a bit so the
+      // freshly-added nodes light up without waiting a full interval.
+      setTimeout(() => graphLive.startPolling(), 0);
+    },
+  });
+  ingestPanel.show();
 }
 
 function buildOrUpdate() {
@@ -133,6 +181,8 @@ function rebuildRenderer() {
   const container = document.getElementById('canvas');
   if (renderer) {
     try { brain?.stop(); } catch {}
+    try { brainOverlay?.destroy(); } catch {}
+    brainOverlay = null;
     try { renderer.destroy(); } catch {}
     renderer = null;
   }
@@ -158,6 +208,14 @@ function rebuildRenderer() {
   applyConfig();
   installRegionForce();
   renderer.startSpikes?.();
+
+  if (brainAnimation) {
+    brainOverlay = createBrainOverlay({
+      container,
+      getRenderer: () => renderer,
+      animation: brainAnimation,
+    });
+  }
 
   // (Re)wire the brain client so spikes flow into the new renderer. The
   // userId must match window.GRAPH_CONFIG.brainUserId so the gateway joins us
@@ -440,6 +498,9 @@ function focusOn(id) {
   setSelected(id);
   if (node.x != null) {
     renderer.centerOn(node, 600);
+    // Ripple a BFS trace through the focused node's neighborhood so the
+    // overlay shows where the user's attention just landed.
+    brainAnimation?.traceQuery(id, state.graph.edges || []);
   } else {
     setTimeout(() => focusOn(id), 200);
   }

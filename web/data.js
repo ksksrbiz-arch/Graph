@@ -8,6 +8,7 @@
 //      and to seed first paint.
 
 const API_GRAPH_PATH = '/api/v1/public/graph';
+const API_GRAPH_DELTA_PATH = '/api/v1/public/graph/delta';
 const API_HEALTH_PATH = '/api/v1/public/ingest/health';
 const API_INGEST_TEXT_PATH = '/api/v1/public/ingest/text';
 const API_INGEST_MARKDOWN_PATH = '/api/v1/public/ingest/markdown';
@@ -87,6 +88,32 @@ export async function loadGraph() {
 export async function loadGraphFromApi() {
   if (!(await publicIngestAvailable())) return null;
   const url = publicApiUrl(`${API_GRAPH_PATH}?userId=${encodeURIComponent(brainUserId())}`);
+  if (!url) return null;
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const body = await res.json();
+    if (!body || !Array.isArray(body.nodes)) return null;
+    return {
+      schemaVersion: body.schemaVersion || 1,
+      metadata: body.metadata || {},
+      nodes: body.nodes,
+      edges: body.edges || [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch nodes + edges added since `since` (ISO-8601 string or epoch ms).
+ *  Returns null when the API isn't available; the caller can treat that the
+ *  same as "no new nodes" and try again on the next poll. */
+export async function loadGraphDelta(since) {
+  if (!(await publicIngestAvailable())) return null;
+  const sinceParam = typeof since === 'number' ? String(since) : (since || '');
+  const url = publicApiUrl(
+    `${API_GRAPH_DELTA_PATH}?userId=${encodeURIComponent(brainUserId())}&since=${encodeURIComponent(sinceParam)}`,
+  );
   if (!url) return null;
   try {
     const res = await fetch(url, { cache: 'no-store' });

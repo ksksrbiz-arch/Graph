@@ -106,6 +106,55 @@ export class GraphRepository {
     }
   }
 
+  /** Nodes + edges created strictly after `sinceIso`. Matches the snapshot
+   *  query but with an extra `createdAt > $since` filter so the SPA can poll
+   *  for fresh additions without re-downloading the whole graph. Edges with a
+   *  null createdAt are excluded — Cypher's `null > x` evaluates to null, not
+   *  true, which is the behaviour we want. */
+  async snapshotDeltaForUser(
+    userId: string,
+    sinceIso: string,
+    limit = 5_000,
+  ): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
+    const session = this.driver.session();
+    try {
+      const nodesRes = await session.run(
+        `MATCH (n:KGNode {userId: $userId})
+         WHERE n.deletedAt IS NULL AND n.createdAt > $since
+         RETURN n
+         LIMIT $limit`,
+        { userId, since: sinceIso, limit },
+      );
+      const nodes = nodesRes.records.map((r) => this.mapNode(r.get('n')));
+
+      const edgesRes = await session.run(
+        `MATCH (a:KGNode {userId: $userId})-[r:REL]->(b:KGNode {userId: $userId})
+         WHERE a.deletedAt IS NULL AND b.deletedAt IS NULL
+           AND r.createdAt > $since
+         RETURN r.id AS id, a.id AS source, b.id AS target,
+                r.relation AS relation, r.weight AS weight,
+                r.inferred AS inferred, r.createdAt AS createdAt,
+                r.metadataJson AS metadataJson
+         LIMIT $limit`,
+        { userId, since: sinceIso, limit: limit * 4 },
+      );
+      const edges = edgesRes.records.map((r) => ({
+        id: r.get('id') as string,
+        source: r.get('source') as string,
+        target: r.get('target') as string,
+        relation: r.get('relation') as KGEdge['relation'],
+        weight: Number(r.get('weight') ?? 0.4),
+        inferred: r.get('inferred') === true,
+        createdAt: (r.get('createdAt') as string) ?? new Date().toISOString(),
+        metadata: parseMetadata(r.get('metadataJson')),
+      }));
+
+      return { nodes, edges };
+    } finally {
+      await session.close();
+    }
+  }
+
   /** Full snapshot of a user's graph — used by the public/demo ingest path
    *  so the SPA can render Neo4j-backed nodes without a full GraphQL setup.
    *  Capped by `limit` (defaults to 5k). */
