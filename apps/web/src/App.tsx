@@ -18,6 +18,7 @@ import {
   type ConnectorCategory,
 } from './connectorCatalog';
 import { DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES } from './sharedConstants';
+import { ArcPanel } from './ArcPanel';
 
 interface ApiHealth {
   ok: boolean;
@@ -325,6 +326,8 @@ export function App(): JSX.Element {
             </div>
           </Panel>
         </div>
+
+        <ArcPanel apiBase={API_BASE} userId={DEMO_USER_ID} />
 
         {(notice || connectorsError) && (
           <Panel

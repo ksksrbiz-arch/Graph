@@ -1,0 +1,16 @@
+# Phase 2 ARC foundation services (append manually if desired)
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:1.89.2
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:

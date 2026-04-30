@@ -13,6 +13,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "ignoreDeprecations": "5.0",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

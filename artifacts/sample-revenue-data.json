@@ -1,0 +1,29 @@
+{
+  "inflows": [
+    {
+      "externalId": "stripe-pi-001",
+      "source": "stripe",
+      "amountCents": 2900,
+      "currency": "USD",
+      "occurredAt": "2026-04-29T18:00:00.000Z",
+      "clientName": "GitHub Sponsor Alpha",
+      "contractName": "Sponsor Tier — Bronze",
+      "invoiceNumber": "GHSP-001",
+      "description": "Monthly sponsor subscription",
+      "taxCategory": "FEDERAL_1099_MISC"
+    },
+    {
+      "externalId": "bank-001",
+      "source": "bank",
+      "amountCents": 125000,
+      "currency": "USD",
+      "occurredAt": "2026-04-28T15:30:00.000Z",
+      "clientName": "Tacoma Digital Ops",
+      "contractName": "Managed automation retainer",
+      "invoiceNumber": "INV-2026-041",
+      "description": "Digital automation services retainer",
+      "taxCategory": "WA_RETAIL_SALES_TAX_DIGITAL",
+      "ledgerRef": "LEDGER-041"
+    }
+  ]
+}
