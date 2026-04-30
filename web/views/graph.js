@@ -189,7 +189,9 @@ export function initGraphView() {
       // If the brain was paused, start it before injecting the stimulus.
       if (brain) {
         if (brain.mode === 'idle') {
-          brain.start().then(() => brain.stimulate(pick.id, 22));
+          // Only stimulate if the brain successfully entered a running mode
+          // (stop() called mid-start would leave mode 'idle' and localSim null).
+          brain.start().then(() => { if (brain.mode !== 'idle') brain.stimulate(pick.id, 22); });
         } else {
           brain.stimulate(pick.id, 22);
         }
