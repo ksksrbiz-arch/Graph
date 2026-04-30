@@ -26,6 +26,15 @@ const DEFAULT_GRAPH_LIMIT = 2_000;
 const DEFAULT_MEMORY_LIMIT = 8;
 const DEFAULT_MAX_DEPTH = 4;
 
+// Hard caps protect the request thread from O(N²) blowups when a caller
+// supplies a hostile or accidentally large value. They are well above any
+// reasonable interactive use — graph snapshots beyond 20 k nodes are batch
+// territory, not request territory.
+const MAX_GRAPH_LIMIT = 20_000;
+const MAX_MEMORY_LIMIT = 64;
+const MAX_ASSOCIATION_DEPTH = 8;
+const MAX_QUESTION_LENGTH = 2_000;
+
 export interface CortexThinkOptions {
   question?: string;
   /** Cap on graph size loaded from Neo4j. Default 2 000 nodes. */
@@ -56,10 +65,12 @@ export class CortexService {
 
   async think(userId: string, opts: CortexThinkOptions = {}): Promise<CortexThinkResult> {
     const startedAt = Date.now();
-    const graph = await this.repo.loadUserGraph(
-      userId,
-      opts.graphLimit ?? DEFAULT_GRAPH_LIMIT,
-    );
+    const graphLimit = clampInt(opts.graphLimit, 1, MAX_GRAPH_LIMIT, DEFAULT_GRAPH_LIMIT);
+    const memoryLimit = clampInt(opts.memoryLimit, 1, MAX_MEMORY_LIMIT, DEFAULT_MEMORY_LIMIT);
+    const maxDepth = clampInt(opts.maxAssociationDepth, 1, MAX_ASSOCIATION_DEPTH, DEFAULT_MAX_DEPTH);
+    const question = sanitiseQuestion(opts.question);
+
+    const graph = await this.repo.loadUserGraph(userId, graphLimit);
 
     const regionByNodeId: Record<string, Region> = {};
     for (const node of graph.nodes) {
@@ -74,12 +85,12 @@ export class CortexService {
 
     const brainState = this.snapshotBrainState(userId);
     const input: CortexInput = {
-      ...(opts.question !== undefined ? { question: opts.question } : {}),
+      ...(question !== undefined ? { question } : {}),
       graph,
       regionByNodeId,
       brainState,
-      memoryLimit: opts.memoryLimit ?? DEFAULT_MEMORY_LIMIT,
-      maxAssociationDepth: opts.maxAssociationDepth ?? DEFAULT_MAX_DEPTH,
+      memoryLimit,
+      maxAssociationDepth: maxDepth,
     };
 
     const thought = cortexThink(input);
@@ -106,22 +117,18 @@ export class CortexService {
       if (memories.length > 0) {
         state.memories = memories.map((m) => ({ a: m.a, b: m.b, strength: m.strength }));
       }
-    } catch {
+    } catch (err) {
       // RecallService not started for this user — skip episodic recall.
+      this.log.debug(`recall snapshot skipped user=${userId}: ${(err as Error).message}`);
     }
 
     try {
-      const regions = this.insights.regions(userId);
-      // Distribute the per-region rate across nodes that fall in each region —
-      // we don't have per-neuron spike counts cheaply, but the region rate is
-      // a useful coarse proxy. Skip if every region is silent.
-      const totalRate = regions.reduce((acc, r) => acc + r.rate, 0);
-      if (totalRate > 0) {
-        // Caller doesn't need recentSpikeCounts for correctness; leave it
-        // unset — limbic still works on social/co-fire signals alone.
-      }
-    } catch {
-      // InsightsService unavailable — fine.
+      // The insights snapshot is read for telemetry consistency; we don't
+      // attach per-neuron spike counts (the cortex's limbic phase still
+      // works without them via social + co-fire signals).
+      this.insights.regions(userId);
+    } catch (err) {
+      this.log.debug(`insights snapshot skipped user=${userId}: ${(err as Error).message}`);
     }
 
     return state;
@@ -150,4 +157,21 @@ export class CortexService {
     }
     return enacted;
   }
+}
+
+function clampInt(v: number | undefined, lo: number, hi: number, dflt: number): number {
+  if (v === undefined) return dflt;
+  if (typeof v !== 'number' || !Number.isFinite(v)) return dflt;
+  const i = Math.floor(v);
+  if (i < lo) return lo;
+  if (i > hi) return hi;
+  return i;
+}
+
+function sanitiseQuestion(q: string | undefined): string | undefined {
+  if (q === undefined) return undefined;
+  if (typeof q !== 'string') return undefined;
+  const trimmed = q.trim();
+  if (trimmed.length === 0) return undefined;
+  return trimmed.length > MAX_QUESTION_LENGTH ? trimmed.slice(0, MAX_QUESTION_LENGTH) : trimmed;
 }

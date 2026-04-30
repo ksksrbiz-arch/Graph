@@ -13,6 +13,7 @@
 // Every action goes through AgentService → permission store → audit log.
 
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -24,11 +25,12 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import type { ConnectorId } from '@pkg/shared';
+import { CONNECTOR_IDS, type ConnectorId } from '@pkg/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Idempotent } from '../shared/idempotency/idempotency.interceptor';
 import {
   AgentPermissionStore,
+  validateScope,
   type AgentPermissionGrant,
   type AgentPermissionScope,
 } from './agent-permission.store';
@@ -49,9 +51,11 @@ interface RunDto {
 }
 
 interface GrantDto {
-  scope: AgentPermissionScope;
+  scope: string;
   expiresAt?: string | null;
 }
+
+const KNOWN_CONNECTOR_IDS: ReadonlySet<ConnectorId> = new Set(CONNECTOR_IDS);
 
 @ApiTags('agent')
 @ApiBearerAuth()
@@ -96,6 +100,9 @@ export class AgentController {
     @Req() req: AuthedRequest,
     @Param('connectorId') connectorId: string,
   ): Promise<AgentStepRecord> {
+    if (!KNOWN_CONNECTOR_IDS.has(connectorId as ConnectorId)) {
+      throw new BadRequestException(`unknown connectorId "${connectorId}"`);
+    }
     return this.agent.ingestFrom(req.user.sub, connectorId as ConnectorId);
   }
 
@@ -119,8 +126,10 @@ export class AgentController {
   @Post('permissions')
   @ApiOperation({ summary: 'Grant the agent a permission scope.' })
   grant(@Req() req: AuthedRequest, @Body() dto: GrantDto): AgentPermissionGrant {
-    return this.permissions.grant(req.user.sub, dto.scope, {
-      ...(dto.expiresAt !== undefined ? { expiresAt: dto.expiresAt } : {}),
+    // validateScope throws BadRequestException — Nest will surface it as 400.
+    const scope = validateScope(dto?.scope);
+    return this.permissions.grant(req.user.sub, scope, {
+      ...(dto?.expiresAt !== undefined ? { expiresAt: dto.expiresAt } : {}),
     });
   }
 
@@ -130,8 +139,9 @@ export class AgentController {
     @Req() req: AuthedRequest,
     @Param('scope') scope: string,
   ): { revoked: boolean } {
-    return {
-      revoked: this.permissions.revoke(req.user.sub, scope as AgentPermissionScope),
-    };
+    // Validate before touching the store so a malformed param can't poison
+    // anything — it's a no-op revoke either way, but a 400 is more useful.
+    const validated: AgentPermissionScope = validateScope(scope);
+    return { revoked: this.permissions.revoke(req.user.sub, validated) };
   }
 }

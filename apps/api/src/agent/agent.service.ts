@@ -90,7 +90,9 @@ const TOOL_REGISTRY: AgentToolDescriptor[] = [
 ];
 
 export interface AgentStepRecord {
-  tool: AgentToolName;
+  /** Tool that ran, or 'unknown' for unsupported action kinds — surfaced so
+   *  the SPA never silently drops a step. */
+  tool: AgentToolName | 'unknown';
   args: Record<string, unknown>;
   /** 'ok' = ran; 'denied' = permission missing; 'skipped' = no work to do;
    *  'error' = ran but threw. */
@@ -107,7 +109,7 @@ export interface AgentRunReport {
   steps: AgentStepRecord[];
   /** Convenience: actions in the cortex thought that the agent was *not*
    *  permitted to enact. Helps the SPA prompt the user for grants. */
-  blocked: Array<{ tool: AgentToolName; reason: string }>;
+  blocked: Array<{ tool: AgentToolName | 'unknown'; reason: string }>;
 }
 
 export interface AgentRunOptions {
@@ -250,11 +252,15 @@ export class AgentService {
         return summary;
       });
     }
+    // Should never happen — `CortexAction` is a closed union — but if a future
+    // action kind is added without a matching dispatch branch, we want a clear,
+    // structured record instead of a misleading "list-data-sources" entry.
+    const unknownKind = (action as { kind: string }).kind;
     return {
-      tool: 'list-data-sources',
-      args: {},
+      tool: 'unknown',
+      args: { kind: unknownKind },
       outcome: 'skipped',
-      reason: `unsupported action kind`,
+      reason: `unsupported action kind: ${unknownKind}`,
     };
   }
 

@@ -19,6 +19,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, forwardRef } from '@nestjs/common';
 import { AttentionService } from './attention.service';
 import { BrainGateway, type DreamEvt } from './brain.gateway';
+import { BrainService } from './brain.service';
 import { CortexService, type CortexThinkResult } from './cortex.service';
 import { InsightsService } from './insights.service';
 import { SensoryService } from './sensory.service';
@@ -61,6 +62,11 @@ interface UserStreamState {
   perceiveTimer?: NodeJS.Timeout;
   /** Most-recent thoughts (capped) for diagnostics. */
   recentThoughts: CerebralThoughtEvent[];
+  /** True while a cortex pass is in flight. Prevents two passes from running
+   *  concurrently for the same user — a new trigger during an in-flight run
+   *  is queued so it picks up the latest brain state when the previous run
+   *  finishes. */
+  running: boolean;
 }
 
 export interface CerebralStreamOptions {
@@ -98,6 +104,8 @@ export class CerebralStreamService implements OnModuleInit, OnModuleDestroy {
     this.agentBridge = bridge;
   }
 
+  private unsubBrainStop?: () => void;
+
   constructor(
     @Inject(forwardRef(() => CortexService))
     private readonly cortex: CortexService,
@@ -105,6 +113,8 @@ export class CerebralStreamService implements OnModuleInit, OnModuleDestroy {
     private readonly sensory: SensoryService,
     private readonly attention: AttentionService,
     private readonly gateway: BrainGateway,
+    @Inject(forwardRef(() => BrainService))
+    private readonly brain: BrainService,
     options: CerebralStreamOptions = {},
   ) {
     this.minIntervalMs = options.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS;
@@ -162,6 +172,10 @@ export class CerebralStreamService implements OnModuleInit, OnModuleDestroy {
       });
     });
 
+    // Evict per-user state when the brain powers down. Prevents the state map
+    // from growing without bound across long-running deploys.
+    this.unsubBrainStop = this.brain.onStop((userId) => this.evictUser(userId));
+
     this.log.log(
       `cerebral stream live · minInterval=${this.minIntervalMs}ms · perceiveBurst=${this.perceiveBurst}`,
     );
@@ -172,12 +186,26 @@ export class CerebralStreamService implements OnModuleInit, OnModuleDestroy {
     this.unsubPerceive?.();
     this.unsubAttention?.();
     this.unsubDream?.();
+    this.unsubBrainStop?.();
     for (const state of this.states.values()) {
       if (state.pendingTimer) clearTimeout(state.pendingTimer);
       if (state.perceiveTimer) clearTimeout(state.perceiveTimer);
     }
     this.states.clear();
     this.listeners.clear();
+  }
+
+  /** Drop all in-memory state for `userId` — pending timers, recent thoughts,
+   *  perceive counters. Idempotent. Called automatically when the brain
+   *  stops; exposed publicly for tests. */
+  evictUser(userId: string): boolean {
+    const state = this.states.get(userId);
+    if (!state) return false;
+    if (state.pendingTimer) clearTimeout(state.pendingTimer);
+    if (state.perceiveTimer) clearTimeout(state.perceiveTimer);
+    this.states.delete(userId);
+    this.log.debug(`cerebral state evicted user=${userId}`);
+    return true;
   }
 
   /** Subscribe to every cortex pass produced by this service. Returns an
@@ -215,6 +243,9 @@ export class CerebralStreamService implements OnModuleInit, OnModuleDestroy {
     const state = this.ensureState(userId);
     state.pendingTrigger = pending;
     if (state.pendingTimer) return; // already scheduled
+    // A run is currently in flight — queue the trigger; the in-flight runner
+    // re-checks pendingTrigger before returning.
+    if (state.running) return;
 
     const elapsed = Date.now() - state.lastThoughtAt;
     const wait = Math.max(0, this.minIntervalMs - elapsed);
@@ -236,6 +267,14 @@ export class CerebralStreamService implements OnModuleInit, OnModuleDestroy {
     userId: string,
     pending: { trigger: CerebralTrigger; reason: string; question?: string },
   ): Promise<CerebralThoughtEvent | null> {
+    const state = this.ensureState(userId);
+    if (state.running) {
+      // Another invocation beat us to it — leave the trigger queued so the
+      // active run picks it up when it finishes.
+      state.pendingTrigger = pending;
+      return null;
+    }
+    state.running = true;
     try {
       const thought = await this.cortex.think(userId, {
         ...(pending.question !== undefined ? { question: pending.question } : {}),
@@ -290,6 +329,15 @@ export class CerebralStreamService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       this.log.warn(`cerebral think failed user=${userId}: ${(err as Error).message}`);
       return null;
+    } finally {
+      state.running = false;
+      // A trigger arrived during the run — schedule it now using the normal
+      // queue path so the rate limiter and timers stay consistent.
+      const queued = state.pendingTrigger;
+      if (queued) {
+        state.pendingTrigger = undefined;
+        this.queue(userId, queued);
+      }
     }
   }
 
@@ -301,6 +349,7 @@ export class CerebralStreamService implements OnModuleInit, OnModuleDestroy {
       lastThoughtAt: 0,
       perceiveCount: 0,
       recentThoughts: [],
+      running: false,
     };
     this.states.set(userId, fresh);
     return fresh;

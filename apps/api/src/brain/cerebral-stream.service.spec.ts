@@ -1,5 +1,6 @@
 import type { AttentionService, AttentionFocus } from './attention.service';
 import type { BrainGateway, DreamEvt } from './brain.gateway';
+import type { BrainService } from './brain.service';
 import { CerebralStreamService, type CerebralThoughtEvent } from './cerebral-stream.service';
 import type { CortexService, CortexThinkResult } from './cortex.service';
 import type { InsightsService } from './insights.service';
@@ -10,6 +11,7 @@ interface Hooks {
   firePerceive?: (userId: string, node: PerceivableNode) => void;
   fireFocus?: (focus: AttentionFocus) => void;
   fireDream?: (userId: string, evt: DreamEvt) => void;
+  fireBrainStop?: (userId: string) => void;
 }
 
 function fakeThought(question = 'q'): CortexThinkResult {
@@ -63,16 +65,24 @@ function build(hooks: Hooks = {}, options = {}) {
     emitThought: jest.fn(),
   } as unknown as BrainGateway;
 
+  const brain = {
+    onStop: jest.fn().mockImplementation((fn: (userId: string) => void) => {
+      hooks.fireBrainStop = fn;
+      return jest.fn();
+    }),
+  } as unknown as BrainService;
+
   const svc = new CerebralStreamService(
     cortex,
     insights,
     sensory,
     attention,
     gateway,
+    brain,
     options,
   );
   svc.onModuleInit();
-  return { svc, cortex, gateway };
+  return { svc, cortex, gateway, brain };
 }
 
 describe('CerebralStreamService', () => {
@@ -260,6 +270,84 @@ describe('CerebralStreamService', () => {
 
     const second = await svc.fire('u1', 'attention', 'again');
     expect(second).not.toBeNull();
+    expect(cortex.think).toHaveBeenCalledTimes(2);
+    svc.onModuleDestroy();
+  });
+
+  it('evicts user state when the brain stops', async () => {
+    const hooks: Hooks = {};
+    const { svc } = build(hooks, { minIntervalMs: 0 });
+
+    await svc.fire('u1', 'attention', 'seed');
+    expect(svc.recent('u1')).toHaveLength(1);
+
+    hooks.fireBrainStop!('u1');
+    expect(svc.recent('u1')).toHaveLength(0);
+    svc.onModuleDestroy();
+  });
+
+  it('serialises overlapping triggers — one cortex pass at a time per user', async () => {
+    const hooks: Hooks = {};
+    let resolveOuter: ((thought: CortexThinkResult) => void) | null = null;
+    const slowThought: Promise<CortexThinkResult> = new Promise((resolve) => {
+      resolveOuter = resolve;
+    });
+    const cortex = {
+      // The first call returns a never-resolving promise until we free it,
+      // simulating an in-flight cortex pass while a second trigger lands.
+      think: jest.fn()
+        .mockImplementationOnce(() => slowThought)
+        .mockImplementation(() =>
+          Promise.resolve({
+            question: 'q', seeds: [], memories: [], associations: [],
+            conclusion: '', actions: [], trace: [], confidence: 0, elapsedMs: 0, enacted: [],
+          }),
+        ),
+    } as unknown as CortexService;
+
+    const insights = {
+      onFormation: jest.fn().mockImplementation((fn) => {
+        hooks.fireFormation = fn;
+        return jest.fn();
+      }),
+    } as unknown as InsightsService;
+    const sensory = { onPerceive: jest.fn().mockReturnValue(jest.fn()) } as unknown as SensoryService;
+    const attention = { onFocus: jest.fn().mockReturnValue(jest.fn()) } as unknown as AttentionService;
+    const gateway = {
+      onDream: jest.fn().mockReturnValue(jest.fn()),
+      emitThought: jest.fn(),
+    } as unknown as BrainGateway;
+    const brain = { onStop: jest.fn().mockReturnValue(jest.fn()) } as unknown as BrainService;
+
+    const svc = new CerebralStreamService(
+      cortex, insights, sensory, attention, gateway, brain,
+      { minIntervalMs: 0 },
+    );
+    svc.onModuleInit();
+
+    // First trigger starts a slow run; second trigger lands while it's pending.
+    hooks.fireFormation!('u1', { synapseId: 's1', pre: 'a', post: 'b', weight: 0.6, formedAt: '' });
+    await jest.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(cortex.think).toHaveBeenCalledTimes(1); // first run in flight
+
+    hooks.fireFormation!('u1', { synapseId: 's2', pre: 'c', post: 'd', weight: 0.7, formedAt: '' });
+    await jest.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+    expect(cortex.think).toHaveBeenCalledTimes(1); // second run NOT started — still in flight
+
+    // Free the first run; the queued trigger should now schedule a second pass.
+    resolveOuter!({
+      question: 'q', seeds: [], memories: [], associations: [],
+      conclusion: '', actions: [], trace: [], confidence: 0, elapsedMs: 0, enacted: [],
+    });
+    await jest.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
     expect(cortex.think).toHaveBeenCalledTimes(2);
     svc.onModuleDestroy();
   });
