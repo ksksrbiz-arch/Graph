@@ -52,6 +52,7 @@
   "triggers": {
     "crons": [
       "*/15 * * * *",   // pulse — has anything new arrived I should notice?
+      "0 6 * * *",      // mcp-refresh — re-fetch tool catalogs from registered MCPs
       "0 * * * *",      // hourly — what theme is forming this hour?
       "0 7 * * *"       // daily 07:00 UTC — synthesize yesterday into a note
     ]

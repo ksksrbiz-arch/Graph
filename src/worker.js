@@ -25,6 +25,7 @@
 import { parseMarkdown, parseText } from './worker/text-parser.js';
 import { handleIngressApi } from './worker/ingress.js';
 import { handleCortexApi } from './worker/cortex/router.js';
+import { handleMcpServer } from './worker/mcp-server.js';
 import { handleFinanceApi } from './worker/finance/router.js';
 import { handleOAuthApi } from './worker/oauth.js';
 import { dispatchCron } from './worker/cortex/scheduler.js';
@@ -65,6 +66,17 @@ export default {
     // tooling works without further configuration.
     if (request.method === 'OPTIONS' && url.pathname.startsWith('/api/')) {
       return new Response(null, { status: 204, headers: corsHeaders(request) });
+    }
+
+    // MCP server endpoint — must intercept BEFORE /api/ filter so /mcp
+    // (the conventional MCP path used by Claude Desktop, Cursor, etc.)
+    // is served by handleMcpServer instead of falling through to assets.
+    {
+      const mcp = await handleMcpServer(request, env, url);
+      if (mcp) {
+        for (const [k, v] of Object.entries(corsHeaders(request))) mcp.headers.set(k, v);
+        return mcp;
+      }
     }
 
     if (url.pathname.startsWith('/api/')) {

@@ -45,6 +45,16 @@ export const CRON_PLAYBOOK = {
       'Finalize a 2-3 sentence summary identifying the dominant topic and the most-touched node id. ' +
       'If the hour was quiet, finalize "quiet hour" with the count of events.',
   },
+  '0 6 * * *': {
+    name: 'mcp-refresh',
+    windowMs: 24 * 60 * 60_000,
+    minNewEvents: 0,           // run every day regardless of activity
+    budgetMs: 30_000,
+    budgetSteps: 0,            // no LLM call — handled out-of-band by router
+    prompt: 'Refresh MCP tool catalogs.',
+    handler: 'mcpRefresh',     // sentinel so runSchedule routes here
+  },
+
   '0 7 * * *': {
     name: 'daily',
     windowMs: 24 * 60 * 60_000,
@@ -116,6 +126,34 @@ export async function runSchedule({ env, userId, name, force = false }) {
         await env.GRAPH_KV.put(watermarkKey, String(startedAt));
       }
       return { ok: true, skipped: 'quiet', newCount, name, userId, elapsedMs: Date.now() - startedAt };
+    }
+  }
+
+  // 3a) Special handler short-circuit — skip the LLM loop entirely
+  if (entry.handler === 'mcpRefresh') {
+    try {
+      const { refreshTools } = await import('./mcp-registry.js');
+      const refreshed = await refreshTools(env, { userId });
+      if (env.GRAPH_DB) {
+        await recordEvent(env.GRAPH_DB, {
+          userId, sourceKind: 'cortex', kind: 'scheduled-think',
+          payload: { schedule: name, mcpRefresh: refreshed },
+          nodeCount: 0, edgeCount: 0,
+          status: 'applied',
+        });
+      }
+      if (env.GRAPH_KV) await env.GRAPH_KV.put(watermarkKey, String(startedAt));
+      return { ok: true, name, userId, refreshed, elapsedMs: Date.now() - startedAt };
+    } catch (err) {
+      if (env.GRAPH_DB) {
+        await recordEvent(env.GRAPH_DB, {
+          userId, sourceKind: 'cortex', kind: 'scheduled-think',
+          payload: { schedule: name, error: err.message },
+          nodeCount: 0, edgeCount: 0,
+          status: 'error', error: err.message,
+        });
+      }
+      return { ok: false, error: err.message, name, userId };
     }
   }
 

@@ -455,3 +455,67 @@ Guarantees:
 - Provenance: every conclusion comes with the reasoning path that produced
   it; the SPA can render the path on the canvas as a literal "this is why".
 - Cheap: ~5k-node graphs run end-to-end in under 100 ms on a single core.
+
+
+## 15 · Bidirectional MCP — the cortex on the open MCP web
+
+The cortex was an MCP **client** (Layer 10). It is now also an MCP **server**.
+Together they make the personal knowledge graph a node on the open MCP web —
+both consuming external MCPs and emitting its own tools to the world.
+
+### Outbound: cortex as MCP client (Layer 10, prior commit `6a6f881`)
+- Register any remote MCP via `POST /api/v1/cortex/mcp/servers`
+- Tools auto-appear as `mcp:<server>:<tool>` in the cortex registry
+- Reasoner picks them autonomously alongside builtins
+
+### Inbound: cortex as MCP server (this commit, `/mcp` endpoint)
+- Streamable HTTP MCP server at `POST /mcp` (and `/api/v1/mcp`)
+- Methods: initialize, notifications/initialized, tools/list, tools/call, ping
+- Sessions identified via `Mcp-Session-Id` response header
+- Optional Bearer auth via `env.MCP_BEARER` env var
+- Per-call userId via `X-Cortex-User` header (defaults to first allowlist entry)
+- Exposes 5 curated tools: recall, graph-query, recent-events, stats, write-note
+
+### Self-loop: cortex calls itself as MCP
+Cloudflare Workers can't `fetch` their own host (subrequest loop guard,
+error 1042). The mcp-registry detects same-host URLs and short-circuits
+to `handleMcpServer` in-process — same code path the HTTP server runs,
+no network hop.
+
+Practical effect:
+```
+$ POST /api/v1/cortex/mcp/servers {name:'self', url:'https://graph.skdev-371.workers.dev/mcp'}
+  → 5 tools discovered via in-process dispatch
+$ POST /api/v1/cortex/act/mcp:self:recall {args:{query:'Wayland'}}
+  → score 0.75 for Wayland note, transport: 'in-process'
+```
+
+### How to plug Claude Desktop / Cursor / IDEs into the cortex
+
+```json
+{
+  "mcpServers": {
+    "personal-graph": {
+      "transport": "streamable-http",
+      "url": "https://graph.skdev-371.workers.dev/mcp"
+    }
+  }
+}
+```
+
+Add an Authorization: Bearer header if you've set `env.MCP_BEARER`. Other
+MCP clients accept the same shape.
+
+### Layer 12 — model swap (live)
+
+`DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'`
+- $0.29/M input · $2.25/M output · 24K context window · function-calling support
+- ~3-5x speed improvement from the recent CF inference backend update
+- Verified pulling 0.78 cosine matches and routing through new mcp:self:* tools
+
+### Layer 9 — mcp-refresh cron (added)
+
+`0 6 * * *` UTC daily — short-circuits the LLM loop entirely (handler:
+'mcpRefresh' sentinel in scheduler.js) and just calls `refreshTools(env, {userId})`
+for every AUTONOMY user. Catalog stays fresh without a model call.
+

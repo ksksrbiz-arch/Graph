@@ -11,7 +11,7 @@ import { readAttention, writeAttention } from './attention.js';
 import { describeTools, dispatch } from './tools.js';
 import { recall as vectorRecall } from './vector.js';
 
-const DEFAULT_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const DEFAULT_BUDGET_MS = 15_000;
 const DEFAULT_BUDGET_STEPS = 6;
 const SYSTEM_PROMPT = `You are CORTEX — a reasoning agent embedded in a personal knowledge graph.

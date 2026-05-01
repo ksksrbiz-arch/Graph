@@ -8,6 +8,32 @@
 // always knows where to route the call.
 
 import { openSession, listTools as mcpListTools, callTool as mcpCallTool } from './mcp-client.js';
+import { handleMcpServer } from '../mcp-server.js';
+
+async function inprocessMcp(env, body) {
+  // Build a synthetic Request and call our own MCP server handler. This is
+  // how the worker uses ITS OWN /mcp without hitting CF's subrequest loop.
+  const url = new URL('https://internal/mcp');
+  const req = new Request(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const res = await handleMcpServer(req, env, url);
+  if (!res) return null;
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+function isSameHost(url) {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.hostname === 'graph.skdev-371.workers.dev' ||
+           u.hostname.endsWith('.workers.dev') ||
+           u.hostname === 'localhost';
+  } catch { return false; }
+}
 
 const TOOL_PREFIX = 'mcp:';
 
@@ -79,7 +105,31 @@ export async function refreshTools(env, { userId, serverId }) {
   for (const s of servers) {
     if (!s.enabled) continue;
     try {
-      const sess = await openSession(s.url, { authToken: s.authToken });
+      let sess;
+      if (isSameHost(s.url)) {
+        // Skip HTTP — call ourselves in-process to avoid CF's loop guard.
+        const initBody = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'self-loop', version: '1' } } };
+        const init = await inprocessMcp(env, initBody);
+        if (!init || init.error) { await markError(env, s.id, init?.error?.message || 'init failed'); out.push({ id: s.id, name: s.name, ok: false, error: init?.error?.message || 'init failed' }); continue; }
+        const listBody = { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} };
+        const list = await inprocessMcp(env, listBody);
+        if (!list || list.error) { await markError(env, s.id, list?.error?.message || 'list failed'); out.push({ id: s.id, name: s.name, ok: false, error: list?.error?.message || 'list failed' }); continue; }
+        const tools = (list.result?.tools || []).map((t) => ({
+          name: t.name, description: t.description || '', inputSchema: t.inputSchema || null,
+        }));
+        await env.GRAPH_DB.prepare(
+          `UPDATE mcp_servers SET tools_json = ?, last_listed_at = ?, last_error = NULL,
+                 protocol_version = ?, server_info_json = ? WHERE id = ?`
+        ).bind(
+          JSON.stringify(tools), Date.now(),
+          init.result?.protocolVersion || null,
+          init.result?.serverInfo ? JSON.stringify(init.result.serverInfo) : null,
+          s.id,
+        ).run();
+        out.push({ id: s.id, name: s.name, ok: true, count: tools.length, transport: 'in-process' });
+        continue;
+      }
+      sess = await openSession(s.url, { authToken: s.authToken });
       if (!sess.ok) {
         await markError(env, s.id, sess.error);
         out.push({ id: s.id, name: s.name, ok: false, error: sess.error });
@@ -160,6 +210,19 @@ export async function dispatchMcpTool(env, intent, args, { userId }) {
   if (!server) return { ok: false, error: `mcp server "${serverName}" not registered or disabled` };
 
   try {
+    if (isSameHost(server.url)) {
+      const callBody = { jsonrpc: '2.0', id: Date.now(), method: 'tools/call', params: { name: toolName, arguments: args || {} } };
+      const out = await inprocessMcp(env, callBody);
+      if (!out) return { ok: false, error: 'in-process MCP returned null' };
+      if (out.error) return { ok: false, error: out.error.message || 'mcp error' };
+      const result = out.result;
+      if (result?.isError) {
+        const txt = (result.content || []).filter((c) => c?.type === 'text').map((c) => c.text).join('\n');
+        return { ok: false, error: txt || 'tool reported isError' };
+      }
+      const text = (result?.content || []).filter((c) => c?.type === 'text').map((c) => c.text).join('\n');
+      return { ok: true, result: { text, structured: result?.structuredContent, contentBlocks: result?.content?.length || 0, transport: 'in-process' } };
+    }
     const sess = await openSession(server.url, { authToken: server.authToken });
     if (!sess.ok) return { ok: false, error: sess.error };
     const r = await sess.callTool(toolName, args || {});
