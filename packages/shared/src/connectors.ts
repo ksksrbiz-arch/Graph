@@ -557,4 +557,13 @@ export const CONNECTOR_CATALOG = [
     availability: 'planned',
     ctaLabel: 'Connect',
   },
+  {
+    id: 'pieces',
+    name: 'Pieces for Developers',
+    category: 'Developer Tools',
+    description: 'Code snippets, notes, and assets saved in Pieces Desktop — auto-categorized by the cortex.',
+    setupMode: 'apikey',
+    availability: 'available',
+    ctaLabel: 'Connect Pieces',
+  },
 ] as const satisfies readonly ConnectorCatalogEntry[];

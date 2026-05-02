@@ -14,6 +14,7 @@ import { GitHubConnector } from './github.connector';
 import { GoogleCalendarConnector } from './google-calendar.connector';
 import { NotionConnector } from './notion.connector';
 import { OpenAIConnector } from './openai.connector';
+import { PiecesConnector } from './pieces.connector';
 import { ZoteroConnector } from './zotero.connector';
 
 @Module({
@@ -26,6 +27,7 @@ import { ZoteroConnector } from './zotero.connector';
     ZoteroConnector,
     OpenAIConnector,
     AnthropicConnector,
+    PiecesConnector,
     ConnectorRegistry,
   ],
   exports: [ConnectorRegistry],

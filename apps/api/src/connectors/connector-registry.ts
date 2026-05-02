@@ -10,6 +10,7 @@ import { GitHubConnector } from './github.connector';
 import { GoogleCalendarConnector } from './google-calendar.connector';
 import { NotionConnector } from './notion.connector';
 import { OpenAIConnector } from './openai.connector';
+import { PiecesConnector } from './pieces.connector';
 import { ZoteroConnector } from './zotero.connector';
 
 @Injectable()
@@ -23,6 +24,7 @@ export class ConnectorRegistry {
     zotero: ZoteroConnector,
     openai: OpenAIConnector,
     anthropic: AnthropicConnector,
+    pieces: PiecesConnector,
   ) {
     this.byId.set(github.id, github);
     this.byId.set(googleCalendar.id, googleCalendar);
@@ -30,6 +32,7 @@ export class ConnectorRegistry {
     this.byId.set(zotero.id, zotero);
     this.byId.set(openai.id, openai);
     this.byId.set(anthropic.id, anthropic);
+    this.byId.set(pieces.id, pieces);
   }
 
   get(id: ConnectorId): BaseConnector {

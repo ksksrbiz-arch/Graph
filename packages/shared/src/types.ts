@@ -156,6 +156,7 @@ export const CONNECTOR_IDS = [
   'perplexity',
   'gemini',
   'huggingface',
+  'pieces',
 ] as const;
 
 export type ConnectorId = (typeof CONNECTOR_IDS)[number];
