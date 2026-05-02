@@ -186,8 +186,36 @@ The 3D / 4D renderers don't draw the overlay yet — particles and glow are 2D-o
 | `claude-code`       | `~/.claude/projects/<encoded-cwd>/<session>.jsonl`              |
 | `git`               | Local git repos (commits, files, authors)                       |
 | `markdown`          | A directory of markdown notes (wikilinks → `LINKS_TO` edges)    |
+| `pieces`            | A local [Pieces OS](https://pieces.app) MCP server (LTM memories, snippets) — see below |
 
 Re-running is idempotent — `weight` and `metadata.count` accumulate across runs.
+
+### Pieces MCP (ingest from Pieces OS LTM)
+
+If you run [Pieces OS](https://pieces.app) locally it advertises a Model Context Protocol endpoint over Streamable-HTTP — by default at `http://localhost:39300/model_context_protocol/2025-03-26/mcp`. `scripts/ingest-pieces-mcp.mjs` is an MCP **client** that talks to that endpoint, calls a retrieval tool (default `ask_pieces_ltm`), and merges the returned memories/snippets into `data/graph.json` as `pieces-memory` nodes hanging off a `Pieces OS` source node, with `pieces-query --ANSWERED_BY--> pieces-memory` edges.
+
+```bash
+# 1. Verify the connection and see which tools the local Pieces MCP exposes:
+npm run ingest:pieces:list-tools
+
+# 2. Default ingest (asks Pieces LTM a generic recap question):
+npm run ingest:pieces
+
+# 3. Custom prompt(s) — semicolon-separated for multiple:
+PIECES_QUERIES="What did I save about graph databases?;Recent code snippets about Neo4j" \
+  npm run ingest:pieces
+```
+
+Useful env vars (full list in the header of `scripts/ingest-pieces-mcp.mjs`):
+
+| Variable             | Default                                                                       |
+| -------------------- | ----------------------------------------------------------------------------- |
+| `PIECES_MCP_URL`     | `http://localhost:39300/model_context_protocol/2025-03-26/mcp`                |
+| `PIECES_QUERY_TOOL`  | `ask_pieces_ltm`                                                              |
+| `PIECES_QUERY_ARG`   | `question` (the string field on the tool's input schema)                      |
+| `PIECES_AUTH_TOKEN`  | _(unset)_ — local Pieces OS doesn't require one                               |
+
+A sample MCP client config (also documenting how to register Pieces with the v2 cortex MCP registry) lives at [`docs/mcp-clients/pieces.json`](docs/mcp-clients/pieces.json). The ingester reuses the same MCP HTTP client (`src/worker/cortex/mcp-client.js`) the v2 Worker uses, so JSON-RPC framing, SSE handling, and session management stay consistent across v1 ingestion and v2 dispatch.
 
 ---
 

@@ -1,0 +1,36 @@
+{
+  "$comment": [
+    "Sample MCP client configuration for the local Pieces OS server. Pieces OS",
+    "exposes its MCP endpoint over Streamable-HTTP at the URL below; the port",
+    "may differ on your machine — check Pieces OS settings if 39300 doesn't",
+    "answer. There are three supported ways to consume it from this repo:",
+    "",
+    "1. v1 ingester (fills data/graph.json):",
+    "     PIECES_MCP_URL='http://localhost:39300/model_context_protocol/2025-03-26/mcp' \\",
+    "       npm run ingest:pieces",
+    "",
+    "2. v2 cortex MCP registry (POST /api/v1/mcp/servers, see",
+    "    src/worker/cortex/mcp-registry.js — the `addServer` helper). Body:",
+    "     { \"userId\": \"local\", \"name\": \"pieces\", \"url\": \"http://localhost:39300/model_context_protocol/2025-03-26/mcp\" }",
+    "",
+    "3. Any other MCP client that speaks Streamable-HTTP — point it at the same",
+    "    URL. The auth token is optional for local Pieces OS."
+  ],
+  "mcpServers": {
+    "pieces": {
+      "transport": "streamable-http",
+      "url": "http://localhost:39300/model_context_protocol/2025-03-26/mcp",
+      "authToken": null,
+      "description": "Local Pieces OS long-term memory. Tools include ask_pieces_ltm and others depending on your Pieces OS version — run `npm run ingest:pieces:list-tools` to enumerate them."
+    }
+  },
+  "ingester": {
+    "scriptPath": "scripts/ingest-pieces-mcp.mjs",
+    "env": {
+      "PIECES_MCP_URL": "http://localhost:39300/model_context_protocol/2025-03-26/mcp",
+      "PIECES_QUERY_TOOL": "ask_pieces_ltm",
+      "PIECES_QUERY_ARG": "question",
+      "PIECES_QUERY": "Summarize the most relevant memories, snippets, and references from my Pieces long-term memory."
+    }
+  }
+}
