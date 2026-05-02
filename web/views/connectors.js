@@ -17,7 +17,7 @@ import {
   validateSelectedFiles,
 } from '../ingest-client.js';
 
-// ── 59-connector catalog ──────────────────────────────────────────────────────
+// ── 60-connector catalog ──────────────────────────────────────────────────────
 // Mirrors packages/shared/src/connectors.ts (CONNECTOR_CATALOG).
 
 export const CATALOG_CATEGORIES = [
@@ -72,6 +72,7 @@ export const CONNECTOR_CATALOG = [
   { id: 'monday',            name: 'Monday.com',        category: 'Developer Tools',   description: 'Boards, items, updates, and timelines.',                                   setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
   { id: 'figma',             name: 'Figma',             category: 'Developer Tools',   description: 'Files, comments, prototypes, and design systems.',                         setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
   { id: 'miro',              name: 'Miro',              category: 'Developer Tools',   description: 'Boards, stickies, diagrams, and brainstorm sessions.',                     setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
+  { id: 'pieces',            name: 'Pieces for Developers', category: 'Developer Tools', description: 'Code snippets, notes, and assets saved in Pieces Desktop — auto-categorized by the cortex.', setupMode: 'apikey', availability: 'available', ctaLabel: 'Connect Pieces' },
   // Storage
   { id: 'google_drive',      name: 'Google Drive',      category: 'Storage',           description: 'Docs, sheets, slides, PDFs, and folder graphs.',                           setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
   { id: 'dropbox',           name: 'Dropbox',           category: 'Storage',           description: 'Files, shared folders, and paper docs.',                                   setupMode: 'oauth',  availability: 'planned',   ctaLabel: 'Connect' },
