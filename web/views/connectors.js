@@ -155,7 +155,7 @@ function isFileOnly(connector) {
 // File fields also need `envVar` (env var passed to the ingester) and `accept`.
 // All non-file fields also need `envVar`.
 
-const KNOWN_CONNECTORS = [
+export const KNOWN_CONNECTORS = [
   {
     id: 'claude_code',
     name: 'Claude Code',
@@ -997,42 +997,67 @@ function buildCard(connector, source, isLocal, isPublic) {
 
 // ── Inline run (no modal, result shown directly on card) ──────────────────────
 
-/** Run a non-file connector inline using saved/default config. */
-async function inlineRun(connector, btn, statusEl, isLocal, isPublic) {
-  const saved = loadSavedConfig(connector.id);
+/**
+ * Execute a connector ingest using saved env/files. Pure logic — no DOM
+ * access, so it can be reused from the schedule timer or any other surface
+ * (e.g. the BRAIN INGEST panel) that doesn't have the connectors-view cards
+ * mounted.
+ */
+export async function executeConnectorIngest(connector, { env = {}, fileMap = {} } = {}, isLocal, isPublic) {
   const hasClientIngest = typeof connector.clientIngest === 'function';
+  try {
+    if (isLocal) {
+      const fileField = (connector.wizard?.fields || []).find(
+        (f) => f.required && (f.type === 'file' || f.type === 'multifile'),
+      );
+      if (fileField && fileMap[fileField.name]) {
+        const file = Array.isArray(fileMap[fileField.name])
+          ? fileMap[fileField.name][0]
+          : fileMap[fileField.name];
+        return await uploadFileIngest(connector.ingestSlug, file, fileField.envVar, env);
+      }
+      return await runIngestWithParams(connector.ingestSlug, env);
+    }
+    if (!connector.localOnly && isPublic && hasClientIngest) {
+      const parsed = await connector.clientIngest({ env, fileMap });
+      return await ingestPublicGraph({
+        nodes: parsed.nodes,
+        edges: parsed.edges,
+        sourceId: parsed.sourceId || connector.id,
+      });
+    }
+    return { ok: false, error: 'Ingest unavailable' };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
 
-  btn.disabled = true;
-  const origText = btn.textContent;
-  btn.textContent = 'Running…';
-  statusEl.textContent = '⏳ Running…';
-  statusEl.className = 'connector-inline-status connector-inline-running';
-
-  // Build env from saved config + field defaults
+/** Build the env map for a connector from its saved config + field defaults. */
+function buildEnvFromSaved(connector) {
+  const saved = loadSavedConfig(connector.id);
   const env = {};
   for (const f of connector.wizard?.fields || []) {
     if (f.type === 'file' || f.type === 'multifile' || f.type === 'oauth') continue;
     const val = (saved[f.envVar] || saved[f.name] || f.default || '').trim();
     if (val && f.envVar) env[f.envVar] = val;
   }
+  return env;
+}
 
-  let res;
-  try {
-    if (isLocal) {
-      res = await runIngestWithParams(connector.ingestSlug, env);
-    } else if (!connector.localOnly && isPublic && hasClientIngest) {
-      const parsed = await connector.clientIngest({ env, fileMap: {} });
-      res = await ingestPublicGraph({
-        nodes: parsed.nodes,
-        edges: parsed.edges,
-        sourceId: parsed.sourceId || connector.id,
-      });
-    } else {
-      res = { ok: false, error: 'Ingest unavailable' };
-    }
-  } catch (err) {
-    res = { ok: false, error: err.message };
-  }
+/** Run a non-file connector inline using saved/default config. */
+async function inlineRun(connector, btn, statusEl, isLocal, isPublic) {
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = 'Running…';
+  statusEl.textContent = '⏳ Running…';
+  statusEl.className = 'connector-inline-status connector-inline-running';
+
+  const res = await executeConnectorIngest(
+    connector,
+    { env: buildEnvFromSaved(connector) },
+    isLocal,
+    isPublic,
+  );
 
   btn.disabled = false;
   btn.textContent = origText;
@@ -1041,41 +1066,13 @@ async function inlineRun(connector, btn, statusEl, isLocal, isPublic) {
 
 /** Run a file-only connector inline after the user picks a file. */
 async function inlineRunWithFiles(connector, btn, statusEl, fileMap, isLocal, isPublic) {
-  const hasClientIngest = typeof connector.clientIngest === 'function';
-
   btn.disabled = true;
   const origText = btn.textContent;
   btn.textContent = 'Running…';
   statusEl.textContent = '⏳ Running…';
   statusEl.className = 'connector-inline-status connector-inline-running';
 
-  let res;
-  try {
-    if (isLocal) {
-      const fileField = (connector.wizard?.fields || []).find(
-        (f) => f.required && (f.type === 'file' || f.type === 'multifile'),
-      );
-      if (fileField) {
-        const file = Array.isArray(fileMap[fileField.name])
-          ? fileMap[fileField.name][0]
-          : fileMap[fileField.name];
-        res = await uploadFileIngest(connector.ingestSlug, file, fileField.envVar, {});
-      } else {
-        res = await runIngestWithParams(connector.ingestSlug, {});
-      }
-    } else if (!connector.localOnly && isPublic && hasClientIngest) {
-      const parsed = await connector.clientIngest({ env: {}, fileMap });
-      res = await ingestPublicGraph({
-        nodes: parsed.nodes,
-        edges: parsed.edges,
-        sourceId: parsed.sourceId || connector.id,
-      });
-    } else {
-      res = { ok: false, error: 'Ingest unavailable' };
-    }
-  } catch (err) {
-    res = { ok: false, error: err.message };
-  }
+  const res = await executeConnectorIngest(connector, { fileMap }, isLocal, isPublic);
 
   btn.disabled = false;
   btn.textContent = origText;
@@ -1147,18 +1144,48 @@ function applySchedule(connector, isLocal, isPublic) {
   });
 }
 
+/** Connector IDs currently mid-flight via the auto-run timer. Prevents
+ *  overlapping runs when an interval fires before the previous run resolves. */
+const _autoRunInFlight = new Set();
+
 /**
- * Called by the timer. Finds the live card DOM and runs the connector
- * inline, skipping if a run is already in progress.
+ * Called by the timer. Runs the connector via the DOM card if mounted, else
+ * falls back to a headless run so auto-ingest keeps working when the user is
+ * on any other view (graph, brain, settings, …) — the original implementation
+ * silently no-op'd whenever the connectors page wasn't visible.
  */
-function scheduledAutoRun(connectorId, isLocal, isPublic) {
-  const card = document.querySelector(`[data-connector-id="${connectorId}"]`);
-  if (!card) return;
-  const btn = card.querySelector('.connector-btn-run');
-  const statusEl = card.querySelector('.connector-inline-status');
-  if (!btn || btn.disabled || !statusEl) return;
+async function scheduledAutoRun(connectorId, isLocal, isPublic) {
   const connector = KNOWN_CONNECTORS.find((c) => c.id === connectorId);
   if (!connector) return;
-  console.info(`[auto-ingest] Scheduled run: ${connector.name}`);
-  inlineRun(connector, btn, statusEl, isLocal, isPublic);
+  if (_autoRunInFlight.has(connectorId)) return;
+
+  // Prefer the live card path so the user sees status feedback when they're
+  // looking at the connectors page during an auto-run.
+  const card = document.querySelector(`[data-connector-id="${connectorId}"]`);
+  const btn = card?.querySelector('.connector-btn-run');
+  const statusEl = card?.querySelector('.connector-inline-status');
+  if (btn && !btn.disabled && statusEl) {
+    console.info(`[auto-ingest] Scheduled run: ${connector.name}`);
+    return inlineRun(connector, btn, statusEl, isLocal, isPublic);
+  }
+
+  // Headless run — works on every view, including the graph view where the
+  // BRAIN INGEST panel lives. File-only connectors are skipped because they
+  // need an interactive picker we can't drive from a timer.
+  if (isFileOnly(connector)) return;
+  _autoRunInFlight.add(connectorId);
+  console.info(`[auto-ingest] Scheduled headless run: ${connector.name}`);
+  const res = await executeConnectorIngest(
+    connector,
+    { env: buildEnvFromSaved(connector) },
+    isLocal,
+    isPublic,
+  );
+  _autoRunInFlight.delete(connectorId);
+  if (res.ok) {
+    showToast(`${connector.name} auto-ingested`, 'success');
+    loadGraph().then(setGraph).catch((err) => console.warn('[auto-ingest] graph reload failed', err));
+  } else {
+    console.warn(`[auto-ingest] ${connector.name} failed:`, res.error || res.status);
+  }
 }
