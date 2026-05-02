@@ -1199,6 +1199,54 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
 .ingest-log-row.err .cnt { color: var(--danger); }
 .ingest-log-row .ts { color: var(--text-faint, rgba(255, 255, 255, 0.4)); font-size: 0.68rem; }
 
+/* Connectors tab inside the ingest panel — quick-launch cards. */
+.ingest-connectors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.ingest-connectors-loading,
+.ingest-connectors-empty {
+  color: var(--text-faint, rgba(255, 255, 255, 0.45));
+  font-size: 0.78rem;
+  padding: 0.6rem;
+  text-align: center;
+}
+.ingest-connector-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.4rem 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(124, 156, 255, 0.18);
+  border-radius: 4px;
+}
+.ingest-connector-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+}
+.ingest-connector-icon { font-size: 0.95rem; }
+.ingest-connector-name { color: var(--text); font-weight: 600; }
+.ingest-connector-actions {
+  display: flex;
+  gap: 0.3rem;
+  justify-content: flex-end;
+}
+.ingest-connector-actions .ingest-btn {
+  padding: 0.25rem 0.55rem;
+  font-size: 0.72rem;
+}
+.ingest-btn-cfg {
+  padding: 0.25rem 0.45rem !important;
+  background: transparent !important;
+  border-color: rgba(124, 156, 255, 0.4) !important;
+  color: var(--text-dim, rgba(255, 255, 255, 0.6)) !important;
+}
+
 /* Brain animation overlay — sits above force-graph's canvas. Pointer events
  * stay off so drag/zoom passes straight through. */
 .brain-overlay-canvas {
