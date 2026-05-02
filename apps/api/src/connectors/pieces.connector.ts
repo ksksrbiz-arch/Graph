@@ -109,6 +109,8 @@ const DEFAULT_BASE_URL = 'http://localhost:1000';
 const PAGE_SIZE = 50;
 const MAX_PAGES = 4; // 200 assets per sync — keeps each run reasonably bounded
 const FETCH_TIMEOUT_MS = 8_000;
+const MAX_LABEL_LENGTH = 200;
+const MAX_DESCRIPTION_LENGTH = 500;
 
 // Weight constants for edges
 const TAG_EDGE_WEIGHT = 0.5;
@@ -138,6 +140,7 @@ export class PiecesConnector extends BaseConnector {
     for (let page = 0; page < MAX_PAGES; page++) {
       const params = new URLSearchParams({
         max: String(PAGE_SIZE),
+        ...(page > 0 ? { offset: String(page * PAGE_SIZE) } : {}),
       });
 
       let res: Response;
@@ -213,7 +216,7 @@ export class PiecesConnector extends BaseConnector {
       metadata: {
         piecesId: asset.id,
         language: language ?? null,
-        description: description?.slice(0, 500) ?? null,
+        description: description?.slice(0, MAX_DESCRIPTION_LENGTH) ?? null,
         tagCount: asset.tags?.iterable?.length ?? 0,
         websiteCount: asset.websites?.iterable?.length ?? 0,
       },
@@ -223,7 +226,9 @@ export class PiecesConnector extends BaseConnector {
 
     // Tag → TAGGED_WITH edges.  Tag nodes are referenced by label so the same
     // tag applied across many snippets collapses into one node (idempotent via
-    // deterministicUuid).
+    // deterministicUuid).  Following the established Zotero connector pattern,
+    // the tag node identity is embedded in edge.metadata; a future NLP pass or
+    // the graph service's upsert logic can create the backing nodes if needed.
     for (const tag of asset.tags?.iterable ?? []) {
       if (!tag?.text?.trim()) continue;
       const tagId = deterministicUuid('pieces', `tag:${tag.text.trim().toLowerCase()}`);
@@ -233,7 +238,8 @@ export class PiecesConnector extends BaseConnector {
     }
 
     // Website → LINKS_TO edges.  Websites captured alongside a snippet in
-    // Pieces represent the origin or reference for the snippet.
+    // Pieces represent the origin or reference for the snippet.  The website
+    // node identity is stored in edge.metadata following the Zotero pattern.
     for (const website of asset.websites?.iterable ?? []) {
       if (!website?.url?.trim()) continue;
       const websiteId = deterministicUuid('pieces', `website:${website.url.trim()}`);
@@ -289,7 +295,7 @@ function detectLanguage(asset: PiecesAsset): string | null {
  *   3. `asset.id` as a last resort
  */
 function resolveLabel(asset: PiecesAsset, language: string | null): string {
-  if (asset.name?.trim()) return asset.name.trim().slice(0, 200);
+  if (asset.name?.trim()) return asset.name.trim().slice(0, MAX_LABEL_LENGTH);
 
   // Extract raw content from the first format that has string content.
   const formats = asset.formats?.iterable ?? [];
@@ -299,11 +305,11 @@ function resolveLabel(asset: PiecesAsset, language: string | null): string {
       const firstLine = raw.split('\n')[0]?.trim() ?? '';
       const snippet = firstLine.length > 0 ? firstLine : raw;
       const lang = language ? ` (${language})` : '';
-      return `${snippet.slice(0, 120)}${lang}`.trim().slice(0, 200);
+      return `${snippet.slice(0, 120)}${lang}`.trim().slice(0, MAX_LABEL_LENGTH);
     }
   }
 
-  return asset.id.slice(0, 200);
+  return asset.id.slice(0, MAX_LABEL_LENGTH);
 }
 
 function edgeBetween(
