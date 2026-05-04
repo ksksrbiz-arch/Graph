@@ -1698,3 +1698,36 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
   .catalog-search { min-width: 100%; }
   .catalog-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Quick-ingest drop zone (top of connectors tab) ──────────────────────── */
+.quick-ingest-card {
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(124,156,255,0.06), rgba(124,156,255,0));
+}
+.quick-ingest-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1.1rem 1rem;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  text-align: center;
+}
+.quick-ingest-drop.drag-over {
+  border-color: var(--accent);
+  background: rgba(124,156,255,0.08);
+  color: var(--text);
+}
+.quick-ingest-drop-icon { font-size: 1.4rem; }
+.connector-card-error {
+  border-color: rgba(255,107,107,0.4);
+  background: rgba(255,107,107,0.04);
+}
+.ingest-connector-card-error {
+  border-color: rgba(255,107,107,0.4);
+  background: rgba(255,107,107,0.05);
+}

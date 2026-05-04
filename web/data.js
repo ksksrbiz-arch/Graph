@@ -184,6 +184,40 @@ export async function uploadFileIngest(name, file, envField, extraEnv = {}) {
   });
 }
 
+/**
+ * Run a local ingester with multiple files (e.g. a folder picked via
+ * webkitdirectory). The dev server materialises them into a tmp directory
+ * preserving each file's `webkitRelativePath`, then sets `envField` to the
+ * tmp dir path so Node-side ingesters can scan it like a real vault.
+ */
+export async function uploadFilesIngest(name, files, envField, extraEnv = {}) {
+  const list = Array.from(files || []);
+  if (list.length === 0) return { ok: false, status: 0, error: 'no files selected' };
+
+  const fileBatch = await Promise.all(list.map((f) => fileToBase64Entry(f, envField)));
+  return runLocalIngest(name, {
+    env: extraEnv,
+    files: fileBatch,
+  });
+}
+
+function fileToBase64Entry(file, envField) {
+  return new Promise((resolveP, rejectP) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = String(reader.result || '').split(',')[1] || '';
+      resolveP({
+        name: file.name,
+        content: b64,
+        field: envField,
+        relativePath: file.webkitRelativePath || file.name,
+      });
+    };
+    reader.onerror = rejectP;
+    reader.readAsDataURL(file);
+  });
+}
+
 /** Check whether GitHub is connected (token held by the local dev server). */
 export async function githubOAuthStatus() {
   try {

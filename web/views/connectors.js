@@ -1,6 +1,6 @@
 import { state, subscribe } from '../state.js';
 import { fmtDate, el, showToast } from '../util.js';
-import { loadGraph, localIngestSupported, publicIngestAvailable, runIngestWithParams, uploadFileIngest, ingestPublicGraph, scheduleAutoIngest, loadConnectorStatuses, configureConnectorApiKey, triggerConnectorSync, connectOAuthConnector } from '../data.js';
+import { loadGraph, localIngestSupported, publicIngestAvailable, runIngestWithParams, uploadFileIngest, uploadFilesIngest, ingestPublicGraph, scheduleAutoIngest, loadConnectorStatuses, configureConnectorApiKey, triggerConnectorSync, connectOAuthConnector } from '../data.js';
 import { setGraph } from '../state.js';
 import { openWizard } from './ingest-wizard.js';
 import { loadSavedConfig, loadSchedule, saveSchedule, SCHEDULE_OPTIONS } from './connector-config.js';
@@ -145,6 +145,18 @@ function isFileOnly(connector) {
   if (!hasAnyRequired) return false;
   return fields.every(
     (f) => !f.required || f.type === 'file' || f.type === 'multifile',
+  );
+}
+
+/**
+ * Find the primary file/multifile field on a connector, regardless of whether
+ * it's marked required. Used to surface a "📁 Pick" button on cards whose
+ * only meaningful input is a file/folder selection (e.g. Markdown vault,
+ * Claude Code session folder, Evernote .enex export).
+ */
+function primaryFileField(connector) {
+  return (connector.wizard?.fields || []).find(
+    (f) => f.type === 'file' || f.type === 'multifile',
   );
 }
 
@@ -554,6 +566,16 @@ async function render() {
 
   const [isLocal, isPublic] = await Promise.all([localIngestSupported(), publicIngestAvailable()]);
 
+  // ── Quick ingest drop-zone ───────────────────────────────────────────────
+  // Surface a one-click "drop a folder of notes" entry point at the top of
+  // the page. This is what most first-time users actually want — Obsidian-
+  // style "point at my vault and go" — without hunting through the catalog.
+  try {
+    container.appendChild(buildQuickIngestSection(isLocal, isPublic));
+  } catch (err) {
+    console.error('[connectors] failed to mount quick-ingest section', err);
+  }
+
   // ── Catalog section ──────────────────────────────────────────────────────
   // Render cards immediately (with current, possibly empty, statuses) so the
   // page is never blank while the status network request is in-flight.
@@ -570,8 +592,21 @@ async function render() {
   );
   const inlineGrid = el('div', { class: 'card-grid' });
   for (const c of KNOWN_CONNECTORS) {
-    inlineGrid.appendChild(buildCard(c, sources.get(c.id), isLocal, isPublic));
-    applySchedule(c, isLocal, isPublic);
+    // A bug in any single card's builder (or a connector with malformed wizard
+    // metadata) used to take down the entire connectors tab. Isolate failures
+    // so the rest of the cards still render and the user always sees *some*
+    // surface for ingestion.
+    try {
+      inlineGrid.appendChild(buildCard(c, sources.get(c.id), isLocal, isPublic));
+    } catch (err) {
+      console.error(`[connectors] failed to build card for ${c.id}`, err);
+      inlineGrid.appendChild(buildCardFallback(c, err));
+    }
+    try {
+      applySchedule(c, isLocal, isPublic);
+    } catch (err) {
+      console.warn(`[connectors] failed to apply schedule for ${c.id}`, err);
+    }
   }
   inlineWrap.appendChild(inlineGrid);
   container.appendChild(inlineWrap);
@@ -588,6 +623,168 @@ async function render() {
     (Array.isArray(statuses) ? statuses : []).map((s) => [s.id, s]),
   );
   refreshCatalogGrid();
+}
+
+// ── Quick ingest drop-zone ────────────────────────────────────────────────────
+
+/**
+ * Map of file-extension → connector ID. Used by the quick-ingest drop-zone
+ * to route a dropped file/folder to the right connector automatically.
+ */
+const FILE_EXTENSION_TO_CONNECTOR = {
+  '.md':    'markdown',
+  '.jsonl': 'claude_code',
+  '.enex':  'evernote',
+  '.html':  'bookmarks',
+  '.htm':   'bookmarks',
+};
+
+function pickConnectorForFiles(files) {
+  // Tally the connectors implied by each file's extension. Pick the connector
+  // with the most matching files — handles mixed folders gracefully.
+  const tally = new Map();
+  for (const f of files) {
+    const lower = f.name.toLowerCase();
+    for (const [ext, id] of Object.entries(FILE_EXTENSION_TO_CONNECTOR)) {
+      if (lower.endsWith(ext)) {
+        tally.set(id, (tally.get(id) || 0) + 1);
+        break;
+      }
+    }
+  }
+  if (tally.size === 0) return null;
+  let bestId = null, bestN = 0;
+  for (const [id, n] of tally) {
+    if (n > bestN) { bestN = n; bestId = id; }
+  }
+  return KNOWN_CONNECTORS.find((c) => c.id === bestId) || null;
+}
+
+/**
+ * Top-of-page section that lets the user drop a folder or pick files of any
+ * supported note format. Routes to the matching connector based on file
+ * extensions so the user doesn't need to know which connector parses what.
+ */
+function buildQuickIngestSection(isLocal, isPublic) {
+  const section = el('div', { class: 'connector-section' });
+  section.appendChild(el('h3', { class: 'connector-section-title' }, 'Add files & folders'));
+
+  const card = el('div', { class: 'card connector-card quick-ingest-card' });
+  card.appendChild(
+    el('p', { class: 'meta', style: 'margin:0' },
+      'Drop a folder (Obsidian vault, ~/.claude/projects, …) or any of: ',
+      el('code', {}, '.md'), ', ',
+      el('code', {}, '.jsonl'), ', ',
+      el('code', {}, '.enex'), ', ',
+      el('code', {}, '.html'),
+      '. The right connector is picked automatically.'),
+  );
+
+  const dropZone = el('div', { class: 'quick-ingest-drop' },
+    el('span', { class: 'quick-ingest-drop-icon', 'aria-hidden': 'true' }, '📥'),
+    el('span', { class: 'quick-ingest-drop-label' }, 'Drop a folder or files here, or use the buttons below'),
+  );
+  card.appendChild(dropZone);
+
+  const inlineStatus = el('div', { class: 'connector-inline-status' });
+  card.appendChild(inlineStatus);
+
+  // Hidden inputs: one for files, one for folder
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.multiple = true;
+  fileInput.style.display = 'none';
+  fileInput.accept = Object.keys(FILE_EXTENSION_TO_CONNECTOR).join(',');
+  card.appendChild(fileInput);
+
+  const folderInput = document.createElement('input');
+  folderInput.type = 'file';
+  folderInput.style.display = 'none';
+  folderInput.setAttribute('webkitdirectory', '');
+  folderInput.setAttribute('directory', '');
+  card.appendChild(folderInput);
+
+  const actions = el('div', { class: 'actions' });
+  const folderBtn = el('button', { class: 'primary', type: 'button' }, '📁 Pick folder');
+  folderBtn.addEventListener('click', () => folderInput.click());
+  const filesBtn = el('button', { type: 'button' }, '📄 Pick files');
+  filesBtn.addEventListener('click', () => fileInput.click());
+  actions.appendChild(folderBtn);
+  actions.appendChild(filesBtn);
+  card.appendChild(actions);
+
+  async function handleFiles(rawFiles) {
+    const files = Array.from(rawFiles || []);
+    if (files.length === 0) return;
+    const connector = pickConnectorForFiles(files);
+    if (!connector) {
+      inlineStatus.textContent = '✗ No supported file types in selection (need .md, .jsonl, .enex, or .html)';
+      inlineStatus.className = 'connector-inline-status connector-inline-err';
+      showToast('No supported files found', 'error');
+      return;
+    }
+
+    const fileField = primaryFileField(connector);
+    if (!fileField) {
+      inlineStatus.textContent = `✗ ${connector.name} has no file input`;
+      inlineStatus.className = 'connector-inline-status connector-inline-err';
+      return;
+    }
+
+    // Filter to the connector's accepted extensions to avoid sending unrelated
+    // files (e.g. a folder containing both .md and random .txt files).
+    const accepted = String(fileField.accept || '')
+      .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+    const filtered = accepted.length
+      ? files.filter((f) => accepted.some((ext) => f.name.toLowerCase().endsWith(ext)))
+      : files;
+    if (filtered.length === 0) {
+      inlineStatus.textContent = `✗ No ${accepted.join(' / ')} files in selection`;
+      inlineStatus.className = 'connector-inline-status connector-inline-err';
+      return;
+    }
+
+    try {
+      validateSelectedFiles(
+        fileField,
+        fileField.type === 'multifile' ? filtered : filtered[0],
+      );
+    } catch (err) {
+      inlineStatus.textContent = `✗ ${err.message || err}`;
+      inlineStatus.className = 'connector-inline-status connector-inline-err';
+      showToast(err.message || String(err), 'error');
+      return;
+    }
+
+    const fileMap = {
+      [fileField.name]: fileField.type === 'multifile' ? filtered : filtered[0],
+    };
+    inlineStatus.textContent = `⏳ Routing ${filtered.length} file(s) to ${connector.name}…`;
+    inlineStatus.className = 'connector-inline-status connector-inline-running';
+    folderBtn.disabled = true;
+    filesBtn.disabled = true;
+    const res = await executeConnectorIngest(connector, { fileMap }, isLocal, isPublic);
+    folderBtn.disabled = false;
+    filesBtn.disabled = false;
+    applyInlineResult(connector, inlineStatus, res);
+  }
+
+  fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+  folderInput.addEventListener('change', () => handleFiles(folderInput.files));
+
+  // Drag-and-drop support on the entire card
+  function setDragOver(on) { dropZone.classList.toggle('drag-over', on); }
+  card.addEventListener('dragover', (e) => { e.preventDefault(); setDragOver(true); });
+  card.addEventListener('dragleave', (e) => { if (e.target === card) setDragOver(false); });
+  card.addEventListener('drop', (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const dropped = e.dataTransfer?.files;
+    if (dropped?.length) handleFiles(dropped);
+  });
+
+  section.appendChild(card);
+  return section;
 }
 
 // ── Catalog section ───────────────────────────────────────────────────────────
@@ -685,8 +882,28 @@ function refreshCatalogGrid() {
     );
   });
   for (const c of filtered) {
-    _catalogGrid.appendChild(buildCatalogCard(c));
+    try {
+      _catalogGrid.appendChild(buildCatalogCard(c));
+    } catch (err) {
+      console.error(`[connectors] failed to build catalog card for ${c.id}`, err);
+      _catalogGrid.appendChild(buildCardFallback(c, err));
+    }
   }
+}
+
+/**
+ * Skeleton card shown when the real card builder threw. Keeps the user aware
+ * that the connector exists, surfaces the underlying error, and lets them
+ * recover by opening the wizard manually.
+ */
+function buildCardFallback(connector, err) {
+  const card = el('div', { class: 'card connector-card connector-card-error' });
+  card.appendChild(el('h3', {}, connector.name || connector.id));
+  card.appendChild(
+    el('p', { class: 'meta connector-local-warn' }, '⚠ Card failed to render'),
+  );
+  card.appendChild(el('p', { class: 'meta' }, String(err?.message || err)));
+  return card;
 }
 
 function buildCatalogCard(connector) {
@@ -929,70 +1146,121 @@ function buildCard(connector, source, isLocal, isPublic) {
       card.appendChild(el('p', { class: 'meta connector-local-warn' }, '⚠ Requires local dev server or online API'));
     }
     actions.appendChild(btnRun);
-  } else if (isQuickRunnable(connector, saved)) {
-    // ── 1-click: ▶ Run directly on the card ─────────────────────────────────
-    const btnRun = el('button', { class: 'primary connector-btn-run', type: 'button' }, '▶ Run');
+    return card;
+  }
+
+  const fileField = primaryFileField(connector);
+  const quickRunnable = isQuickRunnable(connector, saved);
+  // In browser-only mode (no local server), connectors that ship a clientIngest
+  // typically *need* a file/folder pick to produce any nodes — running them
+  // with an empty fileMap throws "select a folder" and the user blames the
+  // platform. Treat the picker as the primary action in that case.
+  const pickerIsPrimary = fileField && (!isLocal || !quickRunnable);
+
+  if (fileField) {
+    const pickBtn = buildFilePickerButton(
+      connector,
+      fileField,
+      inlineStatus,
+      isLocal,
+      isPublic,
+      card,
+      { primary: pickerIsPrimary },
+    );
+    actions.appendChild(pickBtn);
+  }
+
+  if (quickRunnable) {
+    // ── 1-click: ▶ Run with saved config / auto-detected paths ──────────────
+    const runLabel = pickerIsPrimary ? '▶ Run with saved config' : '▶ Run';
+    const btnRun = el(
+      'button',
+      {
+        class: `${pickerIsPrimary ? '' : 'primary '}connector-btn-run`,
+        type: 'button',
+      },
+      runLabel,
+    );
     btnRun.addEventListener('click', () => inlineRun(connector, btnRun, inlineStatus, isLocal, isPublic));
     actions.appendChild(btnRun);
-
-    const btnCfg = el('button', { class: 'connector-btn-cfg', type: 'button', title: 'Open configuration wizard' }, '⚙ Configure');
-    btnCfg.addEventListener('click', () => openWizard({ connector }));
-    actions.appendChild(btnCfg);
-
-    // Auto-schedule picker (only for non-interactive connectors)
-    card.appendChild(buildAutoToggle(connector, isLocal, isPublic));
-  } else if (isFileOnly(connector)) {
-    // ── 2-click: pick file → run immediately ────────────────────────────────
-    const fileField = (connector.wizard?.fields || []).find(
-      (f) => f.required && (f.type === 'file' || f.type === 'multifile'),
-    );
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.style.display = 'none';
-    fileInput.accept = fileField?.accept || '';
-    if (fileField?.type === 'multifile') {
-      fileInput.multiple = true;
-      if (fileField.webkitdirectory) {
-        fileInput.setAttribute('webkitdirectory', '');
-        fileInput.setAttribute('directory', '');
-      }
-    }
-    card.appendChild(fileInput);
-
-    const btnRun = el('button', { class: 'primary connector-btn-run', type: 'button' }, '📁 Pick & Run');
-    btnRun.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', () => {
-      if (!fileInput.files?.length) return;
-      try {
-        validateSelectedFiles(
-          fileField,
-          fileField.type === 'multifile' ? Array.from(fileInput.files) : fileInput.files[0],
-        );
-      } catch (err) {
-        fileInput.value = '';
-        showToast(err.message || String(err), 'error');
-        return;
-      }
-      const fileMap = {
-        [fileField.name]: fileField.type === 'multifile'
-          ? Array.from(fileInput.files)
-          : fileInput.files[0],
-      };
-      inlineRunWithFiles(connector, btnRun, inlineStatus, fileMap, isLocal, isPublic);
-    });
-    actions.appendChild(btnRun);
-
-    const btnCfg = el('button', { class: 'connector-btn-cfg', type: 'button', title: 'Open configuration wizard' }, '⚙ Configure');
-    btnCfg.addEventListener('click', () => openWizard({ connector }));
-    actions.appendChild(btnCfg);
-  } else {
-    // ── Needs first-time configuration ───────────────────────────────────────
+  } else if (!fileField) {
+    // No file picker, no saved config — only path forward is the wizard.
     const btnRun = el('button', { class: 'primary', type: 'button' }, 'Configure & Run');
     btnRun.addEventListener('click', () => openWizard({ connector }));
     actions.appendChild(btnRun);
   }
 
+  const btnCfg = el(
+    'button',
+    { class: 'connector-btn-cfg', type: 'button', title: 'Open configuration wizard' },
+    '⚙ Configure',
+  );
+  btnCfg.addEventListener('click', () => openWizard({ connector }));
+  actions.appendChild(btnCfg);
+
+  // Auto-schedule picker is only meaningful when ▶ Run can produce results
+  // without a fresh file pick (i.e. saved config + non-file-primary).
+  if (quickRunnable && !pickerIsPrimary) {
+    card.appendChild(buildAutoToggle(connector, isLocal, isPublic));
+  }
+
   return card;
+}
+
+/**
+ * Build a "📁 Pick" button that opens a file/folder picker for the given
+ * field and runs the connector with the selected files. Mounts the hidden
+ * <input type="file"> on the card itself.
+ */
+function buildFilePickerButton(connector, fileField, inlineStatus, isLocal, isPublic, hostCard, { primary } = {}) {
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.style.display = 'none';
+  fileInput.accept = fileField.accept || '';
+  if (fileField.type === 'multifile') {
+    fileInput.multiple = true;
+    if (fileField.webkitdirectory) {
+      fileInput.setAttribute('webkitdirectory', '');
+      fileInput.setAttribute('directory', '');
+    }
+  }
+  hostCard.appendChild(fileInput);
+
+  const isFolder = fileField.type === 'multifile' && fileField.webkitdirectory;
+  const label = isFolder ? '📁 Pick folder' : '📁 Pick file';
+  // Note: deliberately not tagged with `connector-btn-run`. The auto-ingest
+  // scheduler queries that class to drive headless re-runs, and the picker
+  // button can't be driven without a user gesture (browser security).
+  const btn = el(
+    'button',
+    {
+      class: `${primary ? 'primary ' : ''}connector-btn-pick`,
+      type: 'button',
+      title: fileField.dropLabel || label,
+    },
+    label,
+  );
+  btn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    if (!fileInput.files?.length) return;
+    try {
+      validateSelectedFiles(
+        fileField,
+        fileField.type === 'multifile' ? Array.from(fileInput.files) : fileInput.files[0],
+      );
+    } catch (err) {
+      fileInput.value = '';
+      showToast(err.message || String(err), 'error');
+      return;
+    }
+    const fileMap = {
+      [fileField.name]: fileField.type === 'multifile'
+        ? Array.from(fileInput.files)
+        : fileInput.files[0],
+    };
+    inlineRunWithFiles(connector, btn, inlineStatus, fileMap, isLocal, isPublic);
+  });
+  return btn;
 }
 
 // ── Inline run (no modal, result shown directly on card) ──────────────────────
@@ -1007,13 +1275,22 @@ export async function executeConnectorIngest(connector, { env = {}, fileMap = {}
   const hasClientIngest = typeof connector.clientIngest === 'function';
   try {
     if (isLocal) {
+      // Use any picked file/folder — required or not. Previously this branch
+      // only honored *required* file fields, so picking a folder for the
+      // optional Markdown vault field was silently dropped and the script
+      // re-scanned the auto-detected ~/notes path instead.
       const fileField = (connector.wizard?.fields || []).find(
-        (f) => f.required && (f.type === 'file' || f.type === 'multifile'),
+        (f) => (f.type === 'file' || f.type === 'multifile') && fileMap[f.name],
       );
-      if (fileField && fileMap[fileField.name]) {
-        const file = Array.isArray(fileMap[fileField.name])
-          ? fileMap[fileField.name][0]
-          : fileMap[fileField.name];
+      if (fileField) {
+        const picked = fileMap[fileField.name];
+        if (fileField.type === 'multifile' && Array.isArray(picked) && picked.length > 0) {
+          // Folder/multi-file selection — server materialises a tmp directory
+          // and sets the envVar to its path so e.g. NOTES_DIR points at the
+          // dropped Obsidian vault.
+          return await uploadFilesIngest(connector.ingestSlug, picked, fileField.envVar, env);
+        }
+        const file = Array.isArray(picked) ? picked[0] : picked;
         return await uploadFileIngest(connector.ingestSlug, file, fileField.envVar, env);
       }
       return await runIngestWithParams(connector.ingestSlug, env);
