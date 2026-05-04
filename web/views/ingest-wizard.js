@@ -155,6 +155,11 @@ function mountWizard(connector, onSuccess) {
 
     body.appendChild(form);
 
+    // Persist field values continuously so a failed run, an Esc, or a tab
+    // reload doesn't wipe sensitive inputs (GitHub PAT, Zotero API key, …).
+    // Saving on `input` covers typing, paste, and programmatic value changes.
+    form.addEventListener('input', () => persistCurrentFormValues(connector));
+
     // Availability warning — shown only when the connector truly cannot run
     if (connector.localOnly) {
       const hint = el('p', { class: 'wiz-hint wiz-hint-warn' },
@@ -296,6 +301,11 @@ function mountWizard(connector, onSuccess) {
       }
     }
 
+    // Persist field values up front so a failed run leaves the inputs intact
+    // for the next attempt — without this, an expired GitHub PAT (or any
+    // failed ingest) would force the user to retype every value.
+    saveConfig(connector.id, env);
+
     const { log } = renderRunning(connector.ingestSlug);
     log.textContent = `Running ${connector.ingestSlug}…\n`;
 
@@ -357,6 +367,29 @@ function mountWizard(connector, onSuccess) {
 
   // ── Initial render ───────────────────────────────────────────────────────
   renderConfigure();
+}
+
+// ── Live persistence ──────────────────────────────────────────────────────────
+
+/**
+ * Snapshot the current wizard form values and persist them to localStorage.
+ * Called on every `input` event so that closing the wizard, hitting Esc, or
+ * a failed run never costs the user their typed-in PAT / API-key / etc.
+ * Only persists non-empty values; file/multifile/oauth inputs are skipped
+ * (file selections live in `fileMap`, OAuth state lives on the server).
+ */
+function persistCurrentFormValues(connector) {
+  const fields = connector.wizard?.fields || [];
+  const env = {};
+  for (const field of fields) {
+    if (field.type === 'oauth') continue;
+    if (field.type === 'file' || field.type === 'multifile') continue;
+    const inputEl = document.getElementById(`wiz-field-${field.name}`);
+    if (!inputEl || !field.envVar) continue;
+    const val = (inputEl.value || '').trim();
+    if (val) env[field.envVar] = val;
+  }
+  saveConfig(connector.id, env);
 }
 
 // ── Field builders ────────────────────────────────────────────────────────────

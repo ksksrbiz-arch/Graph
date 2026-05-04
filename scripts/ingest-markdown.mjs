@@ -43,8 +43,13 @@ const DEFAULT_CANDIDATE_DIRS = [
 ];
 
 async function resolveNotesDirs() {
-  if (process.env.NOTES_DIR) {
-    return process.env.NOTES_DIR.split(':').map((p) => p.trim()).filter(Boolean);
+  // NOTES_FILES is the env var the browser-side wizard uses when the user
+  // picks a vault/folder via webkitdirectory; the dev server materialises
+  // those files into a tmp directory and sets NOTES_FILES to its path. Treat
+  // it as an alias for NOTES_DIR so a one-click folder pick "just works".
+  const explicit = process.env.NOTES_DIR || process.env.NOTES_FILES;
+  if (explicit) {
+    return explicit.split(':').map((p) => p.trim()).filter(Boolean);
   }
   for (const dir of DEFAULT_CANDIDATE_DIRS) {
     try {

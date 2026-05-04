@@ -102,7 +102,19 @@ export function createIngestPanel({ container, onIngested } = {}) {
       return;
     }
     for (const connector of KNOWN_CONNECTORS) {
-      connectorsEl.appendChild(buildConnectorCard(connector, isLocal, isPublic));
+      try {
+        connectorsEl.appendChild(buildConnectorCard(connector, isLocal, isPublic));
+      } catch (err) {
+        console.error(`[ingest-panel] failed to build card for ${connector.id}`, err);
+        const fallback = document.createElement('div');
+        fallback.className = 'ingest-connector-card ingest-connector-card-error';
+        fallback.innerHTML = `<div class="ingest-connector-head">
+          <span class="ingest-connector-icon">⚠</span>
+          <span class="ingest-connector-name">${escapeHtml(connector.name)}</span>
+        </div>
+        <div class="ingest-status err">${escapeHtml(String(err?.message || err))}</div>`;
+        connectorsEl.appendChild(fallback);
+      }
     }
   }
 
@@ -112,10 +124,10 @@ export function createIngestPanel({ container, onIngested } = {}) {
     const saved = loadSavedConfig(connector.id);
     const fields = connector.wizard?.fields || [];
     const required = fields.filter((f) => f.required && f.type !== 'oauth');
-    const fileOnly = required.length > 0 && required.every((f) => f.type === 'file' || f.type === 'multifile');
     const quickRunnable = required
       .filter((f) => f.type !== 'file' && f.type !== 'multifile')
       .every((f) => (saved[f.envVar] || saved[f.name] || '').trim());
+    const fileField = fields.find((f) => f.type === 'file' || f.type === 'multifile');
     const hasClientIngest = typeof connector.clientIngest === 'function';
     const canRun = isLocal || (!connector.localOnly && isPublic && hasClientIngest);
 
@@ -133,10 +145,71 @@ export function createIngestPanel({ container, onIngested } = {}) {
     actions.className = 'ingest-connector-actions';
     card.appendChild(actions);
 
-    const runBtn = document.createElement('button');
-    runBtn.type = 'button';
-    runBtn.className = 'ingest-btn';
-    actions.appendChild(runBtn);
+    if (!canRun) {
+      const runBtn = document.createElement('button');
+      runBtn.type = 'button';
+      runBtn.className = 'ingest-btn';
+      runBtn.textContent = 'Unavailable';
+      runBtn.disabled = true;
+      runBtn.title = connector.localOnly
+        ? 'Requires the local dev server'
+        : 'Requires the local dev server or an online API';
+      setStatus(status, runBtn.title, 'warn');
+      actions.appendChild(runBtn);
+      return card;
+    }
+
+    // Browser-only mode (no local server) needs the picker as the primary
+    // action because client-side ingesters can't auto-discover a folder.
+    const pickerIsPrimary = fileField && (!isLocal || !quickRunnable);
+
+    if (fileField) {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.style.display = 'none';
+      if (fileField.accept) fileInput.accept = fileField.accept;
+      if (fileField.type === 'multifile') {
+        fileInput.multiple = true;
+        if (fileField.webkitdirectory) {
+          fileInput.setAttribute('webkitdirectory', '');
+          fileInput.setAttribute('directory', '');
+        }
+      }
+      card.appendChild(fileInput);
+
+      const isFolder = fileField.type === 'multifile' && fileField.webkitdirectory;
+      const pickBtn = document.createElement('button');
+      pickBtn.type = 'button';
+      pickBtn.className = 'ingest-btn';
+      pickBtn.textContent = isFolder ? '📁 Folder' : '📁 File';
+      pickBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        if (!fileInput.files?.length) return;
+        const fileMap = {
+          [fileField.name]: fileField.type === 'multifile'
+            ? Array.from(fileInput.files)
+            : fileInput.files[0],
+        };
+        runConnectorFromPanel(connector, pickBtn, status, isLocal, isPublic, { fileMap });
+      });
+      actions.appendChild(pickBtn);
+    }
+
+    if (quickRunnable) {
+      const runBtn = document.createElement('button');
+      runBtn.type = 'button';
+      runBtn.className = pickerIsPrimary ? 'ingest-btn' : 'ingest-btn primary';
+      runBtn.textContent = pickerIsPrimary ? 'Saved cfg' : '▶ Run';
+      runBtn.addEventListener('click', () => runConnectorFromPanel(connector, runBtn, status, isLocal, isPublic));
+      actions.appendChild(runBtn);
+    } else if (!fileField) {
+      const cfgPrimary = document.createElement('button');
+      cfgPrimary.type = 'button';
+      cfgPrimary.className = 'ingest-btn primary';
+      cfgPrimary.textContent = 'Configure';
+      cfgPrimary.addEventListener('click', () => openWizard({ connector }));
+      actions.appendChild(cfgPrimary);
+    }
 
     const cfgBtn = document.createElement('button');
     cfgBtn.type = 'button';
@@ -146,48 +219,6 @@ export function createIngestPanel({ container, onIngested } = {}) {
     cfgBtn.addEventListener('click', () => openWizard({ connector }));
     actions.appendChild(cfgBtn);
 
-    if (!canRun) {
-      runBtn.textContent = 'Unavailable';
-      runBtn.disabled = true;
-      runBtn.title = connector.localOnly
-        ? 'Requires the local dev server'
-        : 'Requires the local dev server or an online API';
-      setStatus(status, runBtn.title, 'warn');
-      return card;
-    }
-
-    if (quickRunnable && !fileOnly) {
-      runBtn.textContent = '▶ Run';
-      runBtn.addEventListener('click', () => runConnectorFromPanel(connector, runBtn, status, isLocal, isPublic));
-    } else if (fileOnly) {
-      const fileField = required.find((f) => f.type === 'file' || f.type === 'multifile');
-      const fileInput = document.createElement('input');
-      fileInput.type = 'file';
-      fileInput.style.display = 'none';
-      if (fileField?.accept) fileInput.accept = fileField.accept;
-      if (fileField?.type === 'multifile') {
-        fileInput.multiple = true;
-        if (fileField.webkitdirectory) {
-          fileInput.setAttribute('webkitdirectory', '');
-          fileInput.setAttribute('directory', '');
-        }
-      }
-      card.appendChild(fileInput);
-      runBtn.textContent = '📁 Pick';
-      runBtn.addEventListener('click', () => fileInput.click());
-      fileInput.addEventListener('change', () => {
-        if (!fileInput.files?.length) return;
-        const fileMap = {
-          [fileField.name]: fileField.type === 'multifile'
-            ? Array.from(fileInput.files)
-            : fileInput.files[0],
-        };
-        runConnectorFromPanel(connector, runBtn, status, isLocal, isPublic, { fileMap });
-      });
-    } else {
-      runBtn.textContent = 'Configure';
-      runBtn.addEventListener('click', () => openWizard({ connector }));
-    }
     return card;
   }
 
