@@ -107,6 +107,7 @@ export function el(tag, props = {}, ...children) {
     else if (k === 'style') { if (typeof v === 'string') node.style.cssText = v; else Object.assign(node.style, v); }
     else if (k.startsWith('on')) node.addEventListener(k.slice(2).toLowerCase(), v);
     else if (k === 'html') node.innerHTML = v;
+    else if (v === false) node.removeAttribute(k);
     else if (v != null) node.setAttribute(k, v);
   }
   for (const c of children) {
