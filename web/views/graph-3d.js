@@ -51,9 +51,6 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     .onBackgroundClick(() => callbacks.onBackgroundClick?.())
     .onBackgroundRightClick((evt) => callbacks.onBackgroundRightClick?.(evt));
 
-  // Lock to the right number of dimensions on the d3 simulation
-  if (typeof fg.numDimensions === 'function') fg.numDimensions(3);
-
   // Bloom postprocessing — adds the "neural glow"
   let bloomPass = null;
   try {
@@ -189,6 +186,10 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     if (fourD) applyTemporal(graph);
     else for (const n of graph.nodes) { delete n.fz; }
     fg.graphData(graph);
+    // Ensure the force simulation is running after data load. In pure 3D mode
+    // (no fz pinning) the simulation must be active for nodes to spread out;
+    // without this the engine can remain paused and all nodes overlap at origin.
+    fg.d3ReheatSimulation?.();
     applyConfig();
 
     const newNodeIds = [];
