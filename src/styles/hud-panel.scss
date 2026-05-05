@@ -7,8 +7,8 @@
    ========================================================================== */
 
 .hud-panel {
-  background: var(--bg-glass);
-  border: 1px solid var(--border-dim);
+  background: var(--bg-glass, rgba(4, 20, 35, 0.72));
+  border: 1px solid var(--border-dim, rgba(0, 212, 255, 0.18));
   border-radius: 6px;
   -webkit-backdrop-filter: blur(16px) saturate(180%);
   backdrop-filter: blur(16px) saturate(180%);
@@ -392,11 +392,15 @@
   position: absolute;
   left: 8px;
   bottom: 8px;
-  width: 220px;
+  width: 240px;
   padding: 0;
   z-index: 5;
-  font-family: var(--text-ui);
-  color: var(--text-primary);
+  font-family: var(--text-ui, 'Inter', sans-serif);
+  color: var(--text-primary, #e8f4f8);
+  background: var(--bg-glass, rgba(4, 20, 35, 0.86));
+  border: 1px solid var(--border-dim, rgba(0, 212, 255, 0.28));
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .brain-controls .bc-head {
@@ -470,9 +474,11 @@
 .brain-controls .bc-slider label {
   display: flex;
   justify-content: space-between;
-  font-family: var(--text-mono);
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--text-mono, 'JetBrains Mono', monospace);
   font-size: 10px;
-  color: var(--text-dim);
+  color: var(--text-dim, #7ab8cc);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
