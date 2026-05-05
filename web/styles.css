@@ -1247,6 +1247,120 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
   color: var(--text-dim, rgba(255, 255, 255, 0.6)) !important;
 }
 
+/* ── Batch folder upload tab ────────────────────────────────────── */
+.batch-dropzone {
+  border: 1px dashed rgba(124, 156, 255, 0.5);
+  border-radius: 6px;
+  padding: 1rem 0.6rem;
+  text-align: center;
+  background: rgba(124, 156, 255, 0.04);
+  transition: background 120ms, border-color 120ms;
+}
+.batch-dropzone-active {
+  background: rgba(124, 156, 255, 0.16);
+  border-color: var(--accent);
+}
+.batch-dropzone-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+.batch-pick-btn { align-self: center; }
+
+.batch-preflight { display: flex; flex-direction: column; gap: 0.45rem; }
+.batch-summary {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.78rem;
+}
+.batch-summary-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  align-items: baseline;
+  margin-bottom: 0.3rem;
+}
+.batch-summary-label { font-weight: 600; color: var(--text); }
+.batch-summary-totals { color: var(--text-dim); font-size: 0.72rem; }
+.batch-ext-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  font-size: 0.72rem;
+}
+.batch-ext-list li {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: baseline;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+  padding: 0.1rem 0.35rem;
+}
+.batch-ext { color: var(--accent); font-family: var(--font-mono, ui-monospace, monospace); }
+.batch-count { color: var(--text); font-weight: 600; }
+.batch-bytes { color: var(--text-faint); font-size: 0.68rem; }
+.batch-ext-empty { color: var(--text-faint); font-style: italic; }
+
+.batch-skipped {
+  background: rgba(240, 168, 104, 0.06);
+  border: 1px solid rgba(240, 168, 104, 0.18);
+  border-radius: 4px;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.74rem;
+}
+.batch-skipped summary { cursor: pointer; color: var(--warn); }
+.batch-skipped-list { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.batch-skipped-list li { display: flex; justify-content: space-between; gap: 0.4rem; }
+.batch-skip-reason { color: var(--text-dim); }
+
+.batch-actions { display: flex; gap: 0.4rem; }
+.ingest-btn.primary {
+  background: linear-gradient(135deg, rgba(124, 156, 255, 0.32), rgba(0, 212, 255, 0.32));
+  font-weight: 600;
+}
+
+.batch-progress { display: flex; flex-direction: column; gap: 0.4rem; }
+.batch-progress-bar {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  height: 6px;
+  overflow: hidden;
+}
+.batch-progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), #00d4ff);
+  transition: width 120ms linear;
+}
+.batch-progress-text {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.batch-abort-btn {
+  align-self: flex-start;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* Status text reuse — augment the existing .ingest-status with batch tones. */
+.ingest-status.info { color: var(--text-dim); }
+.ingest-status.warn { color: var(--warn); }
+.ingest-status.ok { color: var(--success); }
+.ingest-status.err { color: var(--danger); }
+
 /* Brain animation overlay — sits above force-graph's canvas. Pointer events
  * stay off so drag/zoom passes straight through. */
 .brain-overlay-canvas {
