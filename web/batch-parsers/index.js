@@ -287,8 +287,11 @@ export async function walkDirectoryEntry(entry, prefix = '') {
     const out = [];
     // readEntries returns chunks (typically up to 100 entries per call); keep
     // calling until empty. A safety counter guards against a misbehaving
-    // implementation that never returns an empty batch.
-    const MAX_BATCHES = 1_000;
+    // implementation that never returns an empty batch — at ~100 entries per
+    // batch, 100 batches still allows ~10 000 files which comfortably
+    // exceeds the planFiles `maxFiles` limit (1 000), so this only trips on
+    // truly pathological readers.
+    const MAX_BATCHES = 100;
     for (let i = 0; i < MAX_BATCHES; i++) {
       // eslint-disable-next-line no-await-in-loop
       const batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
