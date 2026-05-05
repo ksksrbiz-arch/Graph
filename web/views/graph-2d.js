@@ -169,10 +169,11 @@ export function create2DRenderer({ container, callbacks }) {
       : state.config.alphaDecay;
     if (typeof fg.d3AlphaDecay === 'function') fg.d3AlphaDecay(alphaDecay);
     // Respect an explicit cooldownTicks override; otherwise cap large graphs
-    // at 300 ticks so the simulation never runs forever.
+    // at 300 ticks and small graphs at 1000 ticks so the simulation never
+    // runs forever regardless of graph size.
     const cooldown = Number.isFinite(state.config.cooldownTicks)
       ? state.config.cooldownTicks
-      : largeGraph ? 300 : Infinity;
+      : largeGraph ? 300 : 1000;
     if (typeof fg.cooldownTicks === 'function') fg.cooldownTicks(cooldown);
     fg.d3ReheatSimulation();
   }
