@@ -331,6 +331,7 @@ export async function ingestPublicBatch({ nodes, edges, sourceId, onChunk }) {
   // accumulated and appended to the last chunk in additional follow-up
   // requests sliced at EDGE_CHUNK.
   const accumulatedTrailingEdges = [];
+  const sentEdgeIds = new Set();
   let totals = { nodes: 0, edges: 0, totalNodes: 0, totalEdges: 0 };
   let lastBody = {};
   let lastStatus = 0;
@@ -341,9 +342,14 @@ export async function ingestPublicBatch({ nodes, edges, sourceId, onChunk }) {
     const chunkIds = new Set(chunkNodes.map((n) => n.id));
     const chunkEdges = [];
     for (const e of allEdges) {
+      if (sentEdgeIds.has(e.id)) continue;
       if (chunkIds.has(e.source) && chunkIds.has(e.target)) {
-        if (chunkEdges.length < EDGE_CHUNK) chunkEdges.push(e);
-        else accumulatedTrailingEdges.push(e);
+        if (chunkEdges.length < EDGE_CHUNK) {
+          chunkEdges.push(e);
+          sentEdgeIds.add(e.id);
+        } else {
+          accumulatedTrailingEdges.push(e);
+        }
       }
     }
     const res = await ingestPublicGraph({
@@ -363,14 +369,8 @@ export async function ingestPublicBatch({ nodes, edges, sourceId, onChunk }) {
     lastStatus = res.status;
   }
 
-  // Cross-chunk edges + any not yet sent.
-  const sentEdgeIds = new Set();
-  for (const chunk of nodeChunks) {
-    const ids = new Set(chunk.map((n) => n.id));
-    for (const e of allEdges) {
-      if (ids.has(e.source) && ids.has(e.target)) sentEdgeIds.add(e.id);
-    }
-  }
+  // Cross-chunk edges (endpoints in different chunks) plus any overflow we
+  // bumped to `accumulatedTrailingEdges` because a single chunk hit EDGE_CHUNK.
   const remaining = allEdges
     .filter((e) => !sentEdgeIds.has(e.id))
     .concat(accumulatedTrailingEdges);

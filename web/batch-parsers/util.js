@@ -6,7 +6,7 @@
 // the same folder produces the same IDs, letting `mergeAndPersist` (in
 // src/worker.js) deduplicate via id-keyed indexes instead of multiplying nodes.
 
-const ID_HEX_LEN = 32;
+// SHA-256 produces 32 bytes = 64 hex chars — full digest used to derive the UUID-shaped id.
 
 /**
  * SHA-256-derived UUID-shaped string. Mirrors `stableUuid` in
@@ -17,9 +17,7 @@ export async function stableId(...parts) {
   const data = new TextEncoder().encode(parts.map(String).join('\u0000'));
   const buf = await crypto.subtle.digest('SHA-256', data);
   const bytes = new Uint8Array(buf);
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0'))
-    .join('')
-    .slice(0, ID_HEX_LEN * 2);
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   const variantNibble = '89ab'[parseInt(hex.charAt(16), 16) & 3] ?? '8';
   return [
     hex.slice(0, 8),

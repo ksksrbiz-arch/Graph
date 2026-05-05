@@ -285,9 +285,11 @@ export async function walkDirectoryEntry(entry, prefix = '') {
   if (entry.isDirectory) {
     const reader = entry.createReader();
     const out = [];
-    // readEntries can return in chunks of 100 — keep calling until empty.
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    // readEntries returns chunks (typically up to 100 entries per call); keep
+    // calling until empty. A safety counter guards against a misbehaving
+    // implementation that never returns an empty batch.
+    const MAX_BATCHES = 1_000;
+    for (let i = 0; i < MAX_BATCHES; i++) {
       // eslint-disable-next-line no-await-in-loop
       const batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
       if (!batch.length) break;

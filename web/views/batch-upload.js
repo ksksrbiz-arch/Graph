@@ -152,13 +152,13 @@ export function createBatchUploadTab({ onIngested, onLog } = {}) {
     const sourceLabel = inferFolderName(entries) || 'Batch upload';
     plan = { ...planned, sourceLabel };
 
-    summaryEl.innerHTML = renderSummary(planned, sourceLabel);
+    summaryEl.replaceChildren(renderSummary(planned, sourceLabel));
     if (planned.skipped.length) {
       skippedEl.classList.remove('hidden');
-      skippedEl.innerHTML = renderSkipped(planned.skipped);
+      skippedEl.replaceChildren(renderSkipped(planned.skipped));
     } else {
       skippedEl.classList.add('hidden');
-      skippedEl.innerHTML = '';
+      skippedEl.replaceChildren();
     }
     preflightEl.classList.remove('hidden');
     progressEl.classList.add('hidden');
@@ -284,21 +284,48 @@ export function createBatchUploadTab({ onIngested, onLog } = {}) {
 // ── helpers ─────────────────────────────────────────────────────────────
 
 function renderSummary(plan, sourceLabel) {
+  const wrap = document.createDocumentFragment();
+
+  const head = document.createElement('div');
+  head.className = 'batch-summary-head';
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'batch-summary-label';
+  labelSpan.textContent = sourceLabel;
+  const totalsSpan = document.createElement('span');
+  totalsSpan.className = 'batch-summary-totals';
+  totalsSpan.textContent =
+    `${plan.kept.length} file(s) · ${formatBytes(plan.totalBytes)} · ${plan.skipped.length} skipped`;
+  head.append(labelSpan, totalsSpan);
+  wrap.appendChild(head);
+
+  const list = document.createElement('ul');
+  list.className = 'batch-ext-list';
   const exts = Object.entries(plan.byExt)
     .sort((a, b) => b[1].count - a[1].count)
     .slice(0, 12);
-  const extRows = exts.map(([ext, info]) =>
-    `<li><span class="batch-ext">${escapeHtml(ext)}</span> <span class="batch-count">${info.count}</span> <span class="batch-bytes">${formatBytes(info.bytes)}</span></li>`,
-  ).join('');
-  return `
-    <div class="batch-summary-head">
-      <span class="batch-summary-label">${escapeHtml(sourceLabel)}</span>
-      <span class="batch-summary-totals">
-        ${plan.kept.length} file(s) · ${formatBytes(plan.totalBytes)} · ${plan.skipped.length} skipped
-      </span>
-    </div>
-    <ul class="batch-ext-list">${extRows || '<li class="batch-ext-empty">(no parseable files)</li>'}</ul>
-  `;
+  if (exts.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'batch-ext-empty';
+    li.textContent = '(no parseable files)';
+    list.appendChild(li);
+  } else {
+    for (const [ext, info] of exts) {
+      const li = document.createElement('li');
+      const extEl = document.createElement('span');
+      extEl.className = 'batch-ext';
+      extEl.textContent = ext;
+      const countEl = document.createElement('span');
+      countEl.className = 'batch-count';
+      countEl.textContent = String(info.count);
+      const bytesEl = document.createElement('span');
+      bytesEl.className = 'batch-bytes';
+      bytesEl.textContent = formatBytes(info.bytes);
+      li.append(extEl, countEl, bytesEl);
+      list.appendChild(li);
+    }
+  }
+  wrap.appendChild(list);
+  return wrap;
 }
 
 function renderSkipped(skipped) {
@@ -307,11 +334,28 @@ function renderSkipped(skipped) {
     const key = s.reason;
     grouped.set(key, (grouped.get(key) || 0) + 1);
   }
-  const rows = Array.from(grouped.entries())
-    .sort((a, b) => b[1] - a[1])
-    .map(([reason, count]) => `<li><span class="batch-skip-reason">${escapeHtml(reason)}</span> <span class="batch-count">${count}</span></li>`)
-    .join('');
-  return `<details><summary>Skipped ${skipped.length} file(s)</summary><ul class="batch-skipped-list">${rows}</ul></details>`;
+
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = `Skipped ${skipped.length} file(s)`;
+  details.appendChild(summary);
+
+  const list = document.createElement('ul');
+  list.className = 'batch-skipped-list';
+  const rows = Array.from(grouped.entries()).sort((a, b) => b[1] - a[1]);
+  for (const [reason, count] of rows) {
+    const li = document.createElement('li');
+    const r = document.createElement('span');
+    r.className = 'batch-skip-reason';
+    r.textContent = reason;
+    const c = document.createElement('span');
+    c.className = 'batch-count';
+    c.textContent = String(count);
+    li.append(r, c);
+    list.appendChild(li);
+  }
+  details.appendChild(list);
+  return details;
 }
 
 function inferFolderName(entries) {
@@ -332,7 +376,7 @@ function slugify(s) {
 
 function shortStamp() {
   const d = new Date();
-  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}`;
+  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
 }
 
 function pad(n) {
@@ -352,12 +396,6 @@ function truncateMid(s, n) {
   if (str.length <= n) return str;
   const half = Math.floor((n - 1) / 2);
   return `${str.slice(0, half)}…${str.slice(-half)}`;
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[c]);
 }
 
 // Re-export so other modules can mention the same skip rules in docs / UI.

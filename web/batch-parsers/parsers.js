@@ -92,21 +92,30 @@ export async function parseTextFile(text, ctx) {
 
 // ── HTML ───────────────────────────────────────────────────────────────
 
+// HTML entities decoded as a single-pass map so a doubly-escaped string like
+// `&amp;lt;` renders as `&lt;` (literal entity), not `<` (the unsafe
+// double-unescape pattern flagged by `js/double-escaping`).
+const HTML_ENTITY_MAP = {
+  '&nbsp;': ' ',
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+};
+const HTML_ENTITY_RE = /&(?:nbsp|amp|lt|gt|quot|#39);/gi;
+
+// Tag-stripping helpers tolerate optional trailing whitespace before `>`
+// (e.g. `</script >`) — matches what real browsers accept and avoids the
+// `js/bad-tag-filter` class of bypasses.
+const STRIPPED_BLOCK_TAGS_RE = /<(script|style|nav|footer|header|svg)\b[\s\S]*?<\/\1\s*>/gi;
+const ANY_TAG_RE = /<\/?[A-Za-z][\s\S]*?>/g;
+
 export async function parseHtmlFile(text, ctx) {
   const cleaned = text
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
-    .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
-    .replace(/<header[\s\S]*?<\/header>/gi, ' ')
-    .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
+    .replace(STRIPPED_BLOCK_TAGS_RE, ' ')
+    .replace(ANY_TAG_RE, ' ')
+    .replace(HTML_ENTITY_RE, (m) => HTML_ENTITY_MAP[m.toLowerCase()] ?? m)
     .replace(/\s+/g, ' ')
     .trim();
   return parseTextFile(cleaned, ctx);
@@ -237,8 +246,10 @@ export async function parseSourceFile(text, ctx, ext) {
 
   if (lang && IMPORT_PATTERNS[lang]) {
     for (const re of IMPORT_PATTERNS[lang]) {
-      let m;
-      while ((m = re.exec(text)) !== null) {
+      // Use matchAll (stateless) instead of repeated re.exec() — the latter
+      // keeps `lastIndex` on the shared global regex and would leak state
+      // across files. Bonus: matchAll is more idiomatic in modern browsers.
+      for (const m of text.matchAll(re)) {
         const raw = (m[1] || m[2] || '').trim();
         if (!raw) continue;
         // Python `import a, b` — split into individual modules
@@ -249,6 +260,7 @@ export async function parseSourceFile(text, ctx, ext) {
         }
         if (imports.size >= MAX_IMPORTS_PER_FILE) break;
       }
+      if (imports.size >= MAX_IMPORTS_PER_FILE) break;
     }
   }
 
