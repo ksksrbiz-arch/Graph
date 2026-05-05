@@ -72,8 +72,30 @@ const PIECES_MCP_URL = (
   'http://localhost:39300/model_context_protocol/2025-03-26/mcp'
 ).trim();
 const PIECES_AUTH_TOKEN = (process.env.PIECES_AUTH_TOKEN || '').trim() || undefined;
-const PIECES_QUERY_TOOL = (process.env.PIECES_QUERY_TOOL || 'ask_pieces_ltm').trim();
-const PIECES_QUERY_ARG = (process.env.PIECES_QUERY_ARG || 'question').trim();
+// When PIECES_QUERY_TOOL is unset we auto-pick from this list in order. Pieces
+// OS builds vary in which retrieval tools they expose — newer versions bundle
+// the LTM ask tool, older ones only ship the workstream/conversation searchers.
+// Picking automatically means a fresh install works without env tweaking.
+const TOOL_PREFERENCE = [
+  'ask_pieces_ltm',
+  'conversations_full_text_search',
+  'workstream_summaries_full_text_search',
+  'workstream_events_full_text_search',
+  'materials_vector_search',
+];
+
+// Pieces' search tools take `query`; ask_pieces_ltm takes `question`. Map per
+// tool when the caller hasn't pinned PIECES_QUERY_ARG.
+const TOOL_DEFAULT_ARG = {
+  ask_pieces_ltm: 'question',
+  conversations_full_text_search: 'query',
+  workstream_summaries_full_text_search: 'query',
+  workstream_events_full_text_search: 'query',
+  materials_vector_search: 'query',
+};
+
+const PIECES_QUERY_TOOL = (process.env.PIECES_QUERY_TOOL || '').trim();
+const PIECES_QUERY_ARG = (process.env.PIECES_QUERY_ARG || '').trim();
 const DEFAULT_QUERY =
   'Summarize the most relevant memories, snippets, and references from my Pieces long-term memory.';
 const PIECES_LIST_TOOLS = /^(1|true|yes)$/i.test(process.env.PIECES_LIST_TOOLS || '');
@@ -136,18 +158,28 @@ async function main() {
     return;
   }
 
-  const tool = tools.find((t) => t.name === PIECES_QUERY_TOOL);
+  const tool = pickTool(tools);
   if (!tool) {
+    const wanted = PIECES_QUERY_TOOL || TOOL_PREFERENCE.join(', ');
     console.error(
-      `Tool "${PIECES_QUERY_TOOL}" not found on server. Available: ` +
-        `${tools.map((t) => t.name).join(', ') || '(none)'}\n` +
-        'Set PIECES_QUERY_TOOL to one of the names above, or run with PIECES_LIST_TOOLS=1.',
+      `No usable retrieval tool found on server (looked for: ${wanted}).\n` +
+        `Available: ${tools.map((t) => t.name).join(', ') || '(none)'}\n` +
+        'Set PIECES_QUERY_TOOL to one of the names above, run with ' +
+        'PIECES_LIST_TOOLS=1 to inspect them, or fall back to the REST ' +
+        'ingester (`node scripts/ingest-pieces-rest.mjs`) which talks ' +
+        "directly to Pieces OS's HTTP API.",
     );
     process.exit(1);
   }
 
+  // Resolve the query-arg name: explicit env wins, else per-tool default,
+  // else the legacy `question` for backward-compat.
+  const queryArg = PIECES_QUERY_ARG || TOOL_DEFAULT_ARG[tool.name] || 'question';
+
   const queries = parseQueries();
-  console.log(`Calling \`${tool.name}\` with ${queries.length} prompt(s).`);
+  console.log(
+    `Calling \`${tool.name}\` (arg: ${queryArg}) with ${queries.length} prompt(s).`,
+  );
 
   const existing = await loadGraph(GRAPH_PATH);
   const builder = new GraphBuilder(existing);
@@ -173,7 +205,7 @@ async function main() {
   const perQuery = [];
 
   for (const prompt of queries) {
-    const args = { [PIECES_QUERY_ARG]: prompt };
+    const args = { [queryArg]: prompt };
     let res;
     try {
       res = await session.callTool(tool.name, args);
@@ -192,7 +224,7 @@ async function main() {
       label: truncate(prompt, 80),
       type: 'pieces-query',
       sourceId: SOURCE_ID,
-      metadata: { prompt, tool: tool.name, queryArg: PIECES_QUERY_ARG },
+      metadata: { prompt, tool: tool.name, queryArg },
     });
 
     const memories = extractMemories(res);
@@ -415,6 +447,22 @@ function truncate(s, n) {
   if (typeof s !== 'string') return s;
   if (s.length <= n) return s;
   return s.slice(0, n - 1).trimEnd() + '…';
+}
+
+/**
+ * Resolve which retrieval tool to call. Honors PIECES_QUERY_TOOL when set;
+ * otherwise picks the first match from TOOL_PREFERENCE that the server
+ * actually exposes. Returns the tool object (with name + schema) or null.
+ */
+function pickTool(tools) {
+  if (PIECES_QUERY_TOOL) {
+    return tools.find((t) => t.name === PIECES_QUERY_TOOL) || null;
+  }
+  for (const candidate of TOOL_PREFERENCE) {
+    const match = tools.find((t) => t.name === candidate);
+    if (match) return match;
+  }
+  return null;
 }
 
 main().catch((err) => {

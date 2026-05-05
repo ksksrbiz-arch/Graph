@@ -25,6 +25,7 @@
     "ingest:bank-csv": "node scripts/ingest-bank-csv.mjs",
     "ingest:pieces": "node scripts/ingest-pieces-mcp.mjs && cp data/graph.json web/data/graph.json",
     "ingest:pieces:list-tools": "PIECES_LIST_TOOLS=1 node scripts/ingest-pieces-mcp.mjs",
+    "ingest:pieces:rest": "node scripts/ingest-pieces-rest.mjs && cp data/graph.json web/data/graph.json",
     "mcp": "node scripts/mcp-server.mjs",
     "deploy": "wrangler deploy",
     "preview": "wrangler dev",

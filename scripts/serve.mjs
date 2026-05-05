@@ -32,6 +32,8 @@ const INGESTERS = {
   'github':         'scripts/ingest-github.mjs',
   'bookmarks':      'scripts/ingest-bookmarks.mjs',
   'claude-export':  'scripts/ingest-claude-export.mjs',
+  'pieces':         'scripts/ingest-pieces-mcp.mjs',
+  'pieces-rest':    'scripts/ingest-pieces-rest.mjs',
 };
 
 /** Slugs that are currently executing — prevents duplicate concurrent runs. */
