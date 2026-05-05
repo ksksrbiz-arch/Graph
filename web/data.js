@@ -300,6 +300,112 @@ export async function runIngest(name, params) {
   return runLocalIngest(name, params);
 }
 
+/**
+ * Send a (potentially large) batch of nodes/edges to the public API, chunked
+ * to stay under the per-request 5 000-node / 20 000-edge cap enforced by the
+ * Worker (see SNAPSHOT_MAX_NODES / SNAPSHOT_MAX_EDGES in src/worker.js).
+ *
+ * Edges are routed to the chunk whose nodes contain *both* endpoints when
+ * possible; orphan edges (whose endpoints are split across chunks or refer
+ * to nodes already persisted from a prior call) are appended to the final
+ * chunk, which is fine because the server merges by id.
+ */
+export async function ingestPublicBatch({ nodes, edges, sourceId, onChunk }) {
+  const allNodes = Array.isArray(nodes) ? nodes : [];
+  const allEdges = Array.isArray(edges) ? edges : [];
+  if (allNodes.length === 0) {
+    return { ok: false, status: 0, error: 'no nodes to ingest' };
+  }
+
+  const NODE_CHUNK = 1_500;
+  const EDGE_CHUNK = 6_000;
+
+  // Build node chunks.
+  const nodeChunks = [];
+  for (let i = 0; i < allNodes.length; i += NODE_CHUNK) {
+    nodeChunks.push(allNodes.slice(i, i + NODE_CHUNK));
+  }
+
+  // For each node chunk, collect edges whose endpoints are both in this chunk.
+  // Edges that don't fit (because endpoints are in different chunks) are
+  // accumulated and appended to the last chunk in additional follow-up
+  // requests sliced at EDGE_CHUNK.
+  const accumulatedTrailingEdges = [];
+  let totals = { nodes: 0, edges: 0, totalNodes: 0, totalEdges: 0 };
+  let lastBody = {};
+  let lastStatus = 0;
+  let okAll = true;
+
+  for (let i = 0; i < nodeChunks.length; i++) {
+    const chunkNodes = nodeChunks[i];
+    const chunkIds = new Set(chunkNodes.map((n) => n.id));
+    const chunkEdges = [];
+    for (const e of allEdges) {
+      if (chunkIds.has(e.source) && chunkIds.has(e.target)) {
+        if (chunkEdges.length < EDGE_CHUNK) chunkEdges.push(e);
+        else accumulatedTrailingEdges.push(e);
+      }
+    }
+    const res = await ingestPublicGraph({
+      nodes: chunkNodes,
+      edges: chunkEdges,
+      sourceId,
+    });
+    onChunk?.({ index: i, total: nodeChunks.length, ok: res.ok, body: res });
+    if (!res.ok) {
+      return res;
+    }
+    totals.nodes += res.nodes ?? chunkNodes.length;
+    totals.edges += res.edges ?? chunkEdges.length;
+    totals.totalNodes = res.totalNodes ?? totals.totalNodes;
+    totals.totalEdges = res.totalEdges ?? totals.totalEdges;
+    lastBody = res;
+    lastStatus = res.status;
+  }
+
+  // Cross-chunk edges + any not yet sent.
+  const sentEdgeIds = new Set();
+  for (const chunk of nodeChunks) {
+    const ids = new Set(chunk.map((n) => n.id));
+    for (const e of allEdges) {
+      if (ids.has(e.source) && ids.has(e.target)) sentEdgeIds.add(e.id);
+    }
+  }
+  const remaining = allEdges
+    .filter((e) => !sentEdgeIds.has(e.id))
+    .concat(accumulatedTrailingEdges);
+
+  for (let i = 0; i < remaining.length; i += EDGE_CHUNK) {
+    const slice = remaining.slice(i, i + EDGE_CHUNK);
+    if (slice.length === 0) break;
+    // Send as a graph payload re-stating the endpoints we already persisted.
+    // The server's sanitizer drops nodes with no id, so we resend the minimal
+    // anchor set: the unique ids referenced by this edge slice.
+    const referenced = new Set();
+    for (const e of slice) { referenced.add(e.source); referenced.add(e.target); }
+    const anchorNodes = allNodes.filter((n) => referenced.has(n.id));
+    const res = await ingestPublicGraph({
+      nodes: anchorNodes,
+      edges: slice,
+      sourceId,
+    });
+    onChunk?.({ index: nodeChunks.length + Math.floor(i / EDGE_CHUNK), total: -1, ok: res.ok, body: res });
+    if (!res.ok) {
+      okAll = false;
+      lastBody = res;
+      lastStatus = res.status;
+      break;
+    }
+    totals.edges += res.edges ?? slice.length;
+    totals.totalNodes = res.totalNodes ?? totals.totalNodes;
+    totals.totalEdges = res.totalEdges ?? totals.totalEdges;
+    lastBody = res;
+    lastStatus = res.status;
+  }
+
+  return { ok: okAll, status: lastStatus, ...lastBody, ...totals };
+}
+
 // ── Per-connector auto-ingest scheduler ───────────────────────────────────────
 
 /** Maps connectorId → setInterval handle for auto-ingest timers. */

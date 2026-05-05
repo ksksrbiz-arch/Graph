@@ -21,6 +21,7 @@ import { showToast } from './util.js';
 import { KNOWN_CONNECTORS, executeConnectorIngest } from './views/connectors.js';
 import { loadSavedConfig } from './views/connector-config.js';
 import { openWizard } from './views/ingest-wizard.js';
+import { createBatchUploadTab } from './views/batch-upload.js';
 
 const HISTORY_MAX = 50;
 const URL_FETCH_BYTE_CAP = 6_000;
@@ -36,6 +37,7 @@ export function createIngestPanel({ container, onIngested } = {}) {
         <button type="button" data-tab="url" class="active" role="tab">URL</button>
         <button type="button" data-tab="text" role="tab">Text</button>
         <button type="button" data-tab="connectors" role="tab">Connectors</button>
+        <button type="button" data-tab="batch" role="tab">Batch</button>
         <button type="button" data-tab="log" role="tab">Log</button>
       </div>
       <button type="button" class="ingest-panel-close" aria-label="Close">✕</button>
@@ -57,6 +59,7 @@ export function createIngestPanel({ container, onIngested } = {}) {
       <div class="ingest-tab hidden" data-pane="connectors">
         <div class="ingest-connectors" data-connectors></div>
       </div>
+      <div class="ingest-tab hidden" data-pane="batch" data-batch-host></div>
       <div class="ingest-tab hidden" data-pane="log">
         <ul class="ingest-log" data-log></ul>
       </div>
@@ -65,7 +68,6 @@ export function createIngestPanel({ container, onIngested } = {}) {
   container.appendChild(root);
 
   const tabs = root.querySelectorAll('.ingest-panel-tabs button');
-  const panes = root.querySelectorAll('.ingest-tab');
   const closeBtn = root.querySelector('.ingest-panel-close');
   const urlInput = root.querySelector('.ingest-url');
   const urlBtn = root.querySelector('.ingest-btn-url');
@@ -75,6 +77,25 @@ export function createIngestPanel({ container, onIngested } = {}) {
   const textStatus = root.querySelector('[data-pane="text"] [data-status]');
   const logEl = root.querySelector('[data-log]');
   const connectorsEl = root.querySelector('[data-connectors]');
+  const batchHost = root.querySelector('[data-batch-host]');
+
+  // Mount the Batch upload tab. It manages its own DOM and only needs to
+  // notify the panel (history log) when an upload completes.
+  const batchTab = createBatchUploadTab({
+    onIngested: (res) => {
+      try { onIngested?.(res); } catch { /* swallow caller errors */ }
+    },
+    onLog: (entry) => pushHistory(entry),
+  });
+  // Replace the placeholder pane with the batch tab's root, preserving the
+  // dataset.pane attribute so the tab switcher keeps working.
+  batchTab.root.dataset.pane = 'batch';
+  batchHost.replaceWith(batchTab.root);
+
+  // Re-query panes AFTER replaceWith so the NodeList reflects the new node
+  // — querySelectorAll returns a static NodeList and the placeholder we just
+  // replaced would otherwise still be in `panes`.
+  const panes = root.querySelectorAll('.ingest-tab');
 
   let connectorsRendered = false;
 
