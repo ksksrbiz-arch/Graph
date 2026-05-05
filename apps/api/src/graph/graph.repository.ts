@@ -175,7 +175,7 @@ export class GraphRepository {
   async snapshotDeltaForUser(
     userId: string,
     sinceIso: string,
-    limit = 5_000,
+    limit = 50_000,
   ): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
     const session = this.driver.session();
     try {
@@ -218,10 +218,10 @@ export class GraphRepository {
 
   /** Full snapshot of a user's graph — used by the public/demo ingest path
    *  so the SPA can render Neo4j-backed nodes without a full GraphQL setup.
-   *  Capped by `limit` (defaults to 5k). */
+   *  Capped by `limit` (defaults to 50k). */
   async snapshotForUser(
     userId: string,
-    limit = 5_000,
+    limit = 50_000,
   ): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
     const session = this.driver.session();
     try {
