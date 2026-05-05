@@ -1,0 +1,252 @@
+/* =============================================================================
+   NEURAL INTERFACE — Living chrome for the graph
+   -----------------------------------------------------------------------------
+   Authored as plain-CSS-compatible syntax; served as text/css by scripts/serve.
+   Tokens come from src/styles/design-tokens.scss.
+   ========================================================================== */
+
+/* -- 1. Living backdrop ---------------------------------------------------- */
+
+.neural-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.neural-backdrop::before,
+.neural-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: -10%;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(0, 212, 255, 0.10), transparent 38%),
+    radial-gradient(circle at 78% 68%, rgba(180, 75, 255, 0.08), transparent 42%),
+    radial-gradient(circle at 52% 12%, rgba(0, 255, 170, 0.06), transparent 36%);
+  filter: blur(28px);
+  animation: ni-drift 38s linear infinite;
+  opacity: 0.85;
+}
+.neural-backdrop::after {
+  background:
+    radial-gradient(circle at 70% 30%, rgba(0, 212, 255, 0.07), transparent 40%),
+    radial-gradient(circle at 25% 75%, rgba(255, 109, 0, 0.05), transparent 42%);
+  animation-direction: reverse;
+  animation-duration: 56s;
+  mix-blend-mode: screen;
+}
+.neural-backdrop .ni-grid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 64px 64px,
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 64px 64px;
+  mask-image: radial-gradient(ellipse at center, black 35%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 35%, transparent 80%);
+  opacity: 0.55;
+  animation: ni-grid-shift 22s ease-in-out infinite;
+}
+.neural-backdrop .ni-scan {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 212, 255, 0.012) 3px,
+    rgba(0, 212, 255, 0.012) 4px
+  );
+  animation: ni-scan-drift 9s linear infinite;
+}
+.neural-backdrop .ni-sweep {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  height: 110px;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    rgba(0, 212, 255, 0.05) 45%,
+    rgba(0, 212, 255, 0.10) 50%,
+    rgba(0, 212, 255, 0.05) 55%,
+    transparent 100%);
+  filter: blur(2px);
+  opacity: 0.55;
+  animation: ni-sweep 11s linear infinite;
+}
+
+@keyframes ni-drift {
+  0%   { transform: translate3d(0, 0, 0)         scale(1);    }
+  50%  { transform: translate3d(2%, -1.5%, 0)    scale(1.04); }
+  100% { transform: translate3d(0, 0, 0)         scale(1);    }
+}
+@keyframes ni-grid-shift {
+  0%, 100% { background-position: 0 0, 0 0; opacity: 0.55; }
+  50%      { background-position: 32px 32px, 32px 32px; opacity: 0.30; }
+}
+@keyframes ni-scan-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 0 8px; }
+}
+@keyframes ni-sweep {
+  0%   { top: -120px; opacity: 0; }
+  10%  { opacity: 0.6; }
+  90%  { opacity: 0.6; }
+  100% { top: 110%;  opacity: 0; }
+}
+
+/* -- 2. Canvas frame: corner brackets + edge glow -------------------------- */
+
+#view-graph #canvas {
+  position: relative;
+}
+.canvas-frame {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  box-shadow: inset 0 0 80px rgba(0, 212, 255, 0.06);
+}
+.canvas-frame .br {
+  position: absolute;
+  width: 22px; height: 22px;
+  border: 1px solid var(--cyan-core);
+  opacity: 0.55;
+  filter: drop-shadow(0 0 4px var(--cyan-glow));
+  animation: ni-br-pulse 4.5s ease-in-out infinite;
+}
+.canvas-frame .br.tl { top: 8px;    left: 8px;    border-right: none;  border-bottom: none; }
+.canvas-frame .br.tr { top: 8px;    right: 8px;   border-left: none;   border-bottom: none; }
+.canvas-frame .br.bl { bottom: 8px; left: 8px;    border-right: none;  border-top: none;    }
+.canvas-frame .br.br { bottom: 8px; right: 8px;   border-left: none;   border-top: none;    }
+@keyframes ni-br-pulse {
+  0%, 100% { opacity: 0.40; filter: drop-shadow(0 0 3px var(--cyan-glow)); }
+  50%      { opacity: 0.80; filter: drop-shadow(0 0 8px var(--cyan-glow)); }
+}
+
+/* -- 3. Brand: living title ------------------------------------------------ */
+
+.brand .brand-stack {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1;
+  gap: 2px;
+  margin-left: 2px;
+}
+.brand .brand-stack h1 {
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  color: var(--text-primary, #e8f4f8);
+  text-shadow: 0 0 12px rgba(0, 212, 255, 0.25);
+}
+.brand .brand-sub {
+  font-family: var(--text-mono, monospace);
+  font-size: 9px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--text-label, #00d4ffcc);
+  opacity: 0.85;
+}
+.brand .pulse-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--teal-core, #00ffaa);
+  box-shadow: 0 0 8px var(--teal-glow, #00ffaa88), 0 0 18px rgba(0, 255, 170, 0.35);
+  animation: ni-heartbeat 1.6s ease-in-out infinite;
+  margin-left: 6px;
+  flex: 0 0 auto;
+}
+@keyframes ni-heartbeat {
+  0%, 100% { transform: scale(1);   box-shadow: 0 0 6px var(--teal-glow), 0 0 14px rgba(0,255,170,0.30); }
+  18%      { transform: scale(1.55); box-shadow: 0 0 14px var(--teal-glow), 0 0 28px rgba(0,255,170,0.55); }
+  32%      { transform: scale(1);   }
+  46%      { transform: scale(1.30); box-shadow: 0 0 10px var(--teal-glow), 0 0 22px rgba(0,255,170,0.45); }
+  60%      { transform: scale(1);   }
+}
+
+/* -- 4. Vitals strip ------------------------------------------------------- */
+
+.vitals-strip {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+  padding: 6px 14px;
+  z-index: 6;
+  background: rgba(4, 13, 20, 0.55);
+  border: 1px solid var(--border-dim, rgba(0, 212, 255, 0.12));
+  border-radius: 999px;
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+          backdrop-filter: blur(14px) saturate(160%);
+  font-family: var(--text-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #7ab8cc);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+.vitals-strip .v {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.vitals-strip .v::before {
+  content: '';
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--cyan-core, #00d4ff);
+  box-shadow: 0 0 6px var(--cyan-glow, #00d4ff99);
+}
+.vitals-strip .v.alive::before { background: var(--teal-core, #00ffaa); box-shadow: 0 0 6px var(--teal-glow, #00ffaa88); animation: ni-heartbeat 1.6s ease-in-out infinite; }
+.vitals-strip .v.warm::before  { background: var(--orange-core, #ff6d00); box-shadow: 0 0 6px rgba(255, 109, 0, 0.6); }
+.vitals-strip .v.idea::before  { background: var(--purple-core, #b44bff); box-shadow: 0 0 6px rgba(180, 75, 255, 0.6); }
+.vitals-strip .v b {
+  color: var(--text-primary, #e8f4f8);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.25);
+}
+.vitals-strip .v .lbl { color: var(--text-dim, #2a4a5a); }
+
+@media (max-width: 720px) {
+  .vitals-strip { gap: 10px; padding: 5px 10px; font-size: 9px; }
+  .vitals-strip .v .lbl { display: none; }
+}
+
+/* -- 5. Sidebar: ambient marker for active item ---------------------------- */
+
+.sidebar .nav-item {
+  position: relative;
+}
+.sidebar .nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 8px; bottom: 8px;
+  width: 2px;
+  background: var(--cyan-core, #00d4ff);
+  box-shadow: 0 0 8px var(--cyan-glow, #00d4ff99), 0 0 18px var(--cyan-dim, #00d4ff33);
+  animation: ni-bar-breath 2.4s ease-in-out infinite;
+}
+@keyframes ni-bar-breath {
+  0%, 100% { opacity: 0.65; }
+  50%      { opacity: 1;    }
+}
+
+/* -- 6. Honor reduced-motion ----------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .neural-backdrop::before,
+  .neural-backdrop::after,
+  .neural-backdrop .ni-grid,
+  .neural-backdrop .ni-scan,
+  .neural-backdrop .ni-sweep,
+  .canvas-frame .br,
+  .brand .pulse-dot,
+  .sidebar .nav-item.active::before,
+  .vitals-strip .v.alive::before {
+    animation: none !important;
+  }
+}
