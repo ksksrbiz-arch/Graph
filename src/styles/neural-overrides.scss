@@ -1,0 +1,320 @@
+/* =============================================================================
+   NEURAL INTERFACE — Overrides for the legacy palette in web/styles.css
+   -----------------------------------------------------------------------------
+   Loaded AFTER web/styles.css so it can rebind the older `--bg`, `--accent`,
+   `--border` tokens onto the cyan neural palette. Most of the existing UI then
+   re-tones automatically — topbar, sidebar, panels, buttons, dim-switch,
+   brain-link, HUD, view-headers, the focus banner, search results, settings.
+   ========================================================================== */
+
+:root {
+  /* Background stack: lift toward the design-tokens void/panel set. */
+  --bg:        #040d14;
+  --bg-elev:   #06151f;
+  --bg-elev-2: #0a1f2c;
+  --bg-elev-3: #0f2a3b;
+
+  /* Borders: cyan-tinted instead of slate. */
+  --border:        rgba(0, 212, 255, 0.14);
+  --border-strong: rgba(0, 212, 255, 0.40);
+
+  /* Text: align with neural palette. */
+  --text:       #e8f4f8;
+  --text-dim:   #7ab8cc;
+  --text-faint: #2a4a5a;
+
+  /* Accent: cyan, not lavender-blue. */
+  --accent:       #00d4ff;
+  --accent-hover: #5ee7ff;
+}
+
+/* -- Body: deep void with subtle vignette --------------------------------- */
+html, body {
+  background:
+    radial-gradient(ellipse at top, rgba(0, 212, 255, 0.05), transparent 55%),
+    radial-gradient(ellipse at bottom, rgba(180, 75, 255, 0.04), transparent 60%),
+    var(--bg-void, #000507);
+  font-family: var(--text-ui, 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif);
+}
+
+/* -- Topbar: glass with cyan underline ------------------------------------ */
+.topbar {
+  background: rgba(4, 13, 20, 0.78);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+          backdrop-filter: blur(14px) saturate(160%);
+  border-bottom: 1px solid var(--border-dim, rgba(0, 212, 255, 0.14));
+  box-shadow: 0 1px 0 rgba(0, 212, 255, 0.12), 0 6px 24px rgba(0, 0, 0, 0.55);
+}
+.topbar::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.55), transparent);
+  pointer-events: none;
+}
+.brand .logo {
+  background: radial-gradient(circle at 30% 30%, var(--cyan-core, #00d4ff), #042b3d 70%);
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.55), inset 0 0 6px rgba(0, 212, 255, 0.4);
+}
+.tag {
+  font-family: var(--text-mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-label, #00d4ffcc);
+  border-color: var(--border-dim, rgba(0, 212, 255, 0.14));
+  background: rgba(0, 212, 255, 0.04);
+}
+
+/* -- Buttons: cyan glow on hover, primary as a console action ------------- */
+button {
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid var(--border-dim, rgba(0, 212, 255, 0.14));
+  color: var(--text);
+  transition: border-color 150ms ease, color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+button:hover:not(:disabled) {
+  border-color: var(--cyan-core, #00d4ff);
+  color: var(--cyan-core, #00d4ff);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.25);
+  background: rgba(0, 212, 255, 0.08);
+}
+button.primary {
+  background: linear-gradient(180deg, rgba(0, 212, 255, 0.22), rgba(0, 212, 255, 0.10));
+  border: 1px solid var(--cyan-core, #00d4ff);
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.78rem;
+  font-weight: 600;
+  box-shadow: 0 0 14px rgba(0, 212, 255, 0.30), inset 0 0 18px rgba(0, 212, 255, 0.12);
+}
+button.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(0, 212, 255, 0.32), rgba(0, 212, 255, 0.16));
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.55), inset 0 0 22px rgba(0, 212, 255, 0.20);
+}
+
+/* -- Inputs --------------------------------------------------------------- */
+input[type="search"], input[type="text"], select {
+  background: rgba(0, 212, 255, 0.04);
+  border: 1px solid var(--border-dim, rgba(0, 212, 255, 0.14));
+  color: var(--text);
+}
+input[type="search"]:focus, input[type="text"]:focus, select:focus {
+  outline: none;
+  border-color: var(--cyan-core, #00d4ff);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+}
+
+/* -- Sidebar: rail tinted, brain glyph in cyan ---------------------------- */
+.sidebar {
+  background: rgba(4, 13, 20, 0.58);
+  border-right: 1px solid var(--border-dim, rgba(0, 212, 255, 0.14));
+  -webkit-backdrop-filter: blur(10px);
+          backdrop-filter: blur(10px);
+}
+.nav-item:hover { background: rgba(0, 212, 255, 0.06); color: var(--text); }
+.nav-item.active {
+  background: rgba(0, 212, 255, 0.10);
+  border: 1px solid rgba(0, 212, 255, 0.30);
+  color: var(--text);
+  box-shadow: inset 0 0 18px rgba(0, 212, 255, 0.08);
+}
+.nav-glyph[data-g="brain"] {
+  background: radial-gradient(circle at 35% 35%, var(--cyan-core, #00d4ff), transparent 70%);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.55);
+}
+.nav-glyph[data-g="finance"] {
+  background: linear-gradient(135deg, rgba(0, 255, 170, 0.40), rgba(0, 255, 170, 0.10));
+  border-color: rgba(0, 255, 170, 0.55);
+}
+.sidebar-foot {
+  font-family: var(--text-mono, monospace);
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border-dim, rgba(0, 212, 255, 0.14));
+}
+
+/* -- Graph toolbar: smoother gradient, monospaced filters ----------------- */
+.graph-toolbar {
+  background: linear-gradient(180deg, rgba(4, 13, 20, 0.94), rgba(4, 13, 20, 0.60) 70%, transparent);
+}
+#type-filters label, #timeline-type-filters label {
+  font-family: var(--text-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  background: rgba(4, 13, 20, 0.75);
+  border: 1px solid var(--border-dim, rgba(0, 212, 255, 0.14));
+  color: var(--text-dim);
+}
+#type-filters label.on, #timeline-type-filters label.on {
+  color: var(--text);
+  background: rgba(0, 212, 255, 0.10);
+  border-color: rgba(0, 212, 255, 0.40);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.25);
+}
+
+/* -- Dim switch: cyan active state --------------------------------------- */
+.dim-switch {
+  background: rgba(4, 13, 20, 0.80);
+  border-color: var(--border-dim, rgba(0, 212, 255, 0.14));
+}
+.dim-switch button.active {
+  background: linear-gradient(180deg, rgba(0, 212, 255, 0.30), rgba(0, 212, 255, 0.12));
+  border-color: var(--cyan-core, #00d4ff);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(0, 212, 255, 0.55);
+}
+
+/* -- Brain link button -------------------------------------------------- */
+.brain-link {
+  background: rgba(4, 13, 20, 0.80);
+  border-color: var(--border-dim, rgba(0, 212, 255, 0.14));
+}
+.brain-link.active {
+  border-color: var(--cyan-core, #00d4ff);
+  color: var(--text);
+  box-shadow: 0 0 14px rgba(0, 212, 255, 0.45);
+}
+.brain-link.active .dot {
+  background: var(--cyan-core, #00d4ff);
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.85);
+}
+
+/* -- Bottom-right HUD overlay ------------------------------------------- */
+.hud {
+  background: rgba(4, 13, 20, 0.65);
+  border-color: var(--border-dim, rgba(0, 212, 255, 0.14));
+  font-family: var(--text-mono, monospace);
+  letter-spacing: 0.05em;
+}
+
+/* -- View headers (timeline, connectors, search, settings) -------------- */
+.view-header {
+  background: linear-gradient(180deg, rgba(4, 13, 20, 0.90), rgba(4, 13, 20, 0.55));
+  border-bottom: 1px solid var(--border-dim, rgba(0, 212, 255, 0.14));
+  -webkit-backdrop-filter: blur(10px);
+          backdrop-filter: blur(10px);
+}
+.view-header h2 {
+  font-family: var(--text-mono, monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.95rem;
+  color: var(--text);
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+}
+.view-header .view-sub { color: var(--text-dim); }
+
+/* -- Focus banner: warmer alert tone ------------------------------------ */
+.focus-banner {
+  background: rgba(255, 109, 0, 0.12);
+  border: 1px solid var(--orange-core, #ff6d00);
+  color: var(--text);
+  font-family: var(--text-mono, monospace);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  font-size: 11px;
+  box-shadow: 0 0 14px rgba(255, 109, 0, 0.30);
+}
+
+/* -- Stats tag in topbar: hide on desktop (vitals strip replaces it) ----- */
+@media (min-width: 720px) {
+  .brand > .tag#stats { display: none; }
+}
+
+/* -- Brain / Cortex / Finance shells: ensure base console framing -------- */
+#view-brain:empty::before,
+#view-cortex:empty::before,
+#view-finance:empty::before {
+  content: 'INITIALIZING…';
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-family: var(--text-mono, monospace);
+  letter-spacing: 0.32em;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* -- Search results: cyan list separators ------------------------------- */
+.search-results > * {
+  border-bottom: 1px solid var(--border-dim, rgba(0, 212, 255, 0.10));
+}
+.search-results > *:hover {
+  background: rgba(0, 212, 255, 0.04);
+}
+
+/* -- Settings: card chrome --------------------------------------------- */
+.settings-card {
+  background: rgba(4, 13, 20, 0.55) !important;
+  border: 1px solid var(--border-dim, rgba(0, 212, 255, 0.14)) !important;
+  box-shadow: inset 0 0 30px rgba(0, 212, 255, 0.04);
+}
+.settings-card h3 {
+  font-family: var(--text-mono, monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.82rem;
+  color: var(--cyan-core, #00d4ff);
+}
+
+/* -- Range sliders: cyan thumb ------------------------------------------ */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 14px;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px;
+  background: linear-gradient(90deg, rgba(0, 212, 255, 0.4), rgba(0, 212, 255, 0.10));
+  border-radius: 2px;
+}
+input[type="range"]::-moz-range-track {
+  height: 2px;
+  background: rgba(0, 212, 255, 0.30);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--cyan-core, #00d4ff);
+  border: none;
+  margin-top: -5px;
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.7);
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--cyan-core, #00d4ff);
+  border: none;
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.7);
+  cursor: pointer;
+}
+
+/* -- Toast: console-style ------------------------------------------------ */
+.toast {
+  background: rgba(4, 13, 20, 0.92) !important;
+  border: 1px solid var(--cyan-core, #00d4ff) !important;
+  color: var(--text) !important;
+  font-family: var(--text-mono, monospace);
+  letter-spacing: 0.06em;
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.35);
+}
+
+/* -- Scrollbars --------------------------------------------------------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 212, 255, 0.30) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 255, 0.20);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(0, 212, 255, 0.45); }
