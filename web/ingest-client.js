@@ -130,9 +130,9 @@ function decodeXmlEntities(text) {
 }
 
 export const BROWSER_INGEST_LIMITS = Object.freeze({
-  maxFilesPerUpload: 200,
+  maxFilesPerUpload: 50_000,
   maxSingleFileBytes: 5 * 1024 * 1024,
-  maxTotalFileBytes: 25 * 1024 * 1024,
+  maxTotalFileBytes: 500 * 1024 * 1024,
   maxRemoteBytes: 1_500_000,
   maxRemoteUrls: 25,
   fetchTimeoutMs: 8_000,
