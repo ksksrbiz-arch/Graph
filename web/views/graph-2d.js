@@ -10,10 +10,14 @@ import { createSpikeRenderer } from '../spike-render.js';
 import { createBrainConstruction } from '../brain-construction.js';
 
 export function create2DRenderer({ container, callbacks }) {
+  if (typeof window.ForceGraph !== 'function') {
+    container.innerHTML = `<div class="empty"><div>2D renderer failed to load (vendor/force-graph.min.js).</div></div>`;
+    return null;
+  }
   container.innerHTML = '';
   const fg = ForceGraph()(container)
     .backgroundColor('rgba(0,0,0,0)')
-    .autoPauseRedraw(false)
+    .autoPauseRedraw(true)
     .nodeId('id')
     .nodeLabel((n) => `${escapeLabel(n.label || n.id)} — ${n.type}`)
     .nodeVal((n) => Math.max(1, Math.sqrt(n.__degree || 1) * 3))
@@ -133,12 +137,24 @@ export function create2DRenderer({ container, callbacks }) {
   }
 
   function applyConfig() {
+    const nodeCount = fg.graphData?.()?.nodes?.length ?? 0;
+    const largeGraph = nodeCount > 2000;
+
     const charge = fg.d3Force('charge');
-    if (charge) charge.strength(state.config.chargeStrength);
+    if (charge) {
+      charge.strength(state.config.chargeStrength);
+      // Limit charge distance on large graphs to keep the Barnes-Hut
+      // approximation tractable and avoid O(n²) worst-case behaviour.
+      if (largeGraph && typeof charge.distanceMax === 'function') {
+        charge.distanceMax(250);
+      }
+    }
     const link = fg.d3Force('link');
     if (link) {
       link.distance(state.config.linkDistance);
       if (typeof link.strength === 'function') link.strength(state.config.linkStrength);
+      // Fewer iterations per tick on large graphs keeps each tick short.
+      if (largeGraph && typeof link.iterations === 'function') link.iterations(1);
     }
     const center = fg.d3Force('center');
     if (center && typeof center.strength === 'function') {
@@ -146,10 +162,18 @@ export function create2DRenderer({ container, callbacks }) {
     }
     fg.nodeRelSize(state.config.nodeRelSize);
     if (typeof fg.d3VelocityDecay === 'function') fg.d3VelocityDecay(state.config.velocityDecay);
-    if (typeof fg.d3AlphaDecay === 'function') fg.d3AlphaDecay(state.config.alphaDecay);
-    if (typeof fg.cooldownTicks === 'function' && Number.isFinite(state.config.cooldownTicks)) {
-      fg.cooldownTicks(state.config.cooldownTicks);
-    }
+    // For large graphs use a higher alpha decay so the simulation settles
+    // quickly (fewer expensive ticks) unless the user has overridden it.
+    const alphaDecay = largeGraph
+      ? Math.max(state.config.alphaDecay, 0.04)
+      : state.config.alphaDecay;
+    if (typeof fg.d3AlphaDecay === 'function') fg.d3AlphaDecay(alphaDecay);
+    // Respect an explicit cooldownTicks override; otherwise cap large graphs
+    // at 300 ticks so the simulation never runs forever.
+    const cooldown = Number.isFinite(state.config.cooldownTicks)
+      ? state.config.cooldownTicks
+      : largeGraph ? 300 : Infinity;
+    if (typeof fg.cooldownTicks === 'function') fg.cooldownTicks(cooldown);
     fg.d3ReheatSimulation();
   }
 

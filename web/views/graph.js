@@ -318,6 +318,11 @@ function rebuildRenderer() {
   if (!renderer) {
     renderer = create2DRenderer({ container, callbacks });
   }
+  if (!renderer) {
+    // Both 3D and 2D renderers failed to initialise (vendor scripts not loaded).
+    console.error('[graph] renderer could not be created — vendor scripts may not be loaded');
+    return;
+  }
   if (renderer.kind === '2d') attachLongPress(container);
   applyFilters();
   applyConfig();
