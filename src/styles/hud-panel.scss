@@ -439,6 +439,29 @@
   gap: 6px;
   margin-bottom: 8px;
 }
+.brain-controls .q-row .bc-btn {
+  flex: 1;
+  background: rgba(0, 212, 255, 0.04);
+  border: 1px solid var(--border-dim);
+  color: var(--text-dim);
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-family: var(--text-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
+}
+.brain-controls .q-row .bc-btn:hover {
+  border-color: var(--border-active);
+  background: rgba(0, 212, 255, 0.10);
+  color: var(--cyan-core);
+}
+.brain-controls .q-row .bc-btn.active {
+  border-color: var(--cyan-core);
+  background: rgba(0, 212, 255, 0.30);
+  color: #fff;
+  box-shadow: var(--glow-cyan-sm);
+}
 .brain-controls button.bc-btn {
   flex: 1;
   background: rgba(0, 212, 255, 0.05);

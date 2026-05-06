@@ -46,16 +46,20 @@ export function initGraphView() {
   document.getElementById('focus-banner-close').addEventListener('click', clearFocus);
 
   const weightSlider = document.getElementById('edge-weight');
+  weightSlider.style.setProperty('--val', weightSlider.value);
   weightSlider.addEventListener('input', () => {
     document.getElementById('edge-weight-val').textContent = Number(weightSlider.value).toFixed(2);
     setMinEdgeWeight(Number(weightSlider.value));
+    weightSlider.style.setProperty('--val', weightSlider.value);
   });
 
   const regionSlider = document.getElementById('region-pull');
+  regionSlider.style.setProperty('--val', regionSlider.value);
   regionSlider.addEventListener('input', () => {
     const v = Number(regionSlider.value);
     document.getElementById('region-pull-val').textContent = v.toFixed(2);
     setConfig({ regionClustering: v });
+    regionSlider.style.setProperty('--val', regionSlider.value);
     const tw = document.getElementById('cfg-region');
     const twv = document.getElementById('cfg-region-val');
     if (tw) tw.value = String(v);
