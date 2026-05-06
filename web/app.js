@@ -175,7 +175,7 @@ async function refresh() {
     }
     if (data.nodes.length === 0) renderEmpty();
   } catch (err) {
-    document.getElementById('stats').textContent = '0 nodes · 0 edges';
+    document.getElementById('stats').textContent = '0 nodes · 0 edges';
     renderEmpty(`Could not load <code>data/graph.json</code> — ${escape(err.message)}`);
   }
 }
