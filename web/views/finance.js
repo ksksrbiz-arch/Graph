@@ -597,7 +597,7 @@ function injectStyles() {
     .fin-loading { color: var(--text-dim, #9aa3b2); padding: 20px; border: 1px solid rgba(0,212,255,0.14); border-radius: 10px; background: linear-gradient(90deg, rgba(0,212,255,0.05), rgba(255,255,255,0.03), rgba(0,212,255,0.05)); background-size: 220% 100%; animation: fin-skeleton 1.6s ease-in-out infinite; }
     .fin-error { color: #ffd6d6; padding: 12px; background: rgba(58,26,26,0.86); border: 1px solid rgba(255,138,138,0.35); border-radius: 8px; margin: 8px 0; display:flex; flex-direction:column; gap:4px; }
     .fin-empty { color: var(--text-faint, #6b7385); font-style: italic; padding: 12px 0; }
-    .fin-section { margin-bottom: 24px; }
+    .fin-section { margin-bottom: 24px; overflow-x: auto; }
     .fin-section-title { font: 600 12px/1 ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim, #9aa3b2); margin: 0 0 10px; }
     .fin-section-title .fin-count { background: var(--bg-elev-2, #181c25); color: var(--text, #e6e8ee); padding: 1px 6px; border-radius: 10px; font-weight: 400; margin-left: 4px; }
     .fin-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }

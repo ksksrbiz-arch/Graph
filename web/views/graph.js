@@ -511,7 +511,7 @@ function refreshOverlay() {
 
 function scheduleRendererData(data) {
   pendingRendererData = data;
-  if (applyFiltersRaf) return;
+  if (applyFiltersRaf) cancelAnimationFrame(applyFiltersRaf);
   applyFiltersRaf = requestAnimationFrame(() => {
     applyFiltersRaf = 0;
     if (!renderer || !pendingRendererData) return;
@@ -754,7 +754,7 @@ function trapPanelFocus(e) {
   const panel = document.getElementById('panel');
   if (!panel?.classList.contains('open') || !panel.contains(document.activeElement)) return false;
   const focusables = [...panel.querySelectorAll('button, a[href], summary, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
-    .filter((el) => !el.disabled && el.offsetParent !== null);
+    .filter((el) => !el.disabled && el.getClientRects().length > 0);
   if (focusables.length === 0) return false;
   const first = focusables[0];
   const last = focusables[focusables.length - 1];

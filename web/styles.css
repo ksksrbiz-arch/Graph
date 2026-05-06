@@ -1918,12 +1918,15 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
 :root {
   --bg: var(--bg-void, #000507);
   --bg-elev: var(--bg-panel, #040d14);
+  --bg-elev-2: #08131c;
   --bg-elev-2: color-mix(in srgb, var(--bg-panel, #040d14), white 7%);
+  --bg-elev-3: #0b1823;
   --bg-elev-3: color-mix(in srgb, var(--bg-panel, #040d14), white 12%);
   --border: var(--border-dim, rgba(0, 212, 255, 0.12));
   --border-strong: var(--border-active, rgba(0, 212, 255, 0.45));
   --text: var(--text-primary, #e8f4f8);
   --text-dim: var(--text-secondary, #7ab8cc);
+  --text-faint: #4d7e8f;
   --text-faint: color-mix(in srgb, var(--text-secondary, #7ab8cc), transparent 48%);
   --accent: var(--cyan-core, #00d4ff);
   --accent-hover: var(--teal-core, #00ffaa);

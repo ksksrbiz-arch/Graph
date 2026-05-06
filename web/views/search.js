@@ -12,6 +12,7 @@ export function initSearchView() {
     worker = new Worker(new URL('../search-worker.js', import.meta.url), { type: 'module' });
     worker.onmessage = (event) => {
       if (event.data?.query !== lastQuery) return;
+      if (event.data?.error) console.warn('[search] worker failed:', event.data.error);
       renderResults(event.data.results || [], lastQuery);
     };
   } catch (err) {
@@ -93,13 +94,14 @@ function renderResults(results, q) {
     out.appendChild(el('div', { class: 'empty empty-rich' }, 'No matching labels or metadata. Try a broader term.'));
     return;
   }
+  const ql = q.toLowerCase();
   for (const r of results) {
     const card = el('button', { class: 'search-result', type: 'button' });
     const labelHtml = highlightSnippet(r.node.label || r.node.id, q);
     const matchesHtml = r.fields
       .filter((f) => f.field !== 'label')
       .slice(0, 3)
-      .map((f) => `<div><b>${escape(f.field)}:</b> ${highlightSnippet(truncateAround(f.value, q.toLowerCase()), q)}</div>`)
+      .map((f) => `<div><b>${escape(f.field)}:</b> ${highlightSnippet(truncateAround(f.value, ql), q)}</div>`)
       .join('');
     card.innerHTML = `
       <div>

@@ -356,8 +356,11 @@ function addAudio(kind, label, audioObj) {
 function replaceLast(kind, text) {
   if (!lastEl) return add(kind, text);
   lastEl.className = `cortex-msg cortex-${kind}`;
-  lastEl.querySelector('.cm-tag').textContent = kind;
-  lastEl.querySelector('.cm-body').textContent = text;
+  const tag = lastEl.querySelector('.cm-tag');
+  const body = lastEl.querySelector('.cm-body');
+  if (!tag || !body) return add(kind, text);
+  tag.textContent = kind;
+  body.textContent = text;
   lastClass = kind;
 }
 

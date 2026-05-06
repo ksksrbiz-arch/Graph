@@ -10,9 +10,19 @@ export function initTimelineView() {
   subscribe((reason) => {
     if (reason === 'graph-loaded' || reason === 'filters-changed' || reason === 'search-changed') {
       render();
-      if (!minuteTimer) minuteTimer = setInterval(render, 60_000);
+      syncMinuteTimer();
     }
   });
+  window.addEventListener('hashchange', syncMinuteTimer);
+}
+
+function syncMinuteTimer() {
+  const active = location.hash === '#/timeline';
+  if (active && !minuteTimer) minuteTimer = setInterval(render, 60_000);
+  if (!active && minuteTimer) {
+    clearInterval(minuteTimer);
+    minuteTimer = null;
+  }
 }
 
 function buildTypeFilters() {
@@ -25,7 +35,7 @@ function buildTypeFilters() {
     const label = el('label', { class: on ? 'on' : '', for: id });
     label.innerHTML = `
       <input type="checkbox" id="${id}" value="${t}" ${on ? 'checked' : ''} />
-      <span class="swatch" style="--c:${colorForType(t)}" aria-hidden="true"></span><span class="sr-only">${escape(t)}</span>${escape(t)}
+      <span class="swatch" style="--c:${colorForType(t)}" aria-hidden="true"></span>${escape(t)}
     `;
     label.querySelector('input').addEventListener('change', (e) => {
       toggleFilterType(t, e.target.checked);

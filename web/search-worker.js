@@ -1,17 +1,21 @@
 self.onmessage = (event) => {
   const { nodes = [], query = '' } = event.data || {};
-  const ql = String(query).trim().toLowerCase();
-  if (!ql) {
-    self.postMessage({ query, results: [] });
-    return;
+  try {
+    const ql = String(query).trim().toLowerCase();
+    if (!ql) {
+      self.postMessage({ query, results: [] });
+      return;
+    }
+    const results = [];
+    for (const node of nodes) {
+      const matches = scoreNode(node, ql);
+      if (matches.score > 0) results.push({ node, ...matches });
+    }
+    results.sort((a, b) => b.score - a.score);
+    self.postMessage({ query, results: results.slice(0, 200) });
+  } catch (err) {
+    self.postMessage({ query, error: err?.message || String(err), results: [] });
   }
-  const results = [];
-  for (const node of nodes) {
-    const matches = scoreNode(node, ql);
-    if (matches.score > 0) results.push({ node, ...matches });
-  }
-  results.sort((a, b) => b.score - a.score);
-  self.postMessage({ query, results: results.slice(0, 200) });
 };
 
 function scoreNode(node, ql) {

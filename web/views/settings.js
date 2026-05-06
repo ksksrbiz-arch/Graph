@@ -109,7 +109,8 @@ export function initSettingsView() {
   document.getElementById('cfg-export')?.addEventListener('click', async () => {
     const json = JSON.stringify(state.config, null, 2);
     try {
-      await navigator.clipboard?.writeText(json);
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(json);
       showToast('Config JSON copied', 'success');
     } catch {
       const box = document.getElementById('cfg-import-box');

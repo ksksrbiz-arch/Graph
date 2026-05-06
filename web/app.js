@@ -92,7 +92,7 @@ async function bootstrap() {
   document.getElementById('search-toggle').addEventListener('click', toggleMobileSearch);
   document.getElementById('graph-toolbar-toggle')?.addEventListener('click', () => {
     const open = document.body.classList.toggle('graph-tools-open');
-    document.getElementById('graph-toolbar-toggle')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+    document.getElementById('graph-toolbar-toggle').setAttribute('aria-expanded', open ? 'true' : 'false');
   });
   document.getElementById('global-search').addEventListener('blur', () => {
     if (!document.getElementById('global-search').value) closeMobileSearch();
