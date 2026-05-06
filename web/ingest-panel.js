@@ -32,7 +32,7 @@ export function createIngestPanel({ container, onIngested } = {}) {
   root.setAttribute('aria-label', 'Live ingest');
   root.innerHTML = `
     <header class="ingest-panel-head">
-      <span class="ingest-panel-title">⚡ Brain ingest</span>
+      <span class="ingest-panel-title"><span class="glyph">⬡</span> BRAIN INGEST</span>
       <div class="ingest-panel-tabs" role="tablist">
         <button type="button" data-tab="url" class="active" role="tab">URL</button>
         <button type="button" data-tab="text" role="tab">Text</button>
@@ -48,7 +48,7 @@ export function createIngestPanel({ container, onIngested } = {}) {
           <input type="url" class="ingest-url" placeholder="https://example.com/article" />
           <button type="button" class="ingest-btn ingest-btn-url">Ingest →</button>
         </div>
-        <p class="ingest-hint">Fetched in your browser. Sites without permissive CORS will fall back to "paste the text yourself".</p>
+        <p class="ingest-help">Fetched in your browser. Sites without permissive CORS will fall back to "paste the text yourself".</p>
         <div class="ingest-status" data-status></div>
       </div>
       <div class="ingest-tab hidden" data-pane="text">

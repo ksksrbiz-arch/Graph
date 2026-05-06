@@ -225,6 +225,12 @@ input[type="search"]:focus, input[type="text"]:focus, select:focus {
   .brand > .tag#stats { display: none; }
 }
 
+/* The legacy vitals strip duplicates the visual-spec stats bar (#hud-stats-bar)
+   that sits at top:0. Two telemetry rows stacking on top of each other is the
+   #1 reported breakage — hide vitals when the new stats bar is in the DOM. */
+#view-graph #hud-stats-bar ~ #vitals,
+#view-graph .vitals-strip { display: none; }
+
 /* -- Brain / Cortex / Finance shells: ensure base console framing -------- */
 #view-brain:empty::before,
 #view-cortex:empty::before,

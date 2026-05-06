@@ -1107,12 +1107,15 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
 }
 .ingest-panel-title {
   flex: 0 0 auto;
-  font-size: 0.78rem;
+  font-family: var(--text-mono, 'JetBrains Mono', 'Roboto Mono', monospace);
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text-label, #00d4ffcc);
   font-weight: 600;
+  user-select: none;
 }
+.ingest-panel-title .glyph { color: var(--cyan-core, #00d4ff); margin-right: 4px; }
 .ingest-panel-tabs { display: flex; gap: 0.2rem; flex: 1; justify-content: center; }
 .ingest-panel-tabs button {
   background: transparent;
@@ -1124,9 +1127,10 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
   cursor: pointer;
 }
 .ingest-panel-tabs button.active {
-  background: rgba(124, 156, 255, 0.16);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: rgba(0, 212, 255, 0.18);
+  border-color: var(--cyan-core, #00d4ff);
+  border-bottom: 2px solid var(--cyan-core, #00d4ff);
+  color: var(--cyan-core, #00d4ff);
 }
 .ingest-panel-close {
   background: transparent;
@@ -1177,6 +1181,12 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
 .ingest-btn.full-width { width: 100%; }
 
 .ingest-hint { color: var(--text-faint, rgba(255, 255, 255, 0.45)); font-size: 0.72rem; margin: 0; }
+.ingest-help {
+  font-size: 11px;
+  color: var(--text-dim, rgba(255, 255, 255, 0.55));
+  font-style: italic;
+  margin: 4px 0 0;
+}
 
 .ingest-log { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
 .ingest-log-empty { color: var(--text-faint, rgba(255, 255, 255, 0.4)); font-size: 0.78rem; padding: 0.6rem; text-align: center; }
