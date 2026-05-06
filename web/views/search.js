@@ -16,7 +16,7 @@ export function initSearchView() {
       renderResults(event.data.results || [], lastQuery);
     };
   } catch (err) {
-    console.warn('[search] worker unavailable, using main thread search', err);
+    console.warn('[search] worker unavailable, using main thread search. This may occur in insecure contexts or browsers without Worker support.', err);
   }
   input.addEventListener('input', () => {
     clearTimeout(debounce);

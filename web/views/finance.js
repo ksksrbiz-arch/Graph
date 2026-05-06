@@ -560,7 +560,7 @@ function taxBadge(cat) {
 }
 
 function err_html(msg) {
-  return `<div class="error-banner fin-error" role="alert"><b>Finance API unavailable</b><span>${esc(msg)}</span></div>`;
+  return `<div class="error-banner fin-error" role="alert" aria-live="polite"><b>Finance API unavailable</b><span>${esc(msg)}</span></div>`;
 }
 
 function esc(s) {

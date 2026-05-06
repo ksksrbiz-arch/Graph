@@ -109,7 +109,7 @@ export function initSettingsView() {
   document.getElementById('cfg-export')?.addEventListener('click', async () => {
     const json = JSON.stringify(state.config, null, 2);
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API not available in this context');
       await navigator.clipboard.writeText(json);
       showToast('Config JSON copied', 'success');
     } catch {
@@ -204,6 +204,7 @@ function setRangeVisual(input) {
   const max = Number(input.max || 100);
   const value = Number(input.value || 0);
   if (max === min) {
+    console.warn(`[settings] range input ${input.id} has equal min/max`);
     input.style.setProperty('--val', '0');
     return;
   }

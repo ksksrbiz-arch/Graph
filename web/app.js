@@ -184,7 +184,7 @@ async function refresh() {
     if (data.nodes.length === 0) renderEmpty();
   } catch (err) {
     document.getElementById('stats').textContent = '0 nodes · 0 edges';
-    showToast(`Graph load failed: ${err.message}. Try Reload in Settings.`, 'error');
+    showToast(`Graph load failed: ${err.message}. Try Reload in Settings → Data.`, 'error');
     renderEmpty(`Could not load <code>data/graph.json</code> — ${escape(err.message)}`);
   } finally {
     setGraphLoading(false);

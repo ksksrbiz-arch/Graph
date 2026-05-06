@@ -741,7 +741,7 @@ function openContextMenu(node, evt) {
   const url = node.sourceUrl || node.metadata?.sourceUrl;
   if (url) items.push({ label: 'Open source link', fn: () => window.open(url, '_blank', 'noopener') });
   for (const it of items) {
-    const b = el('button', { type: 'button' }, it.label);
+    const b = el('button', { type: 'button', role: 'menuitem' }, it.label);
     b.addEventListener('click', () => { it.fn(); closeContextMenu(); });
     menu.appendChild(b);
   }

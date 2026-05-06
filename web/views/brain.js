@@ -221,7 +221,9 @@ function setStatus(text) {
 function setPulseState(state) {
   const dot = document.querySelector('.pulse-dot');
   if (!dot) return;
-  dot.classList.toggle('reconnecting', state === 'reconnecting');
+  const reconnecting = state === 'reconnecting';
+  dot.classList.toggle('reconnecting', reconnecting);
+  dot.setAttribute('aria-label', reconnecting ? 'Connection status: reconnecting' : 'Connection status: live');
 }
 
 function renderSummary(summary) {

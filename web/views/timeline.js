@@ -5,6 +5,9 @@ import { focusNodeFromOutside } from './graph.js';
 let typeFiltersBuilt = false;
 let itemCache = new Map();
 let minuteTimer = null;
+const MIN_CONFIDENCE = 0.2;
+const BASE_CONFIDENCE = 0.4;
+const DEGREE_CONFIDENCE_WEIGHT = 0.12;
 const routeAbort = new AbortController();
 
 export function initTimelineView() {
@@ -91,7 +94,7 @@ function renderEmptyTimeline() {
     <div class="empty-icon" aria-hidden="true">⧖</div>
     <div class="empty-copy">
       <h3>No timeline activity yet</h3>
-      <p>Run an ingester to populate recent activity, then press the <kbd aria-label="f key">f</kbd> key on the graph to fit the view.</p>
+      <p>Run an ingester to populate recent activity, then press the <kbd aria-label="press f to fit graph view">f</kbd> key on the graph to fit the view.</p>
       <p><code>npm run ingest:claude-code</code></p>
     </div>
   `;
@@ -133,7 +136,7 @@ function confidenceFor(node) {
   const raw = node.confidence ?? node.metadata?.confidence;
   return typeof raw === 'number' && Number.isFinite(raw)
     ? Math.max(0, Math.min(1, raw))
-    : Math.max(0.2, Math.min(1, 0.4 + Math.log2((node.__degree || 0) + 1) * 0.12));
+    : Math.max(MIN_CONFIDENCE, Math.min(1, BASE_CONFIDENCE + Math.log2((node.__degree || 0) + 1) * DEGREE_CONFIDENCE_WEIGHT));
 }
 
 function labelDay(when) {
