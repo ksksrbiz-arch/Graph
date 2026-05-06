@@ -277,11 +277,9 @@ function setupBrainAnimationPipeline() {
 function buildOrUpdate() {
   if (state.graph.nodes.length === 0) {
     document.getElementById('stats').textContent = '0 nodes · 0 edges';
-    document.getElementById('legend').classList.add('hidden');
     return;
   }
   buildTypeFilters();
-  buildLegend();
   if (!renderer) rebuildRenderer();
   applyFilters();
   applyConfig();
@@ -430,7 +428,6 @@ function applyFilters() {
   } else {
     banner.classList.add('hidden');
   }
-  buildLegend(ids);
   renderPanel();
 }
 
@@ -517,38 +514,6 @@ function buildTypeFilters() {
   }
 }
 
-function buildLegend(visibleIds) {
-  const counts = new Map();
-  const ids = visibleIds || new Set(state.graph.nodes.map((n) => n.id));
-  for (const n of state.graph.nodes) {
-    if (!ids.has(n.id)) continue;
-    counts.set(n.type, (counts.get(n.type) || 0) + 1);
-  }
-  const legend = document.getElementById('legend');
-  legend.innerHTML = '';
-  const types = [...counts.keys()].sort();
-  if (types.length === 0) { legend.classList.add('hidden'); return; }
-  legend.classList.remove('hidden');
-  if (state.config.colorMode === 'region') {
-    const regions = new Map();
-    for (const n of state.graph.nodes) {
-      if (!ids.has(n.id)) continue;
-      const r = n.region || regionForNode(n);
-      regions.set(r, (regions.get(r) || 0) + 1);
-    }
-    for (const r of [...regions.keys()].sort()) {
-      const row = el('div', { class: 'row' });
-      row.innerHTML = `<span class="swatch" style="--c:${styleForRegion(r).color}"></span><b>${styleForRegion(r).label}</b><span class="count">${regions.get(r)}</span>`;
-      legend.appendChild(row);
-    }
-    return;
-  }
-  for (const t of types) {
-    const row = el('div', { class: 'row' });
-    row.innerHTML = `<span class="swatch" style="--c:${colorForType(t)}"></span><b>${t}</b><span class="count">${counts.get(t)}</span>`;
-    legend.appendChild(row);
-  }
-}
 
 function renderPanel() {
   const panel = document.getElementById('panel');

@@ -55,7 +55,7 @@ export function fmtDay(s) {
 export function fmtTime(s) {
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
 export function socketNamespaceUrl(apiBaseUrl, namespace) {
