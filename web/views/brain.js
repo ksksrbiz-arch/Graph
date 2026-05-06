@@ -78,9 +78,11 @@ function ensureSocket() {
     reconnection: true,
     reconnectionDelay: 500,
   });
-  socket.on('connect', () => setStatus('live'));
-  socket.on('disconnect', () => setStatus('disconnected'));
-  socket.on('connect_error', (err) => setStatus(`offline (${err.message})`));
+  socket.on('connect', () => { setStatus('live'); setPulseState('live'); });
+  socket.on('disconnect', () => { setStatus('disconnected'); setPulseState('reconnecting'); });
+  socket.io?.on?.('reconnect_attempt', () => setPulseState('reconnecting'));
+  socket.io?.on?.('reconnect', () => setPulseState('live'));
+  socket.on('connect_error', (err) => { setStatus(`offline (${err.message})`); setPulseState('reconnecting'); });
   socket.on('hello', (msg) => {
     if (!msg?.running) {
       setStatus('idle (start the brain via POST /api/v1/brain/start)');
@@ -214,6 +216,12 @@ function tabButton(id, label, active = false) {
 function setStatus(text) {
   const node = document.getElementById('brain-status');
   if (node) node.textContent = text;
+}
+
+function setPulseState(state) {
+  const dot = document.querySelector('.pulse-dot');
+  if (!dot) return;
+  dot.classList.toggle('reconnecting', state === 'reconnecting');
 }
 
 function renderSummary(summary) {

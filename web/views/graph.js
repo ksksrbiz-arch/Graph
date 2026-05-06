@@ -35,6 +35,8 @@ let graphLive = null;
 let ingestPanel = null;
 let statsBarApi = null;
 let brainControlsApi = null;
+let applyFiltersRaf = 0;
+let pendingRendererData = null;
 
 export function initGraphView() {
   const canvas = document.getElementById('canvas');
@@ -111,6 +113,7 @@ export function initGraphView() {
     if (e.target.tagName === 'CANVAS') closeContextMenu();
   });
   document.addEventListener('keydown', (e) => {
+    if (trapPanelFocus(e)) return;
     if (e.key === 'Escape') {
       closeContextMenu();
       if (state.focusRootId) clearFocus();
@@ -428,7 +431,7 @@ function applyFilters() {
     .filter((e) => ids.has(srcId(e)) && ids.has(tgtId(e)))
     .filter((e) => (e.weight || 0) >= state.filters.minEdgeWeight)
     .map((e) => ({ ...e, source: srcId(e), target: tgtId(e) }));
-  renderer.setData({ nodes, links: edges });
+  scheduleRendererData({ nodes, links: edges });
   document.getElementById('stats').textContent = `${nodes.length} nodes · ${edges.length} edges`;
   document.getElementById('reset-focus').disabled = !state.focusRootId;
   const banner = document.getElementById('focus-banner');
@@ -506,6 +509,17 @@ function refreshOverlay() {
   renderer.refresh?.();
 }
 
+function scheduleRendererData(data) {
+  pendingRendererData = data;
+  if (applyFiltersRaf) return;
+  applyFiltersRaf = requestAnimationFrame(() => {
+    applyFiltersRaf = 0;
+    if (!renderer || !pendingRendererData) return;
+    renderer.setData(pendingRendererData);
+    pendingRendererData = null;
+  });
+}
+
 function buildTypeFilters() {
   const types = [...new Set(state.graph.nodes.map((n) => n.type))].sort();
   const fs = document.getElementById('type-filters');
@@ -565,6 +579,10 @@ function renderPanel() {
   const node = state.byId.get(state.selectedId);
   if (!node) { panel.classList.remove('open'); return; }
   panel.classList.add('open');
+  panel.setAttribute('tabindex', '-1');
+  requestAnimationFrame(() => {
+    if (!panel.contains(document.activeElement)) panel.focus({ preventScroll: true });
+  });
 
   // Header — type badge + label.
   document.getElementById('panel-title').textContent = node.label || node.id;
@@ -610,7 +628,8 @@ function renderPanel() {
     const li = el('li');
     li.style.setProperty('--c', colorForType(other.type));
     li.innerHTML = `
-      <span class="swatch"></span>
+      <span class="swatch" aria-hidden="true"></span>
+      <span class="sr-only">${escape(other.type || 'node')} connection</span>
       <span class="lbl">${escape(other.label || other.id)}</span>
     `;
     li.addEventListener('click', () => {
@@ -726,6 +745,30 @@ function openContextMenu(node, evt) {
   menu.style.left = `${evt.clientX}px`;
   menu.style.top = `${evt.clientY}px`;
   menu.classList.remove('hidden');
+  menu.focus({ preventScroll: true });
+  menu.querySelector('button')?.focus({ preventScroll: true });
+}
+
+function trapPanelFocus(e) {
+  if (e.key !== 'Tab' || !state.selectedId) return false;
+  const panel = document.getElementById('panel');
+  if (!panel?.classList.contains('open') || !panel.contains(document.activeElement)) return false;
+  const focusables = [...panel.querySelectorAll('button, a[href], summary, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+  if (focusables.length === 0) return false;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+    return true;
+  }
+  if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+    return true;
+  }
+  return false;
 }
 
 function closeContextMenu() {

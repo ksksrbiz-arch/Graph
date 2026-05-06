@@ -565,6 +565,16 @@ async function render() {
   );
 
   const [isLocal, isPublic] = await Promise.all([localIngestSupported(), publicIngestAvailable()]);
+  if (sources.size === 0) {
+    container.appendChild(el('div', { class: 'connector-first-run empty-rich' },
+      el('div', { class: 'empty-icon', 'aria-hidden': 'true' }, '↯'),
+      el('div', { class: 'empty-copy' },
+        el('h3', {}, 'No synced sources yet'),
+        el('p', {}, 'Start with a local graph ingest or drop a notes folder below.'),
+        el('p', {}, el('code', {}, 'npm run ingest:claude-code')),
+      ),
+    ));
+  }
 
   // ── Quick ingest drop-zone ───────────────────────────────────────────────
   // Surface a one-click "drop a folder of notes" entry point at the top of

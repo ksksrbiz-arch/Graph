@@ -3,11 +3,14 @@ import { colorForType, escape, fmtDay, fmtTime, el } from '../util.js';
 import { focusNodeFromOutside } from './graph.js';
 
 let typeFiltersBuilt = false;
+let itemCache = new Map();
+let minuteTimer = null;
 
 export function initTimelineView() {
   subscribe((reason) => {
     if (reason === 'graph-loaded' || reason === 'filters-changed' || reason === 'search-changed') {
       render();
+      if (!minuteTimer) minuteTimer = setInterval(render, 60_000);
     }
   });
 }
@@ -22,7 +25,7 @@ function buildTypeFilters() {
     const label = el('label', { class: on ? 'on' : '', for: id });
     label.innerHTML = `
       <input type="checkbox" id="${id}" value="${t}" ${on ? 'checked' : ''} />
-      <span class="swatch" style="--c:${colorForType(t)}"></span>${t}
+      <span class="swatch" style="--c:${colorForType(t)}" aria-hidden="true"></span><span class="sr-only">${escape(t)}</span>${escape(t)}
     `;
     label.querySelector('input').addEventListener('change', (e) => {
       toggleFilterType(t, e.target.checked);
@@ -36,7 +39,6 @@ function buildTypeFilters() {
 function render() {
   if (!typeFiltersBuilt) buildTypeFilters();
   const list = document.getElementById('timeline-list');
-  list.innerHTML = '';
 
   const q = state.filters.search.trim().toLowerCase();
   const items = state.graph.nodes
@@ -51,30 +53,80 @@ function render() {
     .slice(0, 500);
 
   if (items.length === 0) {
-    list.appendChild(el('div', { class: 'empty' }, 'No nodes to show yet.'));
+    list.replaceChildren(renderEmptyTimeline());
     return;
   }
 
+  const frag = document.createDocumentFragment();
+  const liveIds = new Set();
   let lastDay = null;
   for (const { node, when } of items) {
-    const day = fmtDay(when);
+    const day = labelDay(when);
     if (day !== lastDay) {
-      list.appendChild(el('div', { class: 'timeline-day' }, day));
+      frag.appendChild(el('div', { class: 'timeline-day' }, day));
       lastDay = day;
     }
-    const item = el('div', { class: 'timeline-item' });
-    item.innerHTML = `
-      <span class="timeline-time">${fmtTime(when)}</span>
-      <span class="timeline-label">
-        <span class="swatch" style="--c:${colorForType(node.type)}"></span>
-        <span class="name">${escape(node.label || node.id)}</span>
-      </span>
-      <span class="timeline-type">${node.type}</span>
-    `;
+    liveIds.add(node.id);
+    frag.appendChild(renderItem(node, when));
+  }
+  for (const id of [...itemCache.keys()]) if (!liveIds.has(id)) itemCache.delete(id);
+  list.replaceChildren(frag);
+}
+
+function renderEmptyTimeline() {
+  const box = el('div', { class: 'empty empty-rich' });
+  box.innerHTML = `
+    <div class="empty-icon" aria-hidden="true">⧖</div>
+    <div class="empty-copy">
+      <h3>No timeline activity yet</h3>
+      <p>Run an ingester to populate recent activity, then press <kbd>f</kbd> on the graph to fit the view.</p>
+      <p><code>npm run ingest:claude-code</code></p>
+    </div>
+  `;
+  return box;
+}
+
+function renderItem(node, when) {
+  const key = node.id;
+  let item = itemCache.get(key);
+  if (!item) {
+    item = el('button', { class: 'timeline-item', type: 'button' });
     item.addEventListener('click', () => {
       location.hash = '#/graph';
-      requestAnimationFrame(() => focusNodeFromOutside(node.id));
+      requestAnimationFrame(() => focusNodeFromOutside(key));
     });
-    list.appendChild(item);
+    itemCache.set(key, item);
   }
+  const source = node.sourceId || node.source || node.metadata?.source || 'manual';
+  const conf = confidenceFor(node);
+  const edges = node.__degree || 0;
+  item.innerHTML = `
+    <span class="timeline-time">${fmtTime(when)}</span>
+    <span class="timeline-label">
+      <span class="swatch" style="--c:${colorForType(node.type)}" aria-hidden="true"></span>
+      <span class="sr-only">${escape(node.type)} node:</span>
+      <span class="name">${escape(node.label || node.id)}</span>
+    </span>
+    <span class="timeline-type">${escape(node.type)}</span>
+    <span class="timeline-meta">
+      <span>${escape(source)}</span>
+      <span class="confidence-mini" title="confidence ${Math.round(conf * 100)}%"><i style="width:${Math.round(conf * 100)}%"></i></span>
+      <span>${edges} edge${edges === 1 ? '' : 's'}</span>
+    </span>
+  `;
+  return item;
+}
+
+function confidenceFor(node) {
+  const raw = node.confidence ?? node.metadata?.confidence;
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.max(0, Math.min(1, raw))
+    : Math.max(0.2, Math.min(1, 0.4 + Math.log2((node.__degree || 0) + 1) * 0.12));
+}
+
+function labelDay(when) {
+  const d = new Date(when);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'Today';
+  return fmtDay(when);
 }
