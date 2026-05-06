@@ -87,22 +87,19 @@ input[type="search"]:focus, input[type="text"]:focus {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0 1.25rem 0 1rem;
+  padding: 0 1rem;
   height: var(--topbar-h);
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border);
   z-index: 5;
   position: relative;
 }
-.brand { display: flex; align-items: center; gap: 10px; padding-left: 12px; }
+.brand { display: flex; align-items: center; gap: 0.6rem; }
 .brand h1 { font-size: 1rem; margin: 0; font-weight: 600; letter-spacing: 0.02em; }
-.brand-stack { display: inline-flex; flex-direction: column; line-height: 1.15; }
-.brand-sub { font-size: 0.7rem; color: var(--text-dim); letter-spacing: 0.04em; }
 .logo {
   width: 18px; height: 18px; border-radius: 50%;
   background: radial-gradient(circle at 30% 30%, var(--accent), #2a3870 70%);
   box-shadow: 0 0 10px rgba(124, 156, 255, 0.5);
-  flex-shrink: 0;
 }
 .tag {
   font-size: 0.78rem;
@@ -110,9 +107,8 @@ input[type="search"]:focus, input[type="text"]:focus {
   padding: 0.15rem 0.55rem;
   border: 1px solid var(--border);
   border-radius: 999px;
-  white-space: nowrap;
 }
-.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.topbar-actions { display: flex; align-items: center; gap: 0.6rem; }
 .topbar-actions input[type="search"] { width: 240px; }
 
 /* ── App shell ───────────────────────────────────────── */
@@ -130,7 +126,7 @@ input[type="search"]:focus, input[type="text"]:focus {
   padding: 0.5rem;
 }
 .nav-item {
-  display: flex; align-items: center; gap: 0.5rem;
+  display: flex; align-items: center; gap: 0.55rem;
   color: var(--text-dim);
   text-decoration: none;
   padding: 0.5rem 0.7rem;
@@ -145,9 +141,7 @@ input[type="search"]:focus, input[type="text"]:focus {
   border: 1.5px solid currentColor;
   border-radius: 3px;
   position: relative;
-  vertical-align: middle;
 }
-.nav-item > span:not(.nav-glyph) { line-height: 1; }
 .nav-glyph[data-g="graph"]::before,
 .nav-glyph[data-g="graph"]::after {
   content: ""; position: absolute; background: currentColor; border-radius: 50%;
@@ -1113,12 +1107,15 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
 }
 .ingest-panel-title {
   flex: 0 0 auto;
-  font-size: 0.78rem;
+  font-family: var(--text-mono, 'JetBrains Mono', 'Roboto Mono', monospace);
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text-label, #00d4ffcc);
   font-weight: 600;
+  user-select: none;
 }
+.ingest-panel-title .glyph { color: var(--cyan-core, #00d4ff); margin-right: 4px; }
 .ingest-panel-tabs { display: flex; gap: 0.2rem; flex: 1; justify-content: center; }
 .ingest-panel-tabs button {
   background: transparent;
@@ -1130,9 +1127,10 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
   cursor: pointer;
 }
 .ingest-panel-tabs button.active {
-  background: rgba(124, 156, 255, 0.16);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: rgba(0, 212, 255, 0.18);
+  border-color: var(--cyan-core, #00d4ff);
+  border-bottom: 2px solid var(--cyan-core, #00d4ff);
+  color: var(--cyan-core, #00d4ff);
 }
 .ingest-panel-close {
   background: transparent;
@@ -1183,6 +1181,12 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
 .ingest-btn.full-width { width: 100%; }
 
 .ingest-hint { color: var(--text-faint, rgba(255, 255, 255, 0.45)); font-size: 0.72rem; margin: 0; }
+.ingest-help {
+  font-size: 11px;
+  color: var(--text-dim, rgba(255, 255, 255, 0.55));
+  font-style: italic;
+  margin: 4px 0 0;
+}
 
 .ingest-log { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
 .ingest-log-empty { color: var(--text-faint, rgba(255, 255, 255, 0.4)); font-size: 0.78rem; padding: 0.6rem; text-align: center; }
