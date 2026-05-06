@@ -5,6 +5,7 @@ import { focusNodeFromOutside } from './graph.js';
 let typeFiltersBuilt = false;
 let itemCache = new Map();
 let minuteTimer = null;
+const routeAbort = new AbortController();
 
 export function initTimelineView() {
   subscribe((reason) => {
@@ -13,7 +14,8 @@ export function initTimelineView() {
       syncMinuteTimer();
     }
   });
-  window.addEventListener('hashchange', syncMinuteTimer);
+  window.addEventListener('hashchange', syncMinuteTimer, { signal: routeAbort.signal });
+  window.addEventListener('pagehide', () => routeAbort.abort(), { once: true });
 }
 
 function syncMinuteTimer() {
@@ -89,7 +91,7 @@ function renderEmptyTimeline() {
     <div class="empty-icon" aria-hidden="true">⧖</div>
     <div class="empty-copy">
       <h3>No timeline activity yet</h3>
-      <p>Run an ingester to populate recent activity, then press <kbd>f</kbd> on the graph to fit the view.</p>
+      <p>Run an ingester to populate recent activity, then press the <kbd aria-label="f key">f</kbd> key on the graph to fit the view.</p>
       <p><code>npm run ingest:claude-code</code></p>
     </div>
   `;

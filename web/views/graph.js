@@ -511,7 +511,10 @@ function refreshOverlay() {
 
 function scheduleRendererData(data) {
   pendingRendererData = data;
-  if (applyFiltersRaf) cancelAnimationFrame(applyFiltersRaf);
+  if (applyFiltersRaf) {
+    cancelAnimationFrame(applyFiltersRaf);
+    applyFiltersRaf = 0;
+  }
   applyFiltersRaf = requestAnimationFrame(() => {
     applyFiltersRaf = 0;
     if (!renderer || !pendingRendererData) return;

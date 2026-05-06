@@ -203,7 +203,11 @@ function setRangeVisual(input) {
   const min = Number(input.min || 0);
   const max = Number(input.max || 100);
   const value = Number(input.value || 0);
-  const pct = max === min ? 0 : (value - min) / (max - min);
+  if (max === min) {
+    input.style.setProperty('--val', '0');
+    return;
+  }
+  const pct = (value - min) / (max - min);
   input.style.setProperty('--val', String(Math.max(0, Math.min(1, pct))));
 }
 
