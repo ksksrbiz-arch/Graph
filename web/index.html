@@ -26,7 +26,7 @@
         <h1>Graph</h1>
         <span class="brand-sub">Neural Interface · v0.2</span>
       </span>
-      <span class="pulse-dot" aria-hidden="true" title="Live"></span>
+      <span class="pulse-dot" role="status" aria-label="Connection status: live" title="Live"></span>
       <span class="tag" id="stats">loading…</span>
     </div>
     <div class="topbar-actions">
@@ -62,28 +62,28 @@
       <!-- Graph view -->
       <section id="view-graph" class="view active" aria-label="Graph canvas">
         <div class="graph-toolbar">
-          <fieldset id="type-filters" aria-label="Filter by node type"></fieldset>
-          <div class="graph-toolbar-right">
-            <div class="dim-switch" role="tablist" aria-label="Render mode">
-              <button type="button" data-dim="2" class="active" title="Classic 2D canvas">2D</button>
-              <button type="button" data-dim="3" title="Volumetric WebGL with bloom">3D</button>
-              <button type="button" data-dim="4" title="3D + temporal axis (creation time → Z)">Temporal</button>
+          <button id="graph-toolbar-toggle" class="graph-toolbar-toggle" type="button" aria-expanded="false" aria-controls="graph-toolbar-content" title="Graph controls">⚙</button>
+          <div id="graph-toolbar-content" class="graph-toolbar-content">
+            <fieldset id="type-filters" aria-label="Filter by node type"></fieldset>
+            <div class="graph-toolbar-right">
+              <div class="dim-switch" role="tablist" aria-label="Render mode">
+                <button type="button" data-dim="2" class="active" title="Classic 2D canvas">2D</button>
+                <button type="button" data-dim="3" title="Volumetric WebGL with bloom">3D</button>
+                <button type="button" data-dim="4" title="3D + temporal axis (creation time → Z)">Temporal</button>
+              </div>
+              <label class="slider" title="Hide weak edges below this weight · default 0.00">
+                <span>min edge</span>
+                <input id="edge-weight" type="range" min="0" max="1" step="0.05" value="0" aria-describedby="edge-weight-default" />
+                <span id="edge-weight-val">0.00</span>
+                <span id="edge-weight-default" class="slider-default">default 0</span>
+              </label>
+              <label class="slider" title="Same-region attraction (cortex clustering) · default 0.00">
+                <span>region pull</span>
+                <input id="region-pull" type="range" min="0" max="1" step="0.05" value="0" aria-describedby="region-pull-default" />
+                <span id="region-pull-val">0.00</span>
+                <span id="region-pull-default" class="slider-default">default 0</span>
+              </label>
             </div>
-            <label class="slider" title="Hide weak edges below this weight">
-              <span>min edge</span>
-              <input id="edge-weight" type="range" min="0" max="1" step="0.05" value="0" />
-              <span id="edge-weight-val">0.00</span>
-            </label>
-            <label class="slider" title="Same-region attraction (cortex clustering)">
-              <span>region pull</span>
-              <input id="region-pull" type="range" min="0" max="1" step="0.05" value="0" />
-              <span id="region-pull-val">0.00</span>
-            </label>
-            <button id="brain-link" type="button" class="brain-link" title="Show neural firing on the graph">
-              <span class="dot"></span><span class="lbl">brain</span>
-            </button>
-            <button id="fit-btn" type="button" title="Fit graph to view">Fit</button>
-            <button id="reset-focus" type="button" title="Clear ego-network focus" disabled>Reset focus</button>
           </div>
         </div>
         <div class="neural-backdrop" aria-hidden="true">
@@ -107,9 +107,23 @@
           <span class="hud-row"><b id="hud-mode">2D</b><span id="hud-fps">— fps</span></span>
           <span class="hud-row"><span id="hud-spikes">0 spikes/s</span><span id="hud-mode-detail" class="hud-faint"></span></span>
         </div>
+        <div class="graph-floating-actions" aria-label="Graph quick actions">
+          <button id="brain-link" type="button" class="brain-link" title="Show neural firing on the graph">
+            <span class="dot"></span><span class="lbl">brain</span>
+          </button>
+          <button id="fit-btn" type="button" title="Fit graph to view">Fit</button>
+          <button id="reset-focus" type="button" title="Clear ego-network focus" disabled>Reset focus</button>
+        </div>
         <div class="zoom-controls">
           <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
           <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+        </div>
+        <div id="graph-loading" class="graph-loading hidden" role="status" aria-live="polite">
+          <div class="graph-loading-card">
+            <span class="loading-ring" aria-hidden="true"></span>
+            <b>Loading graph</b>
+            <span>Hydrating nodes, edges, and neural overlays…</span>
+          </div>
         </div>
         <div class="focus-banner hidden" id="focus-banner">
           <span>Ego-network: <b id="focus-banner-label"></b></span>
@@ -164,7 +178,7 @@
             <dl id="panel-meta" style="margin-top:6px;display:grid;grid-template-columns:max-content 1fr;gap:0.25rem 0.7rem;font-size:0.78rem"></dl>
           </details>
         </aside>
-        <div id="context-menu" class="context-menu hidden" role="menu"></div>
+        <div id="context-menu" class="context-menu hidden" role="menu" aria-label="Node actions" tabindex="-1"></div>
       </section>
 
       <!-- Timeline view -->
@@ -339,6 +353,17 @@
             <label class="row"><input id="cfg-labels" type="checkbox" /> Always show labels (off = reveal on hover/select)</label>
             <label class="row"><input id="cfg-auto-refresh" type="checkbox" /> Auto-refresh data every 30s</label>
             <button id="cfg-reset" type="button">Reset all to defaults</button>
+          </section>
+
+          <section class="settings-card">
+            <h3>Preferences</h3>
+            <p class="hint">Export saved settings, import a config from another browser, or preview system defaults.</p>
+            <div class="settings-actions">
+              <button id="cfg-export" type="button">Copy config JSON</button>
+              <button id="cfg-import" type="button">Paste config JSON</button>
+              <button id="cfg-preview-defaults" type="button">Preview system defaults</button>
+            </div>
+            <textarea id="cfg-import-box" class="cfg-import-box hidden" rows="5" placeholder='Paste settings JSON, then click "Paste config JSON" again'></textarea>
           </section>
 
           <section class="settings-card">

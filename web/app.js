@@ -34,7 +34,10 @@ function navigate() {
     document.getElementById(id).classList.toggle('active', r === hash);
   }
   document.querySelectorAll('.nav-item').forEach((a) => {
-    a.classList.toggle('active', a.dataset.route === hash);
+    const active = a.dataset.route === hash;
+    a.classList.toggle('active', active);
+    if (active) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
   });
   closeMobileNav();
   closeMobileSearch();
@@ -87,6 +90,10 @@ async function bootstrap() {
   });
   document.getElementById('nav-scrim').addEventListener('click', closeMobileNav);
   document.getElementById('search-toggle').addEventListener('click', toggleMobileSearch);
+  document.getElementById('graph-toolbar-toggle')?.addEventListener('click', () => {
+    const open = document.body.classList.toggle('graph-tools-open');
+    document.getElementById('graph-toolbar-toggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
   document.getElementById('global-search').addEventListener('blur', () => {
     if (!document.getElementById('global-search').value) closeMobileSearch();
   });
@@ -162,6 +169,7 @@ async function relabelIngestButton() {
 }
 
 async function refresh() {
+  setGraphLoading(true);
   try {
     reportBootProgress(0.1);
     const data = await loadGraph();
@@ -176,8 +184,16 @@ async function refresh() {
     if (data.nodes.length === 0) renderEmpty();
   } catch (err) {
     document.getElementById('stats').textContent = '0 nodes · 0 edges';
+    showToast(`Graph load failed: ${err.message}. Try Reload in Settings → Data.`, 'error');
     renderEmpty(`Could not load <code>data/graph.json</code> — ${escape(err.message)}`);
+  } finally {
+    setGraphLoading(false);
   }
+}
+
+function setGraphLoading(on) {
+  document.body.classList.toggle('graph-loading-active', on);
+  document.getElementById('graph-loading')?.classList.toggle('hidden', !on);
 }
 
 function renderEmpty(reason) {

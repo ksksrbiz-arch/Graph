@@ -560,7 +560,7 @@ function taxBadge(cat) {
 }
 
 function err_html(msg) {
-  return `<div class="fin-error">⚠ ${esc(msg)}</div>`;
+  return `<div class="error-banner fin-error" role="alert" aria-live="polite"><b>Finance API unavailable</b><span>${esc(msg)}</span></div>`;
 }
 
 function esc(s) {
@@ -588,22 +588,30 @@ function injectStyles() {
   style.id = 'fin-styles';
   style.textContent = `
     .fin-badge { font-size: 10px; background: #1d3a5e; color: #9bd1ff; padding: 2px 7px; border-radius: 4px; vertical-align: middle; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
-    .fin-shell { display: flex; flex-direction: column; height: 100%; padding: 0 16px 16px; gap: 0; }
-    .fin-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border, #232836); padding-bottom: 0; margin-bottom: 0; }
+    .fin-shell { display: flex; flex-direction: column; height: 100%; padding: 0 16px 16px; gap: 0; max-width: 100%; min-width: 0; }
+    .fin-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border, #232836); padding-bottom: 0; margin-bottom: 0; overflow-x: auto; scrollbar-width: thin; }
     .fin-tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-dim, #9aa3b2); padding: 8px 14px; border-radius: 0; cursor: pointer; font: 13px/1 system-ui; }
     .fin-tab:hover { color: var(--text, #e6e8ee); }
     .fin-tab.active { color: var(--accent, #7c9cff); border-bottom-color: var(--accent, #7c9cff); }
-    .fin-content { flex: 1; overflow: auto; padding-top: 12px; }
-    .fin-loading { color: var(--text-dim, #9aa3b2); padding: 20px; }
-    .fin-error { color: #ff8a8a; padding: 10px; background: #3a1a1a; border-radius: 6px; margin: 8px 0; }
+    .fin-content { flex: 1; overflow: auto; padding-top: 12px; max-width: 100%; }
+    .fin-loading {
+      color: var(--text-dim, #9aa3b2);
+      padding: 20px;
+      border: 1px solid rgba(0,212,255,0.14);
+      border-radius: 10px;
+      background: linear-gradient(90deg, rgba(0,212,255,0.05), rgba(255,255,255,0.03), rgba(0,212,255,0.05));
+      background-size: 220% 100%;
+      animation: fin-skeleton 1.6s ease-in-out infinite;
+    }
+    .fin-error { color: #ffd6d6; padding: 12px; background: rgba(58,26,26,0.86); border: 1px solid rgba(255,138,138,0.35); border-radius: 8px; margin: 8px 0; display:flex; flex-direction:column; gap:4px; }
     .fin-empty { color: var(--text-faint, #6b7385); font-style: italic; padding: 12px 0; }
-    .fin-section { margin-bottom: 24px; }
+    .fin-section { margin-bottom: 24px; overflow-x: auto; }
     .fin-section-title { font: 600 12px/1 ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim, #9aa3b2); margin: 0 0 10px; }
     .fin-section-title .fin-count { background: var(--bg-elev-2, #181c25); color: var(--text, #e6e8ee); padding: 1px 6px; border-radius: 10px; font-weight: 400; margin-left: 4px; }
     .fin-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
     .fin-toolbar label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim, #9aa3b2); }
     .fin-toolbar select { background: var(--bg-elev-2, #181c25); color: var(--text, #e6e8ee); border: 1px solid var(--border, #232836); border-radius: 5px; padding: 4px 8px; font: 13px system-ui; }
-    .fin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .fin-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 680px; }
     .fin-table th { text-align: left; padding: 6px 10px; font: 600 11px/1 ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim, #9aa3b2); border-bottom: 1px solid var(--border, #232836); white-space: nowrap; }
     .fin-table td { padding: 8px 10px; border-bottom: 1px solid #1a1f2c; vertical-align: middle; color: var(--text, #e6e8ee); }
     .fin-table tr:last-child td { border-bottom: none; }
@@ -641,7 +649,9 @@ function injectStyles() {
     .fin-rationale-row td { padding: 0 10px 8px; }
     .fin-rationale { font-size: 12px; color: var(--text-dim, #9aa3b2); font-style: italic; }
     .fin-hint { font-size: 12px; color: var(--text-faint, #6b7385); margin: 0 0 10px; }
-    .fin-ingest { max-width: 600px; }
+    .fin-ingest { max-width: 600px; width: 100%; }
+    @keyframes fin-skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    @media (max-width: 700px) { .fin-shell { padding: 0 10px 12px; } .fin-tab { padding: 10px 12px; flex: 0 0 auto; } .fin-toolbar { flex-wrap: wrap; } .fin-content { overflow-x: auto; } .fin-modal { min-width: 0; width: calc(100vw - 24px); padding: 16px; } }
     .fin-ingest-modes { display: flex; gap: 16px; margin-bottom: 10px; font-size: 13px; }
     .fin-ingest-modes label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
     #fin-invoice-text { width: 100%; background: #0a1322; color: #e6eef9; border: 1px solid #1d2b44; border-radius: 8px; padding: 10px; font: 12px/1.5 ui-monospace, monospace; resize: vertical; margin-bottom: 10px; }
