@@ -276,7 +276,7 @@ function setupBrainAnimationPipeline() {
 
 function buildOrUpdate() {
   if (state.graph.nodes.length === 0) {
-    document.getElementById('stats').textContent = '0 nodes · 0 edges';
+    document.getElementById('stats').textContent = '0 nodes · 0 edges';
     document.getElementById('legend').classList.add('hidden');
     return;
   }
@@ -425,7 +425,7 @@ function applyFilters() {
     .filter((e) => (e.weight || 0) >= state.filters.minEdgeWeight)
     .map((e) => ({ ...e, source: srcId(e), target: tgtId(e) }));
   renderer.setData({ nodes, links: edges });
-  document.getElementById('stats').textContent = `${nodes.length} nodes · ${edges.length} edges`;
+  document.getElementById('stats').textContent = `${nodes.length} nodes · ${edges.length} edges`;
   document.getElementById('reset-focus').disabled = !state.focusRootId;
   const banner = document.getElementById('focus-banner');
   if (state.focusRootId) {
@@ -775,8 +775,8 @@ function updateModeHud() {
   const detail = document.getElementById('hud-mode-detail');
   if (detail) {
     if (d === 4) detail.textContent = `t-axis: ${state.config.temporalField}`;
-    else if (d === 3) detail.textContent = 'volumetric · bloom';
-    else detail.textContent = 'canvas · 2D';
+    else if (d === 3) detail.textContent = 'volumetric · bloom';
+    else detail.textContent = 'canvas · 2D';
   }
 }
 
@@ -806,7 +806,7 @@ function showThinkFallback() {
   thinkFallbackEl.className = 'brain-think-fallback';
   thinkFallbackEl.innerHTML = `
     <button type="button" class="bf-close" aria-label="Dismiss">×</button>
-    <span class="bf-tag">Thinking · preview</span>
+    <span class="bf-tag">Thinking · preview</span>
     <div class="bf-host"></div>
     <span class="bf-hint">
       Your graph is too small to traverse yet — here's what thinking will
