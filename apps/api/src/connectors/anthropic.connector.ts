@@ -15,7 +15,7 @@
 // data. When Anthropic ships usage/history APIs this file is the extension
 // point.
 //
-// Docs: https://docs.anthropic.com/reference/getting-started
+// Docs: https://docs.anthropic.com/en/api/models-list
 
 import { Injectable, Logger } from '@nestjs/common';
 import type { ConnectorConfig, KGNode } from '@pkg/shared';
@@ -73,9 +73,12 @@ export class AnthropicConnector extends BaseConnector {
     });
 
     if (!res.ok) {
+      // Surface the failure so the sync orchestrator records `failed` instead
+      // of a silent zero-item success — the docstring above promises this and
+      // it's how users notice misconfigured keys / endpoint regressions.
       const text = await res.text().catch(() => '');
-      this.log.warn(`anthropic /models ${res.status}: ${text.slice(0, 160)}`);
-      return;
+      const detail = text ? `: ${text.slice(0, 160)}` : '';
+      throw new Error(`anthropic /models failed: HTTP ${res.status}${detail}`);
     }
 
     const json = (await res.json()) as AnthropicModelsResponse;

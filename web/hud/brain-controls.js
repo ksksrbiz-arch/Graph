@@ -30,7 +30,7 @@ export function initBrainControls({
   }
 
   root.innerHTML = `
-    <div class="bc-head" role="button" tabindex="0" aria-expanded="false">
+    <div class="bc-head" role="button" tabindex="0" aria-expanded="true">
       <span><span class="glyph">⬡</span> BRAIN CONTROLS</span>
       <span class="arrow">▾</span>
     </div>
@@ -64,7 +64,7 @@ export function initBrainControls({
       </div>
     </div>
   `;
-  root.classList.add('hud-panel-enter');
+  root.classList.add('hud-panel-enter', 'open');
 
   const head = root.querySelector('.bc-head');
   head.addEventListener('click', () => {

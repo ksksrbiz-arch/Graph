@@ -35,6 +35,8 @@ let graphLive = null;
 let ingestPanel = null;
 let statsBarApi = null;
 let brainControlsApi = null;
+let applyFiltersRaf = 0;
+let pendingRendererData = null;
 
 export function initGraphView() {
   const canvas = document.getElementById('canvas');
@@ -46,16 +48,20 @@ export function initGraphView() {
   document.getElementById('focus-banner-close').addEventListener('click', clearFocus);
 
   const weightSlider = document.getElementById('edge-weight');
+  weightSlider.style.setProperty('--val', weightSlider.value);
   weightSlider.addEventListener('input', () => {
     document.getElementById('edge-weight-val').textContent = Number(weightSlider.value).toFixed(2);
     setMinEdgeWeight(Number(weightSlider.value));
+    weightSlider.style.setProperty('--val', weightSlider.value);
   });
 
   const regionSlider = document.getElementById('region-pull');
+  regionSlider.style.setProperty('--val', regionSlider.value);
   regionSlider.addEventListener('input', () => {
     const v = Number(regionSlider.value);
     document.getElementById('region-pull-val').textContent = v.toFixed(2);
     setConfig({ regionClustering: v });
+    regionSlider.style.setProperty('--val', regionSlider.value);
     const tw = document.getElementById('cfg-region');
     const twv = document.getElementById('cfg-region-val');
     if (tw) tw.value = String(v);
@@ -107,6 +113,7 @@ export function initGraphView() {
     if (e.target.tagName === 'CANVAS') closeContextMenu();
   });
   document.addEventListener('keydown', (e) => {
+    if (trapPanelFocus(e)) return;
     if (e.key === 'Escape') {
       closeContextMenu();
       if (state.focusRootId) clearFocus();
@@ -276,7 +283,7 @@ function setupBrainAnimationPipeline() {
 
 function buildOrUpdate() {
   if (state.graph.nodes.length === 0) {
-    document.getElementById('stats').textContent = '0 nodes · 0 edges';
+    document.getElementById('stats').textContent = '0 nodes · 0 edges';
     return;
   }
   buildTypeFilters();
@@ -315,6 +322,11 @@ function rebuildRenderer() {
   }
   if (!renderer) {
     renderer = create2DRenderer({ container, callbacks });
+  }
+  if (!renderer) {
+    // Both 3D and 2D renderers failed to initialise (vendor scripts not loaded).
+    console.error('[graph] renderer could not be created — vendor scripts may not be loaded');
+    return;
   }
   if (renderer.kind === '2d') attachLongPress(container);
   applyFilters();
@@ -417,8 +429,8 @@ function applyFilters() {
     .filter((e) => ids.has(srcId(e)) && ids.has(tgtId(e)))
     .filter((e) => (e.weight || 0) >= state.filters.minEdgeWeight)
     .map((e) => ({ ...e, source: srcId(e), target: tgtId(e) }));
-  renderer.setData({ nodes, links: edges });
-  document.getElementById('stats').textContent = `${nodes.length} nodes · ${edges.length} edges`;
+  scheduleRendererData({ nodes, links: edges });
+  document.getElementById('stats').textContent = `${nodes.length} nodes · ${edges.length} edges`;
   document.getElementById('reset-focus').disabled = !state.focusRootId;
   const banner = document.getElementById('focus-banner');
   if (state.focusRootId) {
@@ -494,6 +506,20 @@ function refreshOverlay() {
   renderer.refresh?.();
 }
 
+function scheduleRendererData(data) {
+  pendingRendererData = data;
+  if (applyFiltersRaf) {
+    cancelAnimationFrame(applyFiltersRaf);
+    applyFiltersRaf = 0;
+  }
+  applyFiltersRaf = requestAnimationFrame(() => {
+    applyFiltersRaf = 0;
+    if (!renderer || !pendingRendererData) return;
+    renderer.setData(pendingRendererData);
+    pendingRendererData = null;
+  });
+}
+
 function buildTypeFilters() {
   const types = [...new Set(state.graph.nodes.map((n) => n.type))].sort();
   const fs = document.getElementById('type-filters');
@@ -521,6 +547,10 @@ function renderPanel() {
   const node = state.byId.get(state.selectedId);
   if (!node) { panel.classList.remove('open'); return; }
   panel.classList.add('open');
+  panel.setAttribute('tabindex', '-1');
+  requestAnimationFrame(() => {
+    if (!panel.contains(document.activeElement)) panel.focus({ preventScroll: true });
+  });
 
   // Header — type badge + label.
   document.getElementById('panel-title').textContent = node.label || node.id;
@@ -566,7 +596,8 @@ function renderPanel() {
     const li = el('li');
     li.style.setProperty('--c', colorForType(other.type));
     li.innerHTML = `
-      <span class="swatch"></span>
+      <span class="swatch" aria-hidden="true"></span>
+      <span class="sr-only">${escape(other.type || 'node')} connection</span>
       <span class="lbl">${escape(other.label || other.id)}</span>
     `;
     li.addEventListener('click', () => {
@@ -675,13 +706,37 @@ function openContextMenu(node, evt) {
   const url = node.sourceUrl || node.metadata?.sourceUrl;
   if (url) items.push({ label: 'Open source link', fn: () => window.open(url, '_blank', 'noopener') });
   for (const it of items) {
-    const b = el('button', { type: 'button' }, it.label);
+    const b = el('button', { type: 'button', role: 'menuitem' }, it.label);
     b.addEventListener('click', () => { it.fn(); closeContextMenu(); });
     menu.appendChild(b);
   }
   menu.style.left = `${evt.clientX}px`;
   menu.style.top = `${evt.clientY}px`;
   menu.classList.remove('hidden');
+  menu.focus({ preventScroll: true });
+  menu.querySelector('button')?.focus({ preventScroll: true });
+}
+
+function trapPanelFocus(e) {
+  if (e.key !== 'Tab' || !state.selectedId) return false;
+  const panel = document.getElementById('panel');
+  if (!panel?.classList.contains('open') || !panel.contains(document.activeElement)) return false;
+  const focusables = [...panel.querySelectorAll('button, a[href], summary, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => !el.disabled && el.getClientRects().length > 0);
+  if (focusables.length === 0) return false;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+    return true;
+  }
+  if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+    return true;
+  }
+  return false;
 }
 
 function closeContextMenu() {
@@ -735,8 +790,8 @@ function updateModeHud() {
   const detail = document.getElementById('hud-mode-detail');
   if (detail) {
     if (d === 4) detail.textContent = `t-axis: ${state.config.temporalField}`;
-    else if (d === 3) detail.textContent = 'volumetric · bloom';
-    else detail.textContent = 'canvas · 2D';
+    else if (d === 3) detail.textContent = 'volumetric · bloom';
+    else detail.textContent = 'canvas · 2D';
   }
 }
 
@@ -766,7 +821,7 @@ function showThinkFallback() {
   thinkFallbackEl.className = 'brain-think-fallback';
   thinkFallbackEl.innerHTML = `
     <button type="button" class="bf-close" aria-label="Dismiss">×</button>
-    <span class="bf-tag">Thinking · preview</span>
+    <span class="bf-tag">Thinking · preview</span>
     <div class="bf-host"></div>
     <span class="bf-hint">
       Your graph is too small to traverse yet — here's what thinking will

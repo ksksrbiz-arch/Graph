@@ -83,13 +83,13 @@ export class GraphService {
 
   /** Full graph snapshot for a user. Used by the public/demo path so the SPA
    *  can render the graph without a full GraphQL setup. */
-  snapshotForUser(userId: string, limit = 5_000) {
+  snapshotForUser(userId: string, limit = 50_000) {
     return this.repo.snapshotForUser(userId, limit);
   }
 
   /** Nodes + edges added strictly after `sinceIso`. Drives the SPA's poll
    *  loop in web/graph-live.js — passthrough to the repository. */
-  snapshotDeltaForUser(userId: string, sinceIso: string, limit = 5_000) {
+  snapshotDeltaForUser(userId: string, sinceIso: string, limit = 50_000) {
     return this.repo.snapshotDeltaForUser(userId, sinceIso, limit);
   }
 

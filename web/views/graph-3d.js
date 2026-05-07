@@ -51,9 +51,6 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     .onBackgroundClick(() => callbacks.onBackgroundClick?.())
     .onBackgroundRightClick((evt) => callbacks.onBackgroundRightClick?.(evt));
 
-  // Lock to the right number of dimensions on the d3 simulation
-  if (typeof fg.numDimensions === 'function') fg.numDimensions(3);
-
   // Bloom postprocessing — adds the "neural glow"
   let bloomPass = null;
   try {
@@ -150,25 +147,42 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
   ro();
 
   function applyConfig() {
+    const nodeCount = fg.graphData?.()?.nodes?.length ?? 0;
+    const largeGraph = nodeCount > 2000;
+
     const charge = fg.d3Force('charge');
-    if (charge) charge.strength(state.config.chargeStrength);
+    if (charge) {
+      charge.strength(state.config.chargeStrength);
+      if (largeGraph && typeof charge.distanceMax === 'function') {
+        charge.distanceMax(250);
+      }
+    }
     const link = fg.d3Force('link');
     if (link) {
       link.distance(state.config.linkDistance);
       if (typeof link.strength === 'function') link.strength(state.config.linkStrength);
+      if (largeGraph && typeof link.iterations === 'function') link.iterations(1);
     }
     const center = fg.d3Force('center');
     if (center && typeof center.strength === 'function') {
       center.strength(state.config.gravity * 4);
     }
     fg.nodeRelSize(state.config.nodeRelSize);
+    // Reduce node sphere resolution on large graphs to ease the WebGL vertex
+    // budget — 8 segments is still a smooth sphere at normal zoom levels.
+    fg.nodeResolution(largeGraph ? 8 : 16);
     fg.nodeOpacity(state.config.nodeOpacity ?? 0.95);
     fg.linkOpacity(state.config.edgeOpacity ?? 0.35);
     fg.linkCurvature(state.config.edgeCurvature || 0);
-    fg.linkDirectionalParticles(state.config.linkParticles ?? 1);
+    // Disable directional particles on large graphs; they add significant GPU
+    // load and are hard to read at high density.
+    fg.linkDirectionalParticles(largeGraph ? 0 : (state.config.linkParticles ?? 1));
     fg.linkDirectionalParticleSpeed(0.004 * (state.config.pulseSpeed ?? 1));
     if (typeof fg.d3VelocityDecay === 'function') fg.d3VelocityDecay(state.config.velocityDecay);
-    if (typeof fg.d3AlphaDecay === 'function') fg.d3AlphaDecay(state.config.alphaDecay);
+    const alphaDecay = largeGraph
+      ? Math.max(state.config.alphaDecay, 0.04)
+      : state.config.alphaDecay;
+    if (typeof fg.d3AlphaDecay === 'function') fg.d3AlphaDecay(alphaDecay);
     if (bloomPass) {
       // Spec §5: the `bloom` master toggle still hard-disables; otherwise
       // the bloom strength is driven entirely by the quality tier.
@@ -189,6 +203,10 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     if (fourD) applyTemporal(graph);
     else for (const n of graph.nodes) { delete n.fz; }
     fg.graphData(graph);
+    // Ensure the force simulation is running after data load. In pure 3D mode
+    // (no fz pinning) the simulation must be active for nodes to spread out;
+    // without this the engine can remain paused and all nodes overlap at origin.
+    fg.d3ReheatSimulation?.();
     applyConfig();
 
     const newNodeIds = [];

@@ -10,7 +10,9 @@
   <link rel="stylesheet" href="/src/styles/animations.scss" />
   <link rel="stylesheet" href="/src/styles/cursor.scss" />
   <link rel="stylesheet" href="/src/styles/boot-screen.scss" />
+  <link rel="stylesheet" href="/src/styles/neural-interface.scss" />
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="/src/styles/neural-overrides.scss" />
   <link rel="manifest" href="./manifest.webmanifest" />
 </head>
 <body>
@@ -20,7 +22,11 @@
         <span></span><span></span><span></span>
       </button>
       <span class="logo" aria-hidden="true"></span>
-      <h1>Graph</h1>
+      <span class="brand-stack">
+        <h1>Graph</h1>
+        <span class="brand-sub">Neural Interface · v0.2</span>
+      </span>
+      <span class="pulse-dot" role="status" aria-label="Connection status: live" title="Live"></span>
       <span class="tag" id="stats">loading…</span>
     </div>
     <div class="topbar-actions">
@@ -56,38 +62,67 @@
       <!-- Graph view -->
       <section id="view-graph" class="view active" aria-label="Graph canvas">
         <div class="graph-toolbar">
-          <fieldset id="type-filters" aria-label="Filter by node type"></fieldset>
-          <div class="graph-toolbar-right">
-            <div class="dim-switch" role="tablist" aria-label="Render mode">
-              <button type="button" data-dim="2" class="active" title="Classic 2D canvas">2D</button>
-              <button type="button" data-dim="3" title="Volumetric WebGL with bloom">3D</button>
-              <button type="button" data-dim="4" title="3D + temporal axis (creation time → Z)">4D</button>
+          <button id="graph-toolbar-toggle" class="graph-toolbar-toggle" type="button" aria-expanded="false" aria-controls="graph-toolbar-content" title="Graph controls">⚙</button>
+          <div id="graph-toolbar-content" class="graph-toolbar-content">
+            <fieldset id="type-filters" aria-label="Filter by node type"></fieldset>
+            <div class="graph-toolbar-right">
+              <div class="dim-switch" role="tablist" aria-label="Render mode">
+                <button type="button" data-dim="2" class="active" title="Classic 2D canvas">2D</button>
+                <button type="button" data-dim="3" title="Volumetric WebGL with bloom">3D</button>
+                <button type="button" data-dim="4" title="3D + temporal axis (creation time → Z)">Temporal</button>
+              </div>
+              <label class="slider" title="Hide weak edges below this weight · default 0.00">
+                <span>min edge</span>
+                <input id="edge-weight" type="range" min="0" max="1" step="0.05" value="0" aria-describedby="edge-weight-default" />
+                <span id="edge-weight-val">0.00</span>
+                <span id="edge-weight-default" class="slider-default">default 0</span>
+              </label>
+              <label class="slider" title="Same-region attraction (cortex clustering) · default 0.00">
+                <span>region pull</span>
+                <input id="region-pull" type="range" min="0" max="1" step="0.05" value="0" aria-describedby="region-pull-default" />
+                <span id="region-pull-val">0.00</span>
+                <span id="region-pull-default" class="slider-default">default 0</span>
+              </label>
             </div>
-            <label class="slider" title="Hide weak edges below this weight">
-              <span>min edge</span>
-              <input id="edge-weight" type="range" min="0" max="1" step="0.05" value="0" />
-              <span id="edge-weight-val">0.00</span>
-            </label>
-            <label class="slider" title="Same-region attraction (cortex clustering)">
-              <span>region pull</span>
-              <input id="region-pull" type="range" min="0" max="1" step="0.05" value="0" />
-              <span id="region-pull-val">0.00</span>
-            </label>
-            <button id="brain-link" type="button" class="brain-link" title="Show neural firing on the graph">
-              <span class="dot"></span><span class="lbl">brain</span>
-            </button>
-            <button id="fit-btn" type="button" title="Fit graph to view">Fit</button>
-            <button id="reset-focus" type="button" title="Clear ego-network focus" disabled>Reset focus</button>
           </div>
         </div>
+        <div class="neural-backdrop" aria-hidden="true">
+          <div class="ni-grid"></div>
+          <div class="ni-scan"></div>
+          <div class="ni-sweep"></div>
+        </div>
         <div id="canvas" role="application" aria-label="Knowledge graph canvas"></div>
+        <div class="canvas-frame" aria-hidden="true">
+          <span class="br tl"></span><span class="br tr"></span>
+          <span class="br bl"></span><span class="br br"></span>
+        </div>
+        <div class="vitals-strip" id="vitals" aria-label="Neural vitals">
+          <span class="v alive"><b id="vital-nodes">0</b><span class="lbl">nodes</span></span>
+          <span class="v"><b id="vital-edges">0</b><span class="lbl">edges</span></span>
+          <span class="v warm"><b id="vital-spikes">0</b><span class="lbl">spikes/s</span></span>
+          <span class="v idea"><b id="vital-fps">—</b><span class="lbl">fps</span></span>
+        </div>
         <div class="hud" id="hud" aria-label="Render HUD">
           <span class="hud-row"><b id="hud-mode">2D</b><span id="hud-fps">— fps</span></span>
           <span class="hud-row"><span id="hud-spikes">0 spikes/s</span><span id="hud-mode-detail" class="hud-faint"></span></span>
         </div>
+        <div class="graph-floating-actions" aria-label="Graph quick actions">
+          <button id="brain-link" type="button" class="brain-link" title="Show neural firing on the graph">
+            <span class="dot"></span><span class="lbl">brain</span>
+          </button>
+          <button id="fit-btn" type="button" title="Fit graph to view">Fit</button>
+          <button id="reset-focus" type="button" title="Clear ego-network focus" disabled>Reset focus</button>
+        </div>
         <div class="zoom-controls">
           <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
           <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+        </div>
+        <div id="graph-loading" class="graph-loading hidden" role="status" aria-live="polite">
+          <div class="graph-loading-card">
+            <span class="loading-ring" aria-hidden="true"></span>
+            <b>Loading graph</b>
+            <span>Hydrating nodes, edges, and neural overlays…</span>
+          </div>
         </div>
         <div class="focus-banner hidden" id="focus-banner">
           <span>Ego-network: <b id="focus-banner-label"></b></span>
@@ -142,7 +177,7 @@
             <dl id="panel-meta" style="margin-top:6px;display:grid;grid-template-columns:max-content 1fr;gap:0.25rem 0.7rem;font-size:0.78rem"></dl>
           </details>
         </aside>
-        <div id="context-menu" class="context-menu hidden" role="menu"></div>
+        <div id="context-menu" class="context-menu hidden" role="menu" aria-label="Node actions" tabindex="-1"></div>
       </section>
 
       <!-- Timeline view -->
@@ -320,6 +355,17 @@
           </section>
 
           <section class="settings-card">
+            <h3>Preferences</h3>
+            <p class="hint">Export saved settings, import a config from another browser, or preview system defaults.</p>
+            <div class="settings-actions">
+              <button id="cfg-export" type="button">Copy config JSON</button>
+              <button id="cfg-import" type="button">Paste config JSON</button>
+              <button id="cfg-preview-defaults" type="button">Preview system defaults</button>
+            </div>
+            <textarea id="cfg-import-box" class="cfg-import-box hidden" rows="5" placeholder='Paste settings JSON, then click "Paste config JSON" again'></textarea>
+          </section>
+
+          <section class="settings-card">
             <h3>Data</h3>
             <p class="hint">Graph file: <code>data/graph.json</code></p>
             <p class="hint">Last updated: <span id="cfg-updated">—</span></p>
@@ -343,5 +389,6 @@
   <script src="./vendor/socket.io.min.js"></script>
   <script src="./config.js"></script>
   <script type="module" src="./app.js"></script>
+  <script type="module" src="./hud/vitals.js"></script>
 </body>
 </html>

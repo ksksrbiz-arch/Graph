@@ -154,6 +154,7 @@ animation overlay that lights up freshly-arrived nodes in real time.
 | ---- | -------------------------------------------------------------------------------- |
 | URL  | `fetch(url)` in your browser, strips tags, posts cleaned text to `/api/v1/public/ingest/text`. CORS will block many sites — the panel surfaces that as a clear error and falls back to "paste the text yourself". |
 | Text | Pastes text or markdown directly. Auto-detects markdown (headings or `[[wikilinks]]`) and routes to `/markdown` accordingly. |
+| Batch | Drop or pick a whole project folder. The browser walks the tree, routes each file to a parser (markdown, text, source code, JSON, CSV/TSV, HTML, README/LICENSE, YAML/TOML/INI), and posts the resulting nodes/edges to `/api/v1/public/ingest/graph` in chunks. Skips `.git`, `node_modules`, `dist`, `build`, lockfiles, binaries, and files >1 MiB. See [`docs/batch-upload.md`](docs/batch-upload.md). |
 | Log  | In-memory history of recent ingestion attempts with status + node counts.        |
 
 Backend wiring:
