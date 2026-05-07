@@ -7,16 +7,29 @@ import { GraphBuilder, loadGraph, saveGraph, stableId } from './lib/graph-store.
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const GRAPH_PATH = join(REPO_ROOT, 'data', 'graph.json');
 const CLAUDE_HOME = process.env.CLAUDE_HOME || join(homedir(), '.claude');
-const PROJECTS_DIR = join(CLAUDE_HOME, 'projects');
+// CLAUDE_CODE_FILES is the env var the browser wizard uses when the user picks
+// their ~/.claude/projects folder; the dev server writes them to a tmp dir and
+// passes that path here. Otherwise default to the on-disk projects/ subdir.
+const PROJECTS_DIR = process.env.CLAUDE_CODE_FILES || process.env.CLAUDE_PROJECTS_DIR
+  || join(CLAUDE_HOME, 'projects');
 
 const SOURCE_ID = 'claude_code';
 
 async function main() {
   let projectDirs;
   try {
-    projectDirs = (await readdir(PROJECTS_DIR, { withFileTypes: true }))
+    const entries = await readdir(PROJECTS_DIR, { withFileTypes: true });
+    projectDirs = entries
       .filter((d) => d.isDirectory())
       .map((d) => join(PROJECTS_DIR, d.name));
+    // When the dev server materialises a browser folder pick into a tmp dir,
+    // it can land flat at the root (no per-project subdirs). Treat the root
+    // itself as a single project in that case so .jsonl files don't get
+    // ignored just because the user picked them directly.
+    const hasFlatJsonl = entries.some((d) => d.isFile() && d.name.endsWith('.jsonl'));
+    if (projectDirs.length === 0 && hasFlatJsonl) {
+      projectDirs = [PROJECTS_DIR];
+    }
   } catch (err) {
     if (err.code === 'ENOENT') {
       console.error(`No Claude Code data found at ${PROJECTS_DIR}`);

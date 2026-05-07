@@ -120,7 +120,7 @@ export class PublicIngestService {
   async snapshotDelta(
     userId: string,
     sinceIso: string,
-    limit = 5_000,
+    limit = 50_000,
   ): Promise<{
     schemaVersion: number;
     metadata: { ts: string; userId: string; since: string };
@@ -143,7 +143,7 @@ export class PublicIngestService {
   /** Snapshot the demo user's full graph back out so the website can render
    *  it. Cursor-based pagination is overkill at this scale (Phase 0 target is
    *  a few thousand nodes); we cap with a hard limit instead. */
-  async snapshot(userId: string, limit = 5_000): Promise<{
+  async snapshot(userId: string, limit = 50_000): Promise<{
     schemaVersion: number;
     metadata: { updatedAt: string; userId: string; sources: string[] };
     nodes: KGNode[];

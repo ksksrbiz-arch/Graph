@@ -55,7 +55,7 @@ export function fmtDay(s) {
 export function fmtTime(s) {
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
 export function socketNamespaceUrl(apiBaseUrl, namespace) {
@@ -104,9 +104,10 @@ export function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
     if (k === 'class') node.className = v;
-    else if (k === 'style') Object.assign(node.style, v);
+    else if (k === 'style') { if (typeof v === 'string') node.style.cssText = v; else Object.assign(node.style, v); }
     else if (k.startsWith('on')) node.addEventListener(k.slice(2).toLowerCase(), v);
     else if (k === 'html') node.innerHTML = v;
+    else if (v === false) node.removeAttribute(k);
     else if (v != null) node.setAttribute(k, v);
   }
   for (const c of children) {

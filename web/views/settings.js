@@ -1,5 +1,5 @@
 import { state, subscribe, setConfig, setDimensions } from '../state.js';
-import { fmtDate } from '../util.js';
+import { fmtDate, showToast } from '../util.js';
 import { loadGraph } from '../data.js';
 import { setGraph } from '../state.js';
 
@@ -101,16 +101,57 @@ export function initSettingsView() {
   });
 
   document.getElementById('cfg-reset').addEventListener('click', () => {
-    Object.assign(state.config, structuredClone(DEFAULTS));
-    setConfig({});
-    setDimensions(DEFAULTS.dimensions);
-    reflectAllInUI();
+    applyPrefs(DEFAULTS);
     savePrefs();
+    showToast('Settings reset to system defaults', 'success');
+  });
+
+  document.getElementById('cfg-export')?.addEventListener('click', async () => {
+    const json = JSON.stringify(state.config, null, 2);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API not available in this context');
+      await navigator.clipboard.writeText(json);
+      showToast('Config JSON copied', 'success');
+    } catch {
+      const box = document.getElementById('cfg-import-box');
+      box.classList.remove('hidden');
+      box.value = json;
+      box.select();
+      showToast('Copy the config JSON from the text box', 'info');
+    }
+  });
+
+  document.getElementById('cfg-import')?.addEventListener('click', async () => {
+    const box = document.getElementById('cfg-import-box');
+    if (box.classList.contains('hidden')) {
+      box.classList.remove('hidden');
+      box.focus();
+      return;
+    }
+    try {
+      const parsed = JSON.parse(box.value || '{}');
+      applyPrefs(parsed);
+      savePrefs();
+      box.classList.add('hidden');
+      showToast('Config imported', 'success');
+    } catch (err) {
+      showToast(`Invalid config JSON: ${err.message}`, 'error');
+    }
+  });
+
+  document.getElementById('cfg-preview-defaults')?.addEventListener('click', () => {
+    applyPrefs(DEFAULTS);
+    showToast('Previewing system defaults — click reset to save them', 'info');
   });
 
   document.getElementById('cfg-reload').addEventListener('click', async () => {
-    const fresh = await loadGraph();
-    setGraph(fresh);
+    try {
+      const fresh = await loadGraph();
+      setGraph(fresh);
+      showToast('Graph reloaded', 'success');
+    } catch (err) {
+      showToast(`Reload failed: ${err.message}`, 'error');
+    }
   });
 
   subscribe((reason) => {
@@ -131,8 +172,10 @@ function bindSlider(id, valId, onChange, decimals = 0) {
   const out = document.getElementById(valId);
   const fmt = (v) => decimals > 0 ? Number(v).toFixed(decimals) : String(v);
   out.textContent = fmt(input.value);
+  setRangeVisual(input);
   input.addEventListener('input', () => {
     out.textContent = fmt(input.value);
+    setRangeVisual(input);
     onChange(Number(input.value));
     savePrefs();
   });
@@ -142,8 +185,31 @@ function setVal(id, v, outId, decimals = 0) {
   const input = document.getElementById(id);
   if (!input) return;
   input.value = String(v);
+  setRangeVisual(input);
   const out = document.getElementById(outId);
   if (out) out.textContent = decimals > 0 ? Number(v).toFixed(decimals) : String(v);
+}
+
+function applyPrefs(config) {
+  const next = { ...DEFAULTS, ...config };
+  Object.assign(state.config, next);
+  setConfig({});
+  setDimensions(next.dimensions);
+  reflectAllInUI();
+}
+
+function setRangeVisual(input) {
+  if (!input || input.type !== 'range') return;
+  const min = Number(input.min || 0);
+  const max = Number(input.max || 100);
+  const value = Number(input.value || 0);
+  if (max === min) {
+    console.warn(`[settings] range input ${input.id} has equal min/max`);
+    input.style.setProperty('--val', '0');
+    return;
+  }
+  const pct = (value - min) / (max - min);
+  input.style.setProperty('--val', String(Math.max(0, Math.min(1, pct))));
 }
 
 function reflectAllInUI() {

@@ -77,7 +77,13 @@ export function setGraph(graph) {
   } else {
     const present = new Set(graph.nodes.map((n) => n.type));
     for (const t of [...state.filters.types]) if (!present.has(t)) state.filters.types.delete(t);
-    for (const t of present) if (![...state.filters.types].length) state.filters.types.add(t);
+    // If all previously-selected types were removed, default to showing every
+    // type in the new graph.  The original code only added the first new type
+    // because it re-evaluated `state.filters.types.length` inside the loop —
+    // fixed here by capturing the "was empty" flag before the loop starts.
+    if (state.filters.types.size === 0) {
+      for (const t of present) state.filters.types.add(t);
+    }
   }
   emit('graph-loaded');
 }
