@@ -21,6 +21,7 @@ import { showToast } from './util.js';
 import { KNOWN_CONNECTORS, executeConnectorIngest } from './views/connectors.js';
 import { loadSavedConfig } from './views/connector-config.js';
 import { openWizard } from './views/ingest-wizard.js';
+import { createBatchUploadTab } from './views/batch-upload.js';
 
 const HISTORY_MAX = 50;
 const URL_FETCH_BYTE_CAP = 6_000;
@@ -31,11 +32,12 @@ export function createIngestPanel({ container, onIngested } = {}) {
   root.setAttribute('aria-label', 'Live ingest');
   root.innerHTML = `
     <header class="ingest-panel-head">
-      <span class="ingest-panel-title">⚡ Brain ingest</span>
+      <span class="ingest-panel-title"><span class="glyph">⬡</span> BRAIN INGEST</span>
       <div class="ingest-panel-tabs" role="tablist">
         <button type="button" data-tab="url" class="active" role="tab">URL</button>
         <button type="button" data-tab="text" role="tab">Text</button>
         <button type="button" data-tab="connectors" role="tab">Connectors</button>
+        <button type="button" data-tab="batch" role="tab">Batch</button>
         <button type="button" data-tab="log" role="tab">Log</button>
       </div>
       <button type="button" class="ingest-panel-close" aria-label="Close">✕</button>
@@ -46,7 +48,7 @@ export function createIngestPanel({ container, onIngested } = {}) {
           <input type="url" class="ingest-url" placeholder="https://example.com/article" />
           <button type="button" class="ingest-btn ingest-btn-url">Ingest →</button>
         </div>
-        <p class="ingest-hint">Fetched in your browser. Sites without permissive CORS will fall back to "paste the text yourself".</p>
+        <p class="ingest-help">Fetched in your browser. Sites without permissive CORS will fall back to "paste the text yourself".</p>
         <div class="ingest-status" data-status></div>
       </div>
       <div class="ingest-tab hidden" data-pane="text">
@@ -57,6 +59,7 @@ export function createIngestPanel({ container, onIngested } = {}) {
       <div class="ingest-tab hidden" data-pane="connectors">
         <div class="ingest-connectors" data-connectors></div>
       </div>
+      <div class="ingest-tab hidden" data-pane="batch" data-batch-host></div>
       <div class="ingest-tab hidden" data-pane="log">
         <ul class="ingest-log" data-log></ul>
       </div>
@@ -65,7 +68,6 @@ export function createIngestPanel({ container, onIngested } = {}) {
   container.appendChild(root);
 
   const tabs = root.querySelectorAll('.ingest-panel-tabs button');
-  const panes = root.querySelectorAll('.ingest-tab');
   const closeBtn = root.querySelector('.ingest-panel-close');
   const urlInput = root.querySelector('.ingest-url');
   const urlBtn = root.querySelector('.ingest-btn-url');
@@ -75,6 +77,25 @@ export function createIngestPanel({ container, onIngested } = {}) {
   const textStatus = root.querySelector('[data-pane="text"] [data-status]');
   const logEl = root.querySelector('[data-log]');
   const connectorsEl = root.querySelector('[data-connectors]');
+  const batchHost = root.querySelector('[data-batch-host]');
+
+  // Mount the Batch upload tab. It manages its own DOM and only needs to
+  // notify the panel (history log) when an upload completes.
+  const batchTab = createBatchUploadTab({
+    onIngested: (res) => {
+      try { onIngested?.(res); } catch { /* swallow caller errors */ }
+    },
+    onLog: (entry) => pushHistory(entry),
+  });
+  // Replace the placeholder pane with the batch tab's root, preserving the
+  // dataset.pane attribute so the tab switcher keeps working.
+  batchTab.root.dataset.pane = 'batch';
+  batchHost.replaceWith(batchTab.root);
+
+  // Re-query panes AFTER replaceWith so the NodeList reflects the new node
+  // — querySelectorAll returns a static NodeList and the placeholder we just
+  // replaced would otherwise still be in `panes`.
+  const panes = root.querySelectorAll('.ingest-tab');
 
   let connectorsRendered = false;
 
@@ -102,7 +123,19 @@ export function createIngestPanel({ container, onIngested } = {}) {
       return;
     }
     for (const connector of KNOWN_CONNECTORS) {
-      connectorsEl.appendChild(buildConnectorCard(connector, isLocal, isPublic));
+      try {
+        connectorsEl.appendChild(buildConnectorCard(connector, isLocal, isPublic));
+      } catch (err) {
+        console.error(`[ingest-panel] failed to build card for ${connector.id}`, err);
+        const fallback = document.createElement('div');
+        fallback.className = 'ingest-connector-card ingest-connector-card-error';
+        fallback.innerHTML = `<div class="ingest-connector-head">
+          <span class="ingest-connector-icon">⚠</span>
+          <span class="ingest-connector-name">${escapeHtml(connector.name)}</span>
+        </div>
+        <div class="ingest-status err">${escapeHtml(String(err?.message || err))}</div>`;
+        connectorsEl.appendChild(fallback);
+      }
     }
   }
 
@@ -112,10 +145,10 @@ export function createIngestPanel({ container, onIngested } = {}) {
     const saved = loadSavedConfig(connector.id);
     const fields = connector.wizard?.fields || [];
     const required = fields.filter((f) => f.required && f.type !== 'oauth');
-    const fileOnly = required.length > 0 && required.every((f) => f.type === 'file' || f.type === 'multifile');
     const quickRunnable = required
       .filter((f) => f.type !== 'file' && f.type !== 'multifile')
       .every((f) => (saved[f.envVar] || saved[f.name] || '').trim());
+    const fileField = fields.find((f) => f.type === 'file' || f.type === 'multifile');
     const hasClientIngest = typeof connector.clientIngest === 'function';
     const canRun = isLocal || (!connector.localOnly && isPublic && hasClientIngest);
 
@@ -133,10 +166,71 @@ export function createIngestPanel({ container, onIngested } = {}) {
     actions.className = 'ingest-connector-actions';
     card.appendChild(actions);
 
-    const runBtn = document.createElement('button');
-    runBtn.type = 'button';
-    runBtn.className = 'ingest-btn';
-    actions.appendChild(runBtn);
+    if (!canRun) {
+      const runBtn = document.createElement('button');
+      runBtn.type = 'button';
+      runBtn.className = 'ingest-btn';
+      runBtn.textContent = 'Unavailable';
+      runBtn.disabled = true;
+      runBtn.title = connector.localOnly
+        ? 'Requires the local dev server'
+        : 'Requires the local dev server or an online API';
+      setStatus(status, runBtn.title, 'warn');
+      actions.appendChild(runBtn);
+      return card;
+    }
+
+    // Browser-only mode (no local server) needs the picker as the primary
+    // action because client-side ingesters can't auto-discover a folder.
+    const pickerIsPrimary = fileField && (!isLocal || !quickRunnable);
+
+    if (fileField) {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.style.display = 'none';
+      if (fileField.accept) fileInput.accept = fileField.accept;
+      if (fileField.type === 'multifile') {
+        fileInput.multiple = true;
+        if (fileField.webkitdirectory) {
+          fileInput.setAttribute('webkitdirectory', '');
+          fileInput.setAttribute('directory', '');
+        }
+      }
+      card.appendChild(fileInput);
+
+      const isFolder = fileField.type === 'multifile' && fileField.webkitdirectory;
+      const pickBtn = document.createElement('button');
+      pickBtn.type = 'button';
+      pickBtn.className = 'ingest-btn';
+      pickBtn.textContent = isFolder ? '📁 Folder' : '📁 File';
+      pickBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        if (!fileInput.files?.length) return;
+        const fileMap = {
+          [fileField.name]: fileField.type === 'multifile'
+            ? Array.from(fileInput.files)
+            : fileInput.files[0],
+        };
+        runConnectorFromPanel(connector, pickBtn, status, isLocal, isPublic, { fileMap });
+      });
+      actions.appendChild(pickBtn);
+    }
+
+    if (quickRunnable) {
+      const runBtn = document.createElement('button');
+      runBtn.type = 'button';
+      runBtn.className = pickerIsPrimary ? 'ingest-btn' : 'ingest-btn primary';
+      runBtn.textContent = pickerIsPrimary ? 'Saved cfg' : '▶ Run';
+      runBtn.addEventListener('click', () => runConnectorFromPanel(connector, runBtn, status, isLocal, isPublic));
+      actions.appendChild(runBtn);
+    } else if (!fileField) {
+      const cfgPrimary = document.createElement('button');
+      cfgPrimary.type = 'button';
+      cfgPrimary.className = 'ingest-btn primary';
+      cfgPrimary.textContent = 'Configure';
+      cfgPrimary.addEventListener('click', () => openWizard({ connector }));
+      actions.appendChild(cfgPrimary);
+    }
 
     const cfgBtn = document.createElement('button');
     cfgBtn.type = 'button';
@@ -146,48 +240,6 @@ export function createIngestPanel({ container, onIngested } = {}) {
     cfgBtn.addEventListener('click', () => openWizard({ connector }));
     actions.appendChild(cfgBtn);
 
-    if (!canRun) {
-      runBtn.textContent = 'Unavailable';
-      runBtn.disabled = true;
-      runBtn.title = connector.localOnly
-        ? 'Requires the local dev server'
-        : 'Requires the local dev server or an online API';
-      setStatus(status, runBtn.title, 'warn');
-      return card;
-    }
-
-    if (quickRunnable && !fileOnly) {
-      runBtn.textContent = '▶ Run';
-      runBtn.addEventListener('click', () => runConnectorFromPanel(connector, runBtn, status, isLocal, isPublic));
-    } else if (fileOnly) {
-      const fileField = required.find((f) => f.type === 'file' || f.type === 'multifile');
-      const fileInput = document.createElement('input');
-      fileInput.type = 'file';
-      fileInput.style.display = 'none';
-      if (fileField?.accept) fileInput.accept = fileField.accept;
-      if (fileField?.type === 'multifile') {
-        fileInput.multiple = true;
-        if (fileField.webkitdirectory) {
-          fileInput.setAttribute('webkitdirectory', '');
-          fileInput.setAttribute('directory', '');
-        }
-      }
-      card.appendChild(fileInput);
-      runBtn.textContent = '📁 Pick';
-      runBtn.addEventListener('click', () => fileInput.click());
-      fileInput.addEventListener('change', () => {
-        if (!fileInput.files?.length) return;
-        const fileMap = {
-          [fileField.name]: fileField.type === 'multifile'
-            ? Array.from(fileInput.files)
-            : fileInput.files[0],
-        };
-        runConnectorFromPanel(connector, runBtn, status, isLocal, isPublic, { fileMap });
-      });
-    } else {
-      runBtn.textContent = 'Configure';
-      runBtn.addEventListener('click', () => openWizard({ connector }));
-    }
     return card;
   }
 

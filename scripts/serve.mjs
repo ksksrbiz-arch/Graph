@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { extname, join, normalize, resolve } from 'node:path';
+import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
@@ -112,20 +112,56 @@ async function handleIngestPost(slug, req, res) {
 
   const envOverrides = typeof body.env === 'object' && body.env ? { ...body.env } : {};
 
-  // Handle optional file upload: { file: { name, content (base64), field } }
+  // Handle optional file upload(s).
+  //
+  //   body.file  = { name, content (base64), field }                     — single file
+  //   body.files = [{ name, content (base64), field, relativePath? }, …] — folder/multi-pick
+  //
+  // Single-file uploads stay backwards-compatible. Multi-file payloads
+  // materialize into a per-request tmp directory (preserving relativePath
+  // when supplied so e.g. an Obsidian vault keeps its folder structure)
+  // and the upload's `field` env var is set to that directory's path.
   let tmpDir = null;
-  if (body.file?.content && body.file?.field) {
-    try {
+  try {
+    if (Array.isArray(body.files) && body.files.length > 0) {
+      tmpDir = await mkdtemp(join(tmpdir(), 'graph-ingest-'));
+      // Reject pathological payloads up-front so we can't be DoS'd into
+      // writing thousands of files. The browser-side validator already caps
+      // these limits — this is defence in depth.
+      if (body.files.length > 5000) {
+        throw new Error(`too many files: ${body.files.length} (limit 5000)`);
+      }
+      let field = null;
+      for (const entry of body.files) {
+        if (!entry || typeof entry.content !== 'string' || typeof entry.field !== 'string') continue;
+        field = field || entry.field;
+        const rel = String(entry.relativePath || entry.name || 'upload');
+        // Normalize and sanitize the relative path: strip drive letters,
+        // collapse "..", and reject any segment that escapes the tmpDir.
+        const safeRel = normalize(rel)
+          .split(/[\\/]/)
+          .map((seg) => seg.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.{2,}/g, '_'))
+          .filter(Boolean)
+          .join('/');
+        if (!safeRel) continue;
+        const fullPath = join(tmpDir, safeRel);
+        if (!resolve(fullPath).startsWith(resolve(tmpDir))) continue;
+        await mkdir(dirname(fullPath), { recursive: true });
+        await writeFile(fullPath, Buffer.from(String(entry.content), 'base64'));
+      }
+      if (field) envOverrides[field] = tmpDir;
+    } else if (body.file?.content && body.file?.field) {
       tmpDir = await mkdtemp(join(tmpdir(), 'graph-ingest-'));
       const rawName = String(body.file.name || 'upload');
       const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.{2,}/g, '_');
       const tmpPath = join(tmpDir, safeName);
       await writeFile(tmpPath, Buffer.from(String(body.file.content), 'base64'));
       envOverrides[String(body.file.field)] = tmpPath;
-    } catch (err) {
-      jsonRes(res, 400, { ok: false, error: `file upload failed: ${err.message}` });
-      return;
     }
+  } catch (err) {
+    if (tmpDir) rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    jsonRes(res, 400, { ok: false, error: `file upload failed: ${err.message}` });
+    return;
   }
 
   runningIngesters.add(slug);

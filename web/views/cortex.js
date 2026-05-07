@@ -72,6 +72,7 @@ export function mount(rootEl, opts = {}) {
 }
 
 async function hello() {
+  add('system', 'connecting to cortex API…');
   try {
     const att = await fetch(api(API_STATE) + `?userId=${encodeURIComponent(userId)}`).then((r) => r.json());
     add('system', `connected · attention focus on ${att?.attention?.focus?.length || 0} nodes · last updated ${rel(att?.attention?.lastUpdated)}`);
@@ -79,9 +80,9 @@ async function hello() {
     const localNodes = state.graph?.nodes?.length ?? 0;
     const localEdges = state.graph?.edges?.length ?? 0;
     if (localNodes > 0) {
-      add('system', `cortex offline — local graph has ${localNodes} nodes · ${localEdges} edges. Start the backend API to enable Think/Perceive.`);
+      replaceLast('error', `cortex offline — local graph has ${localNodes} nodes · ${localEdges} edges. Start the backend API to enable Think/Perceive.`);
     } else {
-      add('system', 'cortex offline — no graph data yet. Ingest content first, then start the backend API to enable Think/Perceive.');
+      replaceLast('error', 'cortex offline — no graph data yet. Ingest content first, then start the backend API to enable Think/Perceive.');
     }
   }
 }
@@ -353,8 +354,14 @@ function addAudio(kind, label, audioObj) {
 }
 
 function replaceLast(kind, text) {
-  if (!lastEl || lastClass !== kind) return add(kind, text);
-  lastEl.querySelector('.cm-body').textContent = text;
+  if (!lastEl) return add(kind, text);
+  lastEl.className = `cortex-msg cortex-${kind}`;
+  const tag = lastEl.querySelector('.cm-tag');
+  const body = lastEl.querySelector('.cm-body');
+  if (!tag || !body) return add(kind, text);
+  tag.textContent = kind;
+  body.textContent = text;
+  lastClass = kind;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────
@@ -403,8 +410,8 @@ function injectStylesOnce() {
   const style = document.createElement('style');
   style.id = 'cortex-styles';
   style.textContent = `
-    .cortex-shell { display:flex; flex-direction:column; gap:12px; height:100%; padding:0 16px 16px; }
-    .cortex-transcript { flex:1; overflow:auto; background:#0a1322; border:1px solid #1d2b44; border-radius:10px; padding:12px; min-height:200px; }
+    .cortex-shell { display:flex; flex-direction:column; gap:12px; height:100%; padding:0 16px 16px; max-width:100%; min-width:0; }
+    .cortex-transcript { flex:1; overflow:auto; background:#0a1322; border:1px solid #1d2b44; border-radius:10px; padding:12px; min-height:200px; max-width:100%; }
     .cortex-msg { display:flex; gap:10px; align-items:flex-start; padding:6px 0; font:13px/1.45 ui-monospace, "SF Mono", Menlo, monospace; color:#e6eef9; border-bottom:1px dashed #1a2640; }
     .cortex-msg:last-child { border-bottom:none; }
     .cm-tag { display:inline-block; min-width:78px; text-align:right; padding:2px 6px; border-radius:4px; font-size:10.5px; text-transform:uppercase; letter-spacing:0.05em; }
@@ -415,14 +422,16 @@ function injectStylesOnce() {
     .cortex-thought   .cm-tag { background:#2a2244; color:#cfb1ff; }
     .cortex-action    .cm-tag { background:#3a2d1a; color:#ffd28a; }
     .cortex-observe   .cm-tag { background:#1a2c2c; color:#9ee5d7; }
+    .cortex-error { background:rgba(58,26,26,0.52); border:1px solid rgba(255,138,138,0.25); border-radius:8px; padding:8px; margin:4px 0; }
     .cortex-error     .cm-tag { background:#3a1a1a; color:#ff8a8a; }
     .cortex-form { display:flex; flex-direction:column; gap:8px; }
     .cortex-form textarea { width:100%; resize:vertical; background:#0a1322; color:#e6eef9; border:1px solid #1d2b44; border-radius:8px; padding:10px; font:13px/1.4 system-ui; }
-    .cortex-actions { display:flex; gap:8px; justify-content:flex-end; }
+    .cortex-actions { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
     .cortex-actions button { padding:6px 12px; border-radius:6px; border:1px solid #1d2b44; background:#101a2c; color:#e6eef9; cursor:pointer; font:12px/1 system-ui; }
     .cortex-actions button.primary { background:#9bd1ff; color:#0b1320; border-color:#9bd1ff; font-weight:600; }
     .cortex-actions button:disabled { opacity:0.5; cursor:wait; }
     .cortex-actions button.recording { background:#ff3b30; border-color:#ff3b30; color:#fff; animation:cortex-blink 1s step-start infinite; }
+    @media (max-width: 640px) { .cortex-shell { padding:0 10px 12px; } .cortex-msg { flex-direction:column; gap:4px; } .cm-tag { min-width:0; text-align:left; } .cortex-actions button { flex:1 1 auto; min-height:40px; } }
     @keyframes cortex-blink { 50% { opacity:0.5; } }
   `;
   document.head.appendChild(style);
