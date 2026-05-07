@@ -61,4 +61,14 @@
   --node-question:   #ff2244;
   --node-autonomous: #b44bff;
   --node-meta:       #ffffff;
+
+  /* Z-index scale — keep panels above canvas, modals above panels. */
+  --z-canvas:        1;
+  --z-canvas-frame:  2;
+  --z-overlay:       3;   /* legend, vitals, hud */
+  --z-panel:         5;   /* brain-controls, mini-map, stats-bar, topbar */
+  --z-inspector:     6;   /* node-inspector */
+  --z-dropdown:      8;
+  --z-modal:         10;
+  --z-toast:         20;
 }
