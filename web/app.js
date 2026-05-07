@@ -6,7 +6,7 @@ import {
   publicIngestAvailable,
   localIngestSupported,
 } from './data.js';
-import { fmtDate, showToast, escape } from './util.js';
+import { fmtTime, showToast, escape } from './util.js';
 import { openIngestDialog } from './ingest-dialog.js';
 import { initGraphView } from './views/graph.js';
 import { initTimelineView } from './views/timeline.js';
@@ -177,7 +177,7 @@ async function refresh() {
     setGraph(data);
     reportBootProgress(1.0);
     if (data.metadata?.updatedAt) {
-      document.getElementById('sidebar-foot').textContent = `data: ${fmtDate(data.metadata.updatedAt)}`;
+      document.getElementById('sidebar-foot').textContent = `Updated ${fmtTime(data.metadata.updatedAt)}`;
     } else {
       document.getElementById('sidebar-foot').textContent = 'no data yet';
     }
