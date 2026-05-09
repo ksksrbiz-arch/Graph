@@ -331,9 +331,8 @@ function rebuildRenderer() {
     return;
   }
   if (requested3d && renderer.kind !== '3d' && renderer.kind !== '4d') {
-    state.config.dimensions = 2;
-    reflectModeButtons();
     showToast('3D renderer unavailable here — showing the 2D graph instead.', 'error');
+    queueMicrotask(() => setDimensions(2));
   }
   if (renderer.kind === '2d') attachLongPress(container);
   applyFilters();
