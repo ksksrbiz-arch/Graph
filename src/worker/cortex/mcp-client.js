@@ -19,7 +19,7 @@ const CLIENT_INFO = { name: 'pkg-cortex', version: '1.0.0' };
  * the session id. Caller closes — but since we don't persist SSE, "close"
  * is just letting the helpers fall out of scope.
  */
-export async function openSession(url, { authToken } = {}) {
+export async function openSession(url, { authToken, timeoutMs } = {}) {
   // 1) initialize
   const init = await rpc(url, {
     method: 'initialize',
@@ -28,7 +28,7 @@ export async function openSession(url, { authToken } = {}) {
       capabilities: {},
       clientInfo: CLIENT_INFO,
     },
-  }, { authToken });
+  }, { authToken, timeoutMs });
   if (!init.ok) return { ok: false, error: init.error };
 
   const sessionId = init.sessionId; // captured from Mcp-Session-Id header
@@ -40,7 +40,7 @@ export async function openSession(url, { authToken } = {}) {
   //    because some lighter servers ignore notifications entirely.
   try {
     await rpc(url, { method: 'notifications/initialized' }, {
-      authToken, sessionId, isNotification: true,
+      authToken, sessionId, isNotification: true, timeoutMs,
     });
   } catch { /* non-fatal */ }
 
@@ -49,26 +49,26 @@ export async function openSession(url, { authToken } = {}) {
     sessionId,
     serverInfo,
     protocolVersion,
-    listTools: () => listTools(url, { authToken, sessionId }),
-    callTool: (name, args) => callTool(url, name, args, { authToken, sessionId }),
+    listTools: () => listTools(url, { authToken, sessionId, timeoutMs }),
+    callTool: (name, args) => callTool(url, name, args, { authToken, sessionId, timeoutMs }),
   };
 }
 
-export async function listTools(url, { authToken, sessionId } = {}) {
+export async function listTools(url, { authToken, sessionId, timeoutMs } = {}) {
   const r = await rpc(url, {
     method: 'tools/list',
     params: {},
-  }, { authToken, sessionId });
+  }, { authToken, sessionId, timeoutMs });
   if (!r.ok) return { ok: false, error: r.error, tools: [] };
   const tools = r.body?.result?.tools || [];
   return { ok: true, tools, sessionId: r.sessionId || sessionId };
 }
 
-export async function callTool(url, name, args, { authToken, sessionId } = {}) {
+export async function callTool(url, name, args, { authToken, sessionId, timeoutMs } = {}) {
   const r = await rpc(url, {
     method: 'tools/call',
     params: { name, arguments: args || {} },
-  }, { authToken, sessionId });
+  }, { authToken, sessionId, timeoutMs });
   if (!r.ok) return { ok: false, error: r.error };
   const result = r.body?.result;
   if (!result) {
@@ -92,7 +92,7 @@ export async function callTool(url, name, args, { authToken, sessionId } = {}) {
 
 let nextRpcId = 1;
 
-async function rpc(url, message, { authToken, sessionId, isNotification } = {}) {
+async function rpc(url, message, { authToken, sessionId, isNotification, timeoutMs } = {}) {
   const headers = {
     'content-type': 'application/json',
     // The spec says clients SHOULD accept BOTH JSON and SSE. We accept both
@@ -108,7 +108,7 @@ async function rpc(url, message, { authToken, sessionId, isNotification } = {}) 
     : { jsonrpc: '2.0', id: nextRpcId++, ...message };
 
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => ctl.abort(), clampTimeout(timeoutMs));
   let res;
   try {
     res = await fetch(url, {
@@ -146,6 +146,11 @@ async function rpc(url, message, { authToken, sessionId, isNotification } = {}) 
     return { ok: false, error: `parse failed: ${err.message}` };
   }
   return { ok: true, body: parsed, sessionId: newSession };
+}
+
+function clampTimeout(v) {
+  const n = Number.isFinite(+v) ? Math.floor(+v) : REQUEST_TIMEOUT_MS;
+  return Math.max(1_000, Math.min(60_000, n));
 }
 
 async function readFirstSseJson(res) {

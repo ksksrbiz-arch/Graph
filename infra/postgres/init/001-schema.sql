@@ -81,3 +81,14 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 );
 CREATE INDEX IF NOT EXISTS refresh_tokens_user_idx
   ON refresh_tokens (user_id) WHERE revoked_at IS NULL;
+
+-- ── agent_permission_grants ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS agent_permission_grants (
+  user_id     TEXT NOT NULL,
+  scope       TEXT NOT NULL,
+  expires_at  TIMESTAMPTZ,
+  granted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, scope)
+);
+CREATE INDEX IF NOT EXISTS agent_permission_grants_user_idx
+  ON agent_permission_grants (user_id, granted_at DESC);

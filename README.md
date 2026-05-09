@@ -101,6 +101,13 @@ pnpm exec wrangler kv namespace create GRAPH_KV --preview
 pnpm run deploy
 ```
 
+Recommended Worker secrets for hardened cortex/MCP operation:
+
+```bash
+pnpm exec wrangler secret put MCP_TOKEN_KEK_BASE64   # 32 random bytes, base64
+pnpm exec wrangler secret put CORTEX_S2S_SECRET      # shared HMAC secret for signed x-cortex-* user context
+```
+
 Without a KV binding the Worker still serves the static SPA, but the public ingest endpoints respond with `{ enabled: false }` and the SPA falls back to read-only mode.
 
 ---

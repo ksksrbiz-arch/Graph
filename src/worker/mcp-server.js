@@ -24,6 +24,7 @@
 import { listEvents, statsByKind, recordEvent, upsertNodesAndEdges } from './d1-store.js';
 import { recall as vectorRecall } from './cortex/vector.js';
 import { parseText } from './text-parser.js';
+import { verifySignedUserContext as verifySignedUserContextSignature } from './cortex/signed-user-context.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_INFO = { name: 'pkg-cortex', version: '1.0.0' };
@@ -113,7 +114,15 @@ export async function handleMcpServer(request, env, url) {
   try { msg = await request.json(); } catch { return jsonResponse({ jsonrpc: '2.0', error: { code: -32700, message: 'parse error' } }, 400); }
   if (msg?.jsonrpc !== '2.0') return jsonResponse({ jsonrpc: '2.0', error: { code: -32600, message: 'invalid request' } }, 400);
 
-  const userId = pickUserId(request, env);
+  let userId;
+  try {
+    userId = await pickUserId(request, env);
+  } catch (err) {
+    return jsonResponse(
+      { jsonrpc: '2.0', error: { code: -32001, message: (err && err.message) || 'unauthorized' } },
+      401,
+    );
+  }
 
   // Notifications: id absent. Return 202 with no body.
   const isNotification = msg.id === undefined || msg.id === null;
@@ -240,9 +249,16 @@ function checkAuth(request, env) {
   const got = request.headers.get('authorization') || '';
   return got === `Bearer ${required}`;
 }
-function pickUserId(request, env) {
+async function pickUserId(request, env) {
   const explicit = request.headers.get('x-cortex-user');
-  if (explicit) return String(explicit).trim();
+  if (explicit) {
+    const expected = String(explicit).trim();
+    if (!expected) return expected;
+    if (await verifySignedUserContextSignature(request, env, expected)) return expected;
+    // If a caller sends x-cortex-user but cannot prove it, fail closed to
+    // avoid silent cross-user impersonation over the public MCP surface.
+    throw new Error('invalid signed user context');
+  }
   const csv = (env.PUBLIC_INGEST_USER_IDS || 'local').toString();
   return (csv.split(',')[0] || 'local').trim();
 }
@@ -259,7 +275,7 @@ function corsHeaders(request) {
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-methods': 'POST, OPTIONS',
-    'access-control-allow-headers': 'content-type, mcp-session-id, authorization, x-cortex-user',
+    'access-control-allow-headers': 'content-type, mcp-session-id, authorization, x-cortex-user, x-cortex-ts, x-cortex-signature',
     'access-control-expose-headers': 'mcp-session-id',
     'access-control-max-age': '86400',
     'vary': 'Origin',

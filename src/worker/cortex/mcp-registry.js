@@ -36,6 +36,12 @@ function isSameHost(url) {
 }
 
 const TOOL_PREFIX = 'mcp:';
+// auth_token format version tag:
+//   enc1:<base64(iv||ciphertext)> = AES-256-GCM encrypted with MCP_TOKEN_KEK_BASE64
+const AUTH_TOKEN_PREFIX = 'enc1:';
+const DEFAULT_RETRY_ATTEMPTS = 2;
+const DEFAULT_LIST_TIMEOUT_MS = 8_000;
+const DEFAULT_CALL_TIMEOUT_MS = 12_000;
 
 // ── server CRUD ──────────────────────────────────────────────────────
 
@@ -43,12 +49,13 @@ export async function addServer(env, { userId, name, url, authToken }) {
   if (!env.GRAPH_DB) throw new Error('GRAPH_DB binding missing');
   if (!name || !url) throw new Error('name and url are required');
   const id = crypto.randomUUID();
+  const encryptedAuthToken = await encryptAuthToken(env, authToken || null);
   await env.GRAPH_DB
     .prepare(
       `INSERT INTO mcp_servers (id, user_id, name, url, auth_token, enabled, created_at, tools_json)
        VALUES (?, ?, ?, ?, ?, 1, ?, '[]')`,
     )
-    .bind(id, userId, normName(name), url.trim(), authToken || null, Date.now())
+    .bind(id, userId, normName(name), url.trim(), encryptedAuthToken, Date.now())
     .run();
   // First refresh — populate tool catalog right away so /tools shows them.
   const refresh = await refreshTools(env, { userId, serverId: id });
@@ -102,6 +109,8 @@ export async function setEnabled(env, { userId, serverId, enabled }) {
 export async function refreshTools(env, { userId, serverId }) {
   const servers = await loadServers(env, { userId, serverId });
   const out = [];
+  const timeoutMs = mcpListTimeoutMs(env);
+  const attempts = mcpRetryAttempts(env);
   for (const s of servers) {
     if (!s.enabled) continue;
     try {
@@ -129,13 +138,16 @@ export async function refreshTools(env, { userId, serverId }) {
         out.push({ id: s.id, name: s.name, ok: true, count: tools.length, transport: 'in-process' });
         continue;
       }
-      sess = await openSession(s.url, { authToken: s.authToken });
+      sess = await withRetryResult(
+        () => openSession(s.url, { authToken: s.authToken, timeoutMs }),
+        attempts,
+      );
       if (!sess.ok) {
         await markError(env, s.id, sess.error);
         out.push({ id: s.id, name: s.name, ok: false, error: sess.error });
         continue;
       }
-      const lt = await sess.listTools();
+      const lt = await withRetryResult(() => sess.listTools(), attempts);
       if (!lt.ok) {
         await markError(env, s.id, lt.error);
         out.push({ id: s.id, name: s.name, ok: false, error: lt.error });
@@ -210,9 +222,11 @@ export async function dispatchMcpTool(env, intent, args, { userId }) {
   if (!server) return { ok: false, error: `mcp server "${serverName}" not registered or disabled` };
 
   try {
+    const timeoutMs = mcpCallTimeoutMs(env);
+    const attempts = mcpRetryAttempts(env);
     if (isSameHost(server.url)) {
       const callBody = { jsonrpc: '2.0', id: Date.now(), method: 'tools/call', params: { name: toolName, arguments: args || {} } };
-      const out = await inprocessMcp(env, callBody);
+      const out = await withRetry(() => inprocessMcp(env, callBody), attempts);
       if (!out) return { ok: false, error: 'in-process MCP returned null' };
       if (out.error) return { ok: false, error: out.error.message || 'mcp error' };
       const result = out.result;
@@ -223,9 +237,12 @@ export async function dispatchMcpTool(env, intent, args, { userId }) {
       const text = (result?.content || []).filter((c) => c?.type === 'text').map((c) => c.text).join('\n');
       return { ok: true, result: { text, structured: result?.structuredContent, contentBlocks: result?.content?.length || 0, transport: 'in-process' } };
     }
-    const sess = await openSession(server.url, { authToken: server.authToken });
+    const sess = await withRetryResult(
+      () => openSession(server.url, { authToken: server.authToken, timeoutMs }),
+      attempts,
+    );
     if (!sess.ok) return { ok: false, error: sess.error };
-    const r = await sess.callTool(toolName, args || {});
+    const r = await withRetryResult(() => sess.callTool(toolName, args || {}), attempts);
     if (!r.ok) return { ok: false, error: r.error };
     return {
       ok: true,
@@ -249,11 +266,17 @@ async function loadServers(env, { userId, serverId } = {}) {
     : 'SELECT id, name, url, auth_token, enabled FROM mcp_servers WHERE user_id = ?';
   const params = serverId ? [userId, serverId] : [userId];
   const { results } = await env.GRAPH_DB.prepare(sql).bind(...params).all();
-  return (results || []).map((r) => ({
-    id: r.id, name: r.name, url: r.url,
-    authToken: r.auth_token,
-    enabled: r.enabled === 1,
-  }));
+  const out = [];
+  for (const r of results || []) {
+    out.push({
+      id: r.id,
+      name: r.name,
+      url: r.url,
+      authToken: await decryptAuthToken(env, r.auth_token),
+      enabled: r.enabled === 1,
+    });
+  }
+  return out;
 }
 
 async function markError(env, serverId, error) {
@@ -282,4 +305,95 @@ function parseJsonSafe(s, dflt = null) {
 
 function normName(name) {
   return String(name).toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 40);
+}
+
+function mcpListTimeoutMs(env) {
+  return clampInt(env?.MCP_LIST_TIMEOUT_MS, 1_000, 60_000, DEFAULT_LIST_TIMEOUT_MS);
+}
+
+function mcpCallTimeoutMs(env) {
+  return clampInt(env?.MCP_CALL_TIMEOUT_MS, 1_000, 60_000, DEFAULT_CALL_TIMEOUT_MS);
+}
+
+function mcpRetryAttempts(env) {
+  return clampInt(env?.MCP_RETRY_ATTEMPTS, 1, 4, DEFAULT_RETRY_ATTEMPTS);
+}
+
+function clampInt(v, lo, hi, dflt) {
+  const n = Number.isFinite(+v) ? Math.floor(+v) : dflt;
+  return Math.max(lo, Math.min(hi, n));
+}
+
+async function withRetry(fn, attempts) {
+  let lastErr;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
+async function withRetryResult(fn, attempts) {
+  return withRetry(async () => {
+    const out = await fn();
+    if (!out || out.ok === false) {
+      throw new Error(out?.error || 'mcp call failed');
+    }
+    return out;
+  }, attempts);
+}
+
+async function encryptAuthToken(env, token) {
+  if (!token) return null;
+  const key = await mcpTokenKey(env);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const pt = new TextEncoder().encode(String(token));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt));
+  const packed = new Uint8Array(iv.length + ct.length);
+  packed.set(iv, 0);
+  packed.set(ct, iv.length);
+  return AUTH_TOKEN_PREFIX + bytesToBase64(packed);
+}
+
+async function decryptAuthToken(env, encoded) {
+  if (!encoded) return null;
+  const raw = String(encoded);
+  if (!raw.startsWith(AUTH_TOKEN_PREFIX)) return raw; // backward compatible plaintext
+  const key = await mcpTokenKey(env);
+  const bytes = base64ToBytes(raw.slice(AUTH_TOKEN_PREFIX.length));
+  if (bytes.length < 13) {
+    throw new Error('invalid encrypted MCP auth token: payload must be at least 13 bytes (12-byte IV + 1-byte ciphertext minimum)');
+  }
+  const iv = bytes.slice(0, 12);
+  const ct = bytes.slice(12);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  return new TextDecoder().decode(pt);
+}
+
+async function mcpTokenKey(env) {
+  const b64 = (env?.MCP_TOKEN_KEK_BASE64 || '').toString().trim();
+  if (!b64) {
+    throw new Error('MCP_TOKEN_KEK_BASE64 is required for encrypting/decrypting MCP auth tokens (set via: wrangler secret put MCP_TOKEN_KEK_BASE64)');
+  }
+  const raw = base64ToBytes(b64);
+  if (raw.byteLength !== 32) {
+    throw new Error('MCP_TOKEN_KEK_BASE64 must decode to exactly 32 bytes');
+  }
+  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function bytesToBase64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
 }

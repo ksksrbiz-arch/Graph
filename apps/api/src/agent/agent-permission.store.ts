@@ -13,7 +13,9 @@
 // Postgres-backed grant table so the swap is mechanical. Default policy is
 // **deny**: no tool runs unless the user has granted it.
 
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import type { Pool } from 'pg';
+import { POSTGRES_POOL } from '../shared/postgres/postgres.module';
 
 export type AgentPermissionScope =
   | 'agent:enact-motor'
@@ -64,8 +66,55 @@ export interface AgentPermissionGrant {
 }
 
 @Injectable()
-export class AgentPermissionStore {
+export class AgentPermissionStore implements OnModuleInit {
+  private readonly log = new Logger(AgentPermissionStore.name);
   private readonly byUser = new Map<string, Map<AgentPermissionScope, AgentPermissionGrant>>();
+
+  constructor(
+    @Optional() @Inject(POSTGRES_POOL) private readonly pool?: Pool,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    if (!this.pool) return;
+    try {
+      // Defensive bootstrap for local/dev + isolated unit scenarios where the
+      // SQL bootstrap migration may not have run yet. Canonical schema lives in
+      // infra/postgres/init/001-schema.sql.
+      await this.pool.query(
+        `CREATE TABLE IF NOT EXISTS agent_permission_grants (
+           user_id TEXT NOT NULL,
+           scope TEXT NOT NULL,
+           expires_at TIMESTAMPTZ,
+           granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+           PRIMARY KEY (user_id, scope)
+         )`,
+      );
+      const result = await this.pool.query<{
+        user_id: string;
+        scope: string;
+        expires_at: Date | null;
+        granted_at: Date;
+      }>(
+        `SELECT user_id, scope, expires_at, granted_at
+           FROM agent_permission_grants
+          WHERE expires_at IS NULL OR expires_at > now()`,
+      );
+      for (const row of result.rows) {
+        const scope = validateScope(row.scope);
+        this.upsertLocal({
+          userId: row.user_id,
+          scope,
+          expiresAt: row.expires_at ? row.expires_at.toISOString() : null,
+          grantedAt: row.granted_at.toISOString(),
+        });
+      }
+      this.log.log(`loaded ${result.rows.length} agent permission grants from Postgres`);
+    } catch (err) {
+      this.log.warn(
+        `failed to initialize durable agent permissions (continuing in in-memory mode): ${(err as Error).message}`,
+      );
+    }
+  }
 
   grant(
     userId: string,
@@ -89,9 +138,13 @@ export class AgentPermissionStore {
       expiresAt,
       grantedAt: new Date().toISOString(),
     };
-    const userMap = this.byUser.get(userId) ?? new Map();
-    userMap.set(validated, grant);
-    this.byUser.set(userId, userMap);
+    this.upsertLocal(grant);
+    // Persist asynchronously to preserve the existing synchronous API surface
+    // used throughout AgentService/controller paths. This is intentionally
+    // eventually consistent across process crashes. If Postgres is unavailable,
+    // the process still enforces the grant in memory for this runtime, but the
+    // grant may be missing after restart until persistence recovers.
+    void this.persistGrant(grant);
     return grant;
   }
 
@@ -100,6 +153,7 @@ export class AgentPermissionStore {
     if (!userMap) return false;
     const removed = userMap.delete(scope);
     if (userMap.size === 0) this.byUser.delete(userId);
+    if (removed) void this.deleteGrant(userId, scope);
     return removed;
   }
 
@@ -124,5 +178,38 @@ export class AgentPermissionStore {
   private expired(grant: AgentPermissionGrant): boolean {
     if (!grant.expiresAt) return false;
     return new Date(grant.expiresAt).getTime() <= Date.now();
+  }
+
+  private upsertLocal(grant: AgentPermissionGrant): void {
+    const userMap = this.byUser.get(grant.userId) ?? new Map();
+    userMap.set(grant.scope, grant);
+    this.byUser.set(grant.userId, userMap);
+  }
+
+  private async persistGrant(grant: AgentPermissionGrant): Promise<void> {
+    if (!this.pool) return;
+    try {
+      await this.pool.query(
+        `INSERT INTO agent_permission_grants (user_id, scope, expires_at, granted_at)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, scope)
+         DO UPDATE SET expires_at = EXCLUDED.expires_at, granted_at = EXCLUDED.granted_at`,
+        [grant.userId, grant.scope, grant.expiresAt, grant.grantedAt],
+      );
+    } catch (err) {
+      this.log.warn(`failed to persist agent permission grant: ${(err as Error).message}`);
+    }
+  }
+
+  private async deleteGrant(userId: string, scope: AgentPermissionScope): Promise<void> {
+    if (!this.pool) return;
+    try {
+      await this.pool.query(
+        `DELETE FROM agent_permission_grants WHERE user_id = $1 AND scope = $2`,
+        [userId, scope],
+      );
+    } catch (err) {
+      this.log.warn(`failed to delete agent permission grant: ${(err as Error).message}`);
+    }
   }
 }
