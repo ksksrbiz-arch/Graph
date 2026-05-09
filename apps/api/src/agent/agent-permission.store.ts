@@ -141,7 +141,9 @@ export class AgentPermissionStore implements OnModuleInit {
     this.upsertLocal(grant);
     // Persist asynchronously to preserve the existing synchronous API surface
     // used throughout AgentService/controller paths. This is intentionally
-    // eventually consistent across process crashes.
+    // eventually consistent across process crashes. If Postgres is unavailable,
+    // the process still enforces the grant in memory for this runtime, but the
+    // grant may be missing after restart until persistence recovers.
     void this.persistGrant(grant);
     return grant;
   }

@@ -364,7 +364,9 @@ async function decryptAuthToken(env, encoded) {
   if (!raw.startsWith(AUTH_TOKEN_PREFIX)) return raw; // backward compatible plaintext
   const key = await mcpTokenKey(env);
   const bytes = base64ToBytes(raw.slice(AUTH_TOKEN_PREFIX.length));
-  if (bytes.length < 13) throw new Error('invalid encrypted MCP auth token');
+  if (bytes.length < 13) {
+    throw new Error('invalid encrypted MCP auth token: payload must be at least 13 bytes (12-byte IV + 1-byte ciphertext minimum)');
+  }
   const iv = bytes.slice(0, 12);
   const ct = bytes.slice(12);
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
