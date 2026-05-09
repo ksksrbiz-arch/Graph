@@ -19,42 +19,46 @@ import { addServer as mcpAddServer, listServers as mcpListServers, removeServer 
 import { CRON_PLAYBOOK, listSchedules, runSchedule } from './scheduler.js';
 import { think } from './reason.js';
 
+const S2S_MAX_SKEW_MS = 5 * 60_000;
+
 export async function handleCortexApi(request, env, url) {
   const { pathname } = url;
   const method = request.method;
+  const correlationId = requestCorrelationId(request);
+  const responseHeaders = { 'x-correlation-id': correlationId };
 
   if (pathname === '/api/v1/cortex/tools' && method === 'GET') {
     const userId = need(url, 'userId') || 'local';
-    if (!checkUser(userId, env)) return forbidden(userId);
-    return jsonResponse({ tools: await describeTools(env, { userId }) });
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
+    return jsonResponse({ tools: await describeTools(env, { userId }) }, 200, responseHeaders);
   }
 
   if (pathname === '/api/v1/cortex/state' && method === 'GET') {
     const userId = need(url, 'userId');
-    if (!userId) return jsonResponse({ error: 'userId required' }, 400);
-    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!userId) return jsonResponse({ error: 'userId required' }, 400, responseHeaders);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
     const att = await readAttention(env.GRAPH_KV, userId);
-    return jsonResponse({ attention: att });
+    return jsonResponse({ attention: att }, 200, responseHeaders);
   }
 
   if (pathname === '/api/v1/cortex/perceive' && method === 'POST') {
     const dto = await safeJson(request);
-    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
+    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400, responseHeaders);
     const msg = stamp(dto, { clientFallback: 'unknown' });
-    if (!isPerceive(msg)) return jsonResponse({ error: 'not a perceive message (missing kind/modality)' }, 400);
+    if (!isPerceive(msg)) return jsonResponse({ error: 'not a perceive message (missing kind/modality)' }, 400, responseHeaders);
     const userId = (msg.userId || msg.payload?.userId || 'local').toString().trim();
-    if (!checkUser(userId, env)) return forbidden(userId);
-    const result = await perceive(env, userId, msg);
-    return jsonResponse(result, result.ok === false ? 400 : 200);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
+    const result = await perceive(env, userId, msg, { correlationId });
+    return jsonResponse(result, result.ok === false ? 400 : 200, responseHeaders);
   }
 
   if (pathname === '/api/v1/cortex/think' && method === 'POST') {
     const dto = await safeJson(request);
-    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
+    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400, responseHeaders);
     const msg = stamp(dto, { clientFallback: 'unknown' });
-    if (!isThink(msg)) return jsonResponse({ error: 'not a think message' }, 400);
+    if (!isThink(msg)) return jsonResponse({ error: 'not a think message' }, 400, responseHeaders);
     const userId = (msg.userId || 'local').toString().trim();
-    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
     const out = await think(env, {
       userId,
       question: msg.question,
@@ -66,13 +70,18 @@ export async function handleCortexApi(request, env, url) {
     if (env.GRAPH_DB) {
       await recordEvent(env.GRAPH_DB, {
         userId, sourceKind: 'cortex', kind: 'think',
-        payload: { question: msg.question, finalAnswer: out.finalAnswer, steps: out.trace?.length },
+        payload: {
+          question: msg.question,
+          finalAnswer: out.finalAnswer,
+          steps: out.trace?.length,
+          correlationId,
+        },
         nodeCount: 0, edgeCount: 0,
         status: out.ok ? 'applied' : 'error',
         error: out.ok ? null : out.error,
       });
     }
-    return jsonResponse(out);
+    return jsonResponse({ ...out, correlationId }, 200, responseHeaders);
   }
 
   const actMatch = pathname.match(/^\/api\/v1\/cortex\/act\/([a-z0-9_:-]+)$/);
@@ -80,15 +89,27 @@ export async function handleCortexApi(request, env, url) {
     const intent = actMatch[1];
     const dto = await safeJson(request);
     const userId = (dto?.userId || 'local').toString().trim();
-    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
     const result = await dispatch(env, intent, dto?.args || {}, { userId });
-    return jsonResponse(result);
+    if (env.GRAPH_DB) {
+      await recordEvent(env.GRAPH_DB, {
+        userId,
+        sourceKind: 'cortex',
+        kind: 'act',
+        payload: { intent, args: dto?.args || {}, ok: result.ok, correlationId },
+        nodeCount: 0,
+        edgeCount: 0,
+        status: result.ok ? 'applied' : 'error',
+        error: result.ok ? null : result.error,
+      });
+    }
+    return jsonResponse(result, result.ok ? 200 : 400, responseHeaders);
   }
 
   // GET /api/v1/cortex/schedules — list configured cron cadences + last-run watermarks
   if (pathname === '/api/v1/cortex/schedules' && method === 'GET') {
     const userId = need(url, 'userId') || 'local';
-    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
     const schedules = listSchedules();
     if (env.GRAPH_KV) {
       for (const sch of schedules) {
@@ -96,7 +117,7 @@ export async function handleCortexApi(request, env, url) {
         sch.lastRun = ts ? parseInt(ts, 10) : null;
       }
     }
-    return jsonResponse({ userId, schedules });
+    return jsonResponse({ userId, schedules }, 200, responseHeaders);
   }
 
   // POST /api/v1/cortex/schedules/:name/run — manually trigger a scheduled think
@@ -105,16 +126,16 @@ export async function handleCortexApi(request, env, url) {
   if (schedRunMatch && method === 'POST') {
     const dto = (await safeJson(request)) || {};
     const userId = (dto.userId || 'local').toString().trim();
-    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
     const out = await runSchedule({ env, userId, name: schedRunMatch[1], force: !!dto.force });
-    return jsonResponse(out);
+    return jsonResponse(out, 200, responseHeaders);
   }
 
   // GET /api/v1/cortex/scheduled-thoughts?userId=… — recent autonomous thoughts
   if (pathname === '/api/v1/cortex/scheduled-thoughts' && method === 'GET') {
     const userId = need(url, 'userId') || 'local';
-    if (!checkUser(userId, env)) return forbidden(userId);
-    if (!env.GRAPH_DB) return jsonResponse({ error: 'GRAPH_DB binding missing' }, 503);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
+    if (!env.GRAPH_DB) return jsonResponse({ error: 'GRAPH_DB binding missing' }, 503, responseHeaders);
     const limit = clampInt(parseInt(url.searchParams.get('limit') || '20', 10), 1, 200, 20);
     const sql = "SELECT id, ts, payload_json, status, error FROM events " +
                 "WHERE user_id = ?1 AND kind = 'scheduled-think' " +
@@ -129,32 +150,32 @@ export async function handleCortexApi(request, env, url) {
         steps: payload.steps, elapsedMs: payload.elapsedMs, newCount: payload.newCount,
       };
     });
-    return jsonResponse({ userId, thoughts });
+    return jsonResponse({ userId, thoughts }, 200, responseHeaders);
   }
 
   // GET /api/v1/cortex/mcp/servers?userId=&includeTools=1
   if (pathname === '/api/v1/cortex/mcp/servers' && method === 'GET') {
     const userId = need(url, 'userId') || 'local';
-    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
     const includeTools = url.searchParams.get('includeTools') === '1';
     const servers = await mcpListServers(env, { userId, includeTools });
-    return jsonResponse({ userId, servers });
+    return jsonResponse({ userId, servers }, 200, responseHeaders);
   }
 
   // POST /api/v1/cortex/mcp/servers  body:{userId, name, url, authToken?}
   if (pathname === '/api/v1/cortex/mcp/servers' && method === 'POST') {
     const dto = await safeJson(request);
-    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
+    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400, responseHeaders);
     const userId = (dto.userId || 'local').toString().trim();
-    if (!checkUser(userId, env)) return forbidden(userId);
-    if (!dto.name || !dto.url) return jsonResponse({ error: 'name and url are required' }, 400);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
+    if (!dto.name || !dto.url) return jsonResponse({ error: 'name and url are required' }, 400, responseHeaders);
     try {
       const out = await mcpAddServer(env, {
         userId, name: dto.name, url: dto.url, authToken: dto.authToken,
       });
-      return jsonResponse(out);
+      return jsonResponse(out, 200, responseHeaders);
     } catch (err) {
-      return jsonResponse({ error: err.message }, 400);
+      return jsonResponse({ error: err.message }, 400, responseHeaders);
     }
   }
 
@@ -163,9 +184,9 @@ export async function handleCortexApi(request, env, url) {
   if (mcpDelMatch && method === 'DELETE') {
     const dto = (await safeJson(request)) || {};
     const userId = (dto.userId || need(url, 'userId') || 'local').toString().trim();
-    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
     const ok = await mcpRemoveServer(env, { userId, serverId: mcpDelMatch[1] });
-    return jsonResponse({ ok });
+    return jsonResponse({ ok }, 200, responseHeaders);
   }
 
   // POST /api/v1/cortex/mcp/servers/:id/refresh  body:{userId}
@@ -173,18 +194,18 @@ export async function handleCortexApi(request, env, url) {
   if (mcpRefreshMatch && method === 'POST') {
     const dto = (await safeJson(request)) || {};
     const userId = (dto.userId || 'local').toString().trim();
-    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
     const out = await mcpRefreshTools(env, { userId, serverId: mcpRefreshMatch[1] });
-    return jsonResponse({ refreshed: out });
+    return jsonResponse({ refreshed: out }, 200, responseHeaders);
   }
 
   // POST /api/v1/cortex/mcp/refresh  body:{userId}  refresh ALL servers
   if (pathname === '/api/v1/cortex/mcp/refresh' && method === 'POST') {
     const dto = (await safeJson(request)) || {};
     const userId = (dto.userId || 'local').toString().trim();
-    if (!checkUser(userId, env)) return forbidden(userId);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
     const out = await mcpRefreshTools(env, { userId });
-    return jsonResponse({ refreshed: out });
+    return jsonResponse({ refreshed: out }, 200, responseHeaders);
   }
 
   // POST /api/v1/cortex/admin/backfill-vectors — embed every D1 node
@@ -193,9 +214,9 @@ export async function handleCortexApi(request, env, url) {
   if (pathname === '/api/v1/cortex/admin/backfill-vectors' && method === 'POST') {
     const dto = await safeJson(request);
     const userId = (dto?.userId || 'local').toString().trim();
-    if (!checkUser(userId, env)) return forbidden(userId);
-    if (!env.GRAPH_DB) return jsonResponse({ error: 'GRAPH_DB binding missing' }, 503);
-    if (!env.VECTORS || !env.AI) return jsonResponse({ error: 'VECTORS or AI binding missing' }, 503);
+    if (!(await authorizeUser(request, userId, env))) return forbidden(userId, correlationId);
+    if (!env.GRAPH_DB) return jsonResponse({ error: 'GRAPH_DB binding missing' }, 503, responseHeaders);
+    if (!env.VECTORS || !env.AI) return jsonResponse({ error: 'VECTORS or AI binding missing' }, 503, responseHeaders);
     const batch = clampInt(dto?.batch, 50, 1000, 200);
     const sinceTs = Number(dto?.sinceTs || 0);
     let cursor = null;
@@ -231,7 +252,7 @@ export async function handleCortexApi(request, env, url) {
       if (Date.now() - startedAt > 25_000) break; // stay under sub-request budget
       if (rows.length < batch) break;
     }
-    return jsonResponse({ ok: true, total, written, elapsedMs: Date.now() - startedAt, nextCursor: cursor });
+    return jsonResponse({ ok: true, total, written, elapsedMs: Date.now() - startedAt, nextCursor: cursor }, 200, responseHeaders);
   }
 
   return null;
@@ -251,7 +272,7 @@ function safeJson_(s) {
 // the result into the event log + attention focus so the next /think
 // picks up the new perception.
 
-async function perceive(env, userId, msg) {
+async function perceive(env, userId, msg, { correlationId } = {}) {
   const merge = env.__mergeAndPersist;
   if (typeof merge !== 'function' || !env.GRAPH_KV) {
     return { ok: false, error: 'KV merge not wired' };
@@ -363,7 +384,7 @@ async function perceive(env, userId, msg) {
     const [e] = await Promise.all([
       recordEvent(env.GRAPH_DB, {
         userId, sourceKind: msg.modality, kind,
-        payload: { source: msg.source, ...safePayload },
+        payload: { source: msg.source, correlationId: correlationId || null, ...safePayload },
         nodeCount: parsed.nodes?.length ?? 0,
         edgeCount: parsed.edges?.length ?? 0,
         status: 'applied',
@@ -394,6 +415,7 @@ async function perceive(env, userId, msg) {
     totalEdges: snap.edges.length,
     ...(transcript !== null && { transcript }),
     ...(caption    !== null && { caption }),
+    correlationId: correlationId || null,
   };
 }
 
@@ -406,19 +428,71 @@ function need(url, key) {
   const v = (url.searchParams.get(key) || '').trim();
   return v || null;
 }
-function checkUser(userId, env) {
+async function authorizeUser(request, userId, env) {
+  if (!userId) return false;
+  if (checkUserAllowlist(userId, env)) return true;
+  return verifySignedUserContext(request, env, userId);
+}
+
+function checkUserAllowlist(userId, env) {
   if (!userId) return false;
   const csv = (env.PUBLIC_INGEST_USER_IDS || 'local').toString();
   return csv.split(',').map((s) => s.trim()).filter(Boolean).includes(userId);
 }
-function forbidden(userId) {
-  return jsonResponse({ error: `userId=${userId ?? '(empty)'} not on allowlist` }, 403);
+function forbidden(userId, correlationId) {
+  return jsonResponse(
+    { error: `userId=${userId ?? '(empty)'} is unauthorized`, correlationId: correlationId || null },
+    403,
+    correlationId ? { 'x-correlation-id': correlationId } : {},
+  );
 }
-function jsonResponse(body, status = 200) {
+function jsonResponse(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      ...extraHeaders,
+    },
   });
+}
+
+function requestCorrelationId(request) {
+  const fromHeader = (request.headers.get('x-correlation-id') || '').trim();
+  return fromHeader || crypto.randomUUID();
+}
+
+async function verifySignedUserContext(request, env, expectedUserId) {
+  const secret = (env.CORTEX_S2S_SECRET || '').toString();
+  if (!secret) return false;
+  const userId = (request.headers.get('x-cortex-user') || '').trim();
+  const tsRaw = (request.headers.get('x-cortex-ts') || '').trim();
+  const sig = (request.headers.get('x-cortex-signature') || '').trim();
+  if (!userId || !tsRaw || !sig || userId !== expectedUserId) return false;
+  const ts = Number(tsRaw);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > S2S_MAX_SKEW_MS) return false;
+  const data = `${userId}.${tsRaw}`;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
+  const expected = toHex(new Uint8Array(mac));
+  return timingSafeEqualHex(expected, sig.toLowerCase());
+}
+
+function toHex(bytes) {
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function timingSafeEqualHex(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 /** Decode a base64 string to a Uint8Array. Throws on invalid input. */

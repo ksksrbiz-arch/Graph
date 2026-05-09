@@ -113,7 +113,15 @@ export async function handleMcpServer(request, env, url) {
   try { msg = await request.json(); } catch { return jsonResponse({ jsonrpc: '2.0', error: { code: -32700, message: 'parse error' } }, 400); }
   if (msg?.jsonrpc !== '2.0') return jsonResponse({ jsonrpc: '2.0', error: { code: -32600, message: 'invalid request' } }, 400);
 
-  const userId = pickUserId(request, env);
+  let userId;
+  try {
+    userId = await pickUserId(request, env);
+  } catch (err) {
+    return jsonResponse(
+      { jsonrpc: '2.0', error: { code: -32001, message: (err && err.message) || 'unauthorized' } },
+      401,
+    );
+  }
 
   // Notifications: id absent. Return 202 with no body.
   const isNotification = msg.id === undefined || msg.id === null;
@@ -240,9 +248,16 @@ function checkAuth(request, env) {
   const got = request.headers.get('authorization') || '';
   return got === `Bearer ${required}`;
 }
-function pickUserId(request, env) {
+async function pickUserId(request, env) {
   const explicit = request.headers.get('x-cortex-user');
-  if (explicit) return String(explicit).trim();
+  if (explicit) {
+    const expected = String(explicit).trim();
+    if (!expected) return expected;
+    if (await verifySignedUserContext(request, env, expected)) return expected;
+    // If a caller sends x-cortex-user but cannot prove it, fail closed to
+    // avoid silent cross-user impersonation over the public MCP surface.
+    throw new Error('invalid signed user context');
+  }
   const csv = (env.PUBLIC_INGEST_USER_IDS || 'local').toString();
   return (csv.split(',')[0] || 'local').trim();
 }
@@ -259,9 +274,42 @@ function corsHeaders(request) {
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-methods': 'POST, OPTIONS',
-    'access-control-allow-headers': 'content-type, mcp-session-id, authorization, x-cortex-user',
+    'access-control-allow-headers': 'content-type, mcp-session-id, authorization, x-cortex-user, x-cortex-ts, x-cortex-signature',
     'access-control-expose-headers': 'mcp-session-id',
     'access-control-max-age': '86400',
     'vary': 'Origin',
   };
+}
+
+async function verifySignedUserContext(request, env, expectedUserId) {
+  const secret = (env.CORTEX_S2S_SECRET || '').toString();
+  if (!secret) return false;
+  const userId = (request.headers.get('x-cortex-user') || '').trim();
+  const tsRaw = (request.headers.get('x-cortex-ts') || '').trim();
+  const sig = (request.headers.get('x-cortex-signature') || '').trim();
+  if (!userId || !tsRaw || !sig || userId !== expectedUserId) return false;
+  const ts = Number(tsRaw);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > 5 * 60_000) return false;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const data = `${userId}.${tsRaw}`;
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
+  const expected = toHex(new Uint8Array(mac));
+  return timingSafeEqualHex(expected, sig.toLowerCase());
+}
+
+function toHex(bytes) {
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function timingSafeEqualHex(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }

@@ -409,8 +409,10 @@ id then POST the new one (or update the URL via re-register).
 
 ### Limits / next-pass items
 
-- Auth tokens are stored as plaintext in D1. For production add KEK-based
-  encryption (we already have the pattern from Phase 1 of apps/api).
+- MCP auth tokens are encrypted at rest in D1 (`enc1:` AES-256-GCM payload)
+  when `MCP_TOKEN_KEK_BASE64` is configured in Worker secrets.
+  Legacy plaintext rows are still readable for backward compatibility and should
+  be rotated/re-saved.
 - No OAuth dance yet for servers that require it (most public MCPs are
   static-token or no-auth). The CF agents SDK has a full OAuth flow if
   needed — wire its callback into `/api/v1/cortex/mcp/oauth/callback`.
@@ -518,4 +520,3 @@ MCP clients accept the same shape.
 `0 6 * * *` UTC daily — short-circuits the LLM loop entirely (handler:
 'mcpRefresh' sentinel in scheduler.js) and just calls `refreshTools(env, {userId})`
 for every AUTONOMY user. Catalog stays fresh without a model call.
-

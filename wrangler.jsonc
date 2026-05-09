@@ -62,6 +62,14 @@
   "vars": {
     "PUBLIC_INGEST_USER_IDS": "local,ksksrbiz-arch",
     "AUTONOMY_USER_IDS": "local,ksksrbiz-arch"
+    // Optional MCP/cortex hardening knobs:
+    // MCP_RETRY_ATTEMPTS   default 2
+    // MCP_LIST_TIMEOUT_MS  default 8000
+    // MCP_CALL_TIMEOUT_MS  default 12000
+    //
+    // Worker secrets (set via `wrangler secret put`):
+    // MCP_TOKEN_KEK_BASE64  - 32-byte base64 KEK for encrypting mcp_servers.auth_token
+    // CORTEX_S2S_SECRET     - HMAC secret for signed x-cortex-user context
     // GitHub OAuth — set as Worker secrets, not plain vars:
     //   wrangler secret put GITHUB_CLIENT_ID
     //   wrangler secret put GITHUB_CLIENT_SECRET
