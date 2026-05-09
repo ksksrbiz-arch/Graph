@@ -1,5 +1,7 @@
 const DEFAULT_JWT_ISSUER = 'graph-api';
 const DEFAULT_JWT_AUDIENCE = 'graph-worker';
+// Canonical user JWT claims are: sub, tenantId, roles, aud, iss.
+// tid/tenant_id are accepted only as transitional aliases during rollout.
 
 export async function requireAuthContext(request, env, { expectedUserId, expectedTenantId } = {}) {
   const bearer = readBearer(request);
