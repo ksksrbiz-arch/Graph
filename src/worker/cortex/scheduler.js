@@ -20,7 +20,7 @@
 import { recordEvent } from '../d1-store.js';
 import { think } from './reason.js';
 
-const WATERMARK_KEY = (tenantId, name) => `schedule:${tenantId}:${name}:lastRun`;
+export const WATERMARK_KEY = (tenantId, name) => `schedule:${encodeURIComponent(tenantId)}:${encodeURIComponent(name)}:lastRun`;
 
 export const CRON_PLAYBOOK = {
   '*/15 * * * *': {

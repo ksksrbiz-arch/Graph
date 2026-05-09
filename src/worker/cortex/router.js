@@ -17,7 +17,7 @@ import { stamp, isPerceive, isThink, isAct } from './protocol.js';
 import { describeTools, dispatch } from './tools.js';
 import { upsertNodes as upsertVectors } from './vector.js';
 import { addServer as mcpAddServer, listServers as mcpListServers, removeServer as mcpRemoveServer, refreshTools as mcpRefreshTools, setEnabled as mcpSetEnabled } from './mcp-registry.js';
-import { CRON_PLAYBOOK, listSchedules, runSchedule } from './scheduler.js';
+import { CRON_PLAYBOOK, WATERMARK_KEY, listSchedules, runSchedule } from './scheduler.js';
 import { think } from './reason.js';
 import { verifySignedUserContext as verifySignedUserContextSignature } from './signed-user-context.js';
 
@@ -124,7 +124,7 @@ export async function handleCortexApi(request, env, url) {
     const schedules = listSchedules();
     if (env.GRAPH_KV) {
       for (const sch of schedules) {
-        const ts = await env.GRAPH_KV.get('schedule:' + auth.tenantId + ':' + sch.name + ':lastRun');
+        const ts = await env.GRAPH_KV.get(WATERMARK_KEY(auth.tenantId, sch.name));
         sch.lastRun = ts ? parseInt(ts, 10) : null;
       }
     }
