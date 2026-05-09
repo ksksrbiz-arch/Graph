@@ -364,8 +364,8 @@ async function decryptAuthToken(env, encoded) {
   if (!raw.startsWith(AUTH_TOKEN_PREFIX)) return raw; // backward compatible plaintext
   const key = await mcpTokenKey(env);
   const bytes = base64ToBytes(raw.slice(AUTH_TOKEN_PREFIX.length));
-  if (bytes.length < 29) {
-    throw new Error('invalid encrypted MCP auth token: payload must be at least 29 bytes (12-byte IV + non-empty ciphertext + 16-byte authentication tag)');
+  if (bytes.length < 28) {
+    throw new Error('invalid encrypted MCP auth token: payload must be at least 28 bytes (12-byte IV + 16-byte authentication tag)');
   }
   const iv = bytes.slice(0, 12);
   const ct = bytes.slice(12);
