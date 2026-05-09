@@ -18,8 +18,7 @@ import { upsertNodes as upsertVectors } from './vector.js';
 import { addServer as mcpAddServer, listServers as mcpListServers, removeServer as mcpRemoveServer, refreshTools as mcpRefreshTools, setEnabled as mcpSetEnabled } from './mcp-registry.js';
 import { CRON_PLAYBOOK, listSchedules, runSchedule } from './scheduler.js';
 import { think } from './reason.js';
-
-const S2S_MAX_SKEW_MS = 5 * 60_000;
+import { verifySignedUserContext as verifySignedUserContextSignature } from './signed-user-context.js';
 
 export async function handleCortexApi(request, env, url) {
   const { pathname } = url;
@@ -431,7 +430,7 @@ function need(url, key) {
 async function authorizeUser(request, userId, env) {
   if (!userId) return false;
   if (checkUserAllowlist(userId, env)) return true;
-  return verifySignedUserContext(request, env, userId);
+  return verifySignedUserContextSignature(request, env, userId);
 }
 
 function checkUserAllowlist(userId, env) {
@@ -462,38 +461,6 @@ function requestCorrelationId(request) {
   return fromHeader || crypto.randomUUID();
 }
 
-async function verifySignedUserContext(request, env, expectedUserId) {
-  const secret = (env.CORTEX_S2S_SECRET || '').toString();
-  if (!secret) return false;
-  const userId = (request.headers.get('x-cortex-user') || '').trim();
-  const tsRaw = (request.headers.get('x-cortex-ts') || '').trim();
-  const sig = (request.headers.get('x-cortex-signature') || '').trim();
-  if (!userId || !tsRaw || !sig || userId !== expectedUserId) return false;
-  const ts = Number(tsRaw);
-  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > S2S_MAX_SKEW_MS) return false;
-  const data = `${userId}.${tsRaw}`;
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
-  const expected = toHex(new Uint8Array(mac));
-  return timingSafeEqualHex(expected, sig.toLowerCase());
-}
-
-function toHex(bytes) {
-  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-function timingSafeEqualHex(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
 
 /** Decode a base64 string to a Uint8Array. Throws on invalid input. */
 function base64ToBytes(b64) {
