@@ -372,7 +372,7 @@ async function decryptAuthToken(env, encoded) {
 async function mcpTokenKey(env) {
   const b64 = (env?.MCP_TOKEN_KEK_BASE64 || '').toString().trim();
   if (!b64) {
-    throw new Error('MCP_TOKEN_KEK_BASE64 is required when using MCP auth tokens');
+    throw new Error('MCP_TOKEN_KEK_BASE64 is required for encrypting/decrypting MCP auth tokens');
   }
   const raw = base64ToBytes(b64);
   if (raw.byteLength !== 32) {

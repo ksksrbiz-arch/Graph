@@ -441,7 +441,7 @@ function checkUserAllowlist(userId, env) {
 }
 function forbidden(userId, correlationId) {
   return jsonResponse(
-    { error: `userId=${userId ?? '(empty)'} is unauthorized`, correlationId: correlationId || null },
+    { error: `access denied for userId=${userId ?? '(empty)'}`, correlationId: correlationId || null },
     403,
     correlationId ? { 'x-correlation-id': correlationId } : {},
   );

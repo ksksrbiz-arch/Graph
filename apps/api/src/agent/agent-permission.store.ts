@@ -77,6 +77,9 @@ export class AgentPermissionStore implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     if (!this.pool) return;
     try {
+      // Defensive bootstrap for local/dev + isolated unit scenarios where the
+      // SQL bootstrap migration may not have run yet. Canonical schema lives in
+      // infra/postgres/init/001-schema.sql.
       await this.pool.query(
         `CREATE TABLE IF NOT EXISTS agent_permission_grants (
            user_id TEXT NOT NULL,

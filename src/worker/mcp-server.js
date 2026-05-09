@@ -27,6 +27,7 @@ import { parseText } from './text-parser.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_INFO = { name: 'pkg-cortex', version: '1.0.0' };
+const S2S_MAX_SKEW_MS = 5 * 60_000;
 
 // What we expose. Schemas mirror the input args of the matching cortex tool.
 const TOOLS = [
@@ -289,7 +290,7 @@ async function verifySignedUserContext(request, env, expectedUserId) {
   const sig = (request.headers.get('x-cortex-signature') || '').trim();
   if (!userId || !tsRaw || !sig || userId !== expectedUserId) return false;
   const ts = Number(tsRaw);
-  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > 5 * 60_000) return false;
+  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > S2S_MAX_SKEW_MS) return false;
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),
