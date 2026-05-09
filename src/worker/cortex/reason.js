@@ -8,6 +8,7 @@
 
 import { listEvents } from '../d1-store.js';
 import { readAttention, writeAttention } from './attention.js';
+import { getContextPackage, publishObservation } from './brain-client.js';
 import { describeTools, dispatch } from './tools.js';
 import { recall as vectorRecall } from './vector.js';
 
@@ -40,7 +41,7 @@ Working memory (most recent first):
 User question:
 {QUESTION}`;
 
-export async function think(env, { userId, question, budgetMs, budgetSteps, model }) {
+export async function think(env, { userId, tenantId, roles, correlationId, question, budgetMs, budgetSteps, model }) {
   if (!env.AI) {
     return { ok: false, error: 'AI binding missing — add "ai" to wrangler.jsonc', trace: [] };
   }
@@ -53,9 +54,19 @@ export async function think(env, { userId, question, budgetMs, budgetSteps, mode
   const attention = await readAttention(env.GRAPH_KV, userId);
   const recentEvents = await listEvents(env.GRAPH_DB, { userId, limit: 10 });
 
-  const ctx = { userId, attention, recentEvents, observations: [], recalled: [] };
+  const authContext = { userId, tenantId: tenantId || userId, roles: roles || [], correlationId };
+  const ctx = { userId, tenantId: authContext.tenantId, attention, recentEvents, observations: [], recalled: [], brainContext: null };
   // Diagnostic: surface what recall pulled before the loop starts.
   trace.push({ step: 0, kind: 'pre', recentCount: recentEvents.length, attentionFocus: attention.focus.length });
+  if (env.CORTEX_INTERNAL_BRAIN_ENABLED === '1') {
+    const brainContext = await getContextPackage(env, authContext, { question, topK: 10 });
+    if (brainContext.ok) {
+      ctx.brainContext = brainContext.data;
+      trace.push({ step: 0, kind: 'brain-context', ok: true });
+    } else {
+      trace.push({ step: 0, kind: 'brain-context', ok: false, error: brainContext.error });
+    }
+  }
   if (question && env.VECTORS && env.AI) {
     try {
       const r = await vectorRecall(env, userId, question, { topK: 6 });
@@ -112,6 +123,16 @@ export async function think(env, { userId, question, budgetMs, budgetSteps, mode
     trace.push({ step, kind: 'action', intent: parsed.action, args: inputArgs });
     const observation = await dispatch(env, parsed.action, inputArgs, { userId });
     trace.push({ step, kind: 'observation', intent: parsed.action, ok: observation.ok, result: observation.result, error: observation.error });
+    if (env.CORTEX_INTERNAL_BRAIN_ENABLED === '1') {
+      const published = await publishObservation(env, authContext, {
+        intent: parsed.action,
+        args: inputArgs,
+        ok: observation.ok,
+        result: observation.result,
+        error: observation.error,
+      });
+      trace.push({ step, kind: 'brain-observation', ok: published.ok, error: published.error });
+    }
     ctx.observations.push({ intent: parsed.action, args: inputArgs, observation });
   }
 

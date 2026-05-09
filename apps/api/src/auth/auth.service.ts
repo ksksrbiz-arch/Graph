@@ -15,6 +15,10 @@ import { UsersService } from '../users/users.service';
 export interface AccessTokenPayload {
   sub: string;
   email: string;
+  tenantId: string;
+  roles: string[];
+  aud: string;
+  iss: string;
 }
 
 export interface TokenPair {
@@ -86,7 +90,14 @@ export class AuthService {
     userId: string,
     email: string,
   ): Promise<TokenPair> {
-    const accessToken = await this.jwt.signAsync({ sub: userId, email });
+    const accessToken = await this.jwt.signAsync({
+      sub: userId,
+      email,
+      tenantId: userId,
+      roles: ['user'],
+      aud: 'graph-worker',
+      iss: 'graph-api',
+    });
 
     const raw = randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
     const hash = this.hashToken(raw);
@@ -103,4 +114,3 @@ export class AuthService {
     return createHash('sha256').update(raw).digest('hex');
   }
 }
-

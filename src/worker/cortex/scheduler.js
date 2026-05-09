@@ -20,7 +20,7 @@
 import { recordEvent } from '../d1-store.js';
 import { think } from './reason.js';
 
-const WATERMARK_KEY = (userId, name) => `schedule:${userId}:${name}:lastRun`;
+const WATERMARK_KEY = (tenantId, name) => `schedule:${tenantId}:${name}:lastRun`;
 
 export const CRON_PLAYBOOK = {
   '*/15 * * * *': {
@@ -88,12 +88,12 @@ export function listSchedules() {
  * cron fires twice within the same window, the second call short-circuits.
  * The manual route can pass `force: true` to bypass.
  */
-export async function runSchedule({ env, userId, name, force = false }) {
+export async function runSchedule({ env, userId, tenantId = userId, name, force = false }) {
   const entry = Object.values(CRON_PLAYBOOK).find((p) => p.name === name);
   if (!entry) return { ok: false, error: `unknown schedule: ${name}` };
 
   const startedAt = Date.now();
-  const watermarkKey = WATERMARK_KEY(userId, name);
+  const watermarkKey = WATERMARK_KEY(tenantId, name);
 
   // 1) Idempotency check
   if (!force && env.GRAPH_KV) {
@@ -162,6 +162,7 @@ export async function runSchedule({ env, userId, name, force = false }) {
   try {
     result = await think(env, {
       userId,
+      tenantId,
       question: entry.prompt,
       budgetMs: entry.budgetMs,
       budgetSteps: entry.budgetSteps,
@@ -228,7 +229,7 @@ export async function dispatchCron(env, cronExpression) {
   }
   for (const userId of users) {
     try {
-      const out = await runSchedule({ env, userId, name: playbook.name });
+      const out = await runSchedule({ env, userId, tenantId: userId, name: playbook.name });
       console.log(`[scheduler] ${playbook.name} userId=${userId} →`, JSON.stringify(out));
     } catch (err) {
       console.error(`[scheduler] ${playbook.name} userId=${userId} crashed:`, err.message);

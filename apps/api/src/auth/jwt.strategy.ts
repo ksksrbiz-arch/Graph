@@ -11,10 +11,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: loadEnv().JWT_SECRET,
+      audience: 'graph-worker',
+      issuer: 'graph-api',
     });
   }
 
   validate(payload: AccessTokenPayload): AccessTokenPayload {
-    return payload;
+    return {
+      ...payload,
+      tenantId: payload.tenantId || payload.sub,
+      roles: Array.isArray(payload.roles) ? payload.roles : [],
+    };
   }
 }
