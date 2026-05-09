@@ -25,7 +25,8 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     fg = window.ForceGraph3D({
       controlType: 'orbit',
       rendererConfig: { antialias: true, alpha: true },
-    })(container)
+    })(container);
+    fg
       .backgroundColor('rgba(8,10,16,1)')
       .showNavInfo(false)
       .nodeId('id')
@@ -54,6 +55,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
       .onBackgroundRightClick((evt) => callbacks.onBackgroundRightClick?.(evt));
   } catch (err) {
     console.warn('[graph-3d] renderer init failed', err);
+    try { fg?._destructor?.(); } catch {}
     container.innerHTML = '';
     return null;
   }
