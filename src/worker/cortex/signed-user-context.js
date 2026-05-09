@@ -7,7 +7,8 @@ export async function verifySignedUserContext(request, env, expectedUserId) {
   const tsRaw = (request.headers.get('x-cortex-ts') || '').trim();
   const sig = (request.headers.get('x-cortex-signature') || '').trim();
   if (!userId || !tsRaw || !sig || userId !== expectedUserId) return false;
-  const ts = Number(tsRaw);
+  if (!/^\d+$/.test(tsRaw)) return false;
+  const ts = parseInt(tsRaw, 10);
   if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > SIGNED_CONTEXT_MAX_SKEW_MS) return false;
   const key = await crypto.subtle.importKey(
     'raw',
