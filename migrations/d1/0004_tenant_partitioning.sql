@@ -1,15 +1,21 @@
 -- Tenant partitioning rollout scaffold.
 -- Migration-first phase: preserve existing user_id semantics while adding
 -- tenant_id columns, backfilling them from user_id, and adding tenant indexes.
+-- Before consolidating multiple users into one tenant_id, run duplicate checks
+-- for the new tenant uniqueness constraints and dedupe or rekey rows first.
 
 ALTER TABLE sources ADD COLUMN tenant_id TEXT;
 UPDATE sources SET tenant_id = user_id WHERE tenant_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_sources_tenant ON sources(tenant_id);
+-- Duplicate preflight before tenant consolidation:
+-- SELECT tenant_id, kind, label, COUNT(*) FROM sources GROUP BY tenant_id, kind, label HAVING COUNT(*) > 1;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_tenant_kind_label ON sources(tenant_id, kind, label);
 
 ALTER TABLE events ADD COLUMN tenant_id TEXT;
 UPDATE events SET tenant_id = user_id WHERE tenant_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_events_tenant_ts ON events(tenant_id, ts DESC);
+-- Duplicate preflight before tenant consolidation:
+-- SELECT tenant_id, payload_sha, COUNT(*) FROM events GROUP BY tenant_id, payload_sha HAVING COUNT(*) > 1;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_events_tenant_payload_sha ON events(tenant_id, payload_sha);
 
 ALTER TABLE nodes ADD COLUMN tenant_id TEXT;

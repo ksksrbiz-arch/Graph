@@ -67,7 +67,7 @@ export async function upsertNodes(env, userId, nodes) {
       console.warn(`[vector] embed shape mismatch: got ${vectors.length} for ${chunk.length}`);
       continue;
     }
-    const tenantId = String(env.TENANT_ID || userId);
+    const tenantId = tenantIdFor(env, userId);
     const items = chunk.map((n, j) => ({
       id: vectorId(tenantId, n.id),
       values: vectors[j],
@@ -101,7 +101,7 @@ export async function upsertNodes(env, userId, nodes) {
 export async function recall(env, userId, query, opts = {}) {
   if (!env.VECTORS || !env.AI || !query) return { ok: false, error: 'vectorize/AI binding missing or empty query', matches: [] };
   const k = clampInt(opts.topK, 1, 50, QUERY_TOPK_DEFAULT);
-  const tenantId = String(opts.tenantId || env.TENANT_ID || userId);
+  const tenantId = tenantIdFor(env, userId, opts.tenantId);
   let qv;
   try {
     const resp = await env.AI.run(EMBED_MODEL, { text: [query] });
@@ -161,7 +161,7 @@ export async function recall(env, userId, query, opts = {}) {
 /** Drop all vectors for a user — used by admin reset. Returns deleted count. */
 export async function deleteForUser(env, userId, ids) {
   if (!env.VECTORS || !ids?.length) return 0;
-  const tenantId = String(env.TENANT_ID || userId);
+  const tenantId = tenantIdFor(env, userId);
   const targets = ids.map((id) => vectorId(tenantId, id));
   let removed = 0;
   for (let i = 0; i < targets.length; i += UPSERT_BATCH) {
@@ -178,4 +178,8 @@ export async function deleteForUser(env, userId, ids) {
 function clampInt(v, lo, hi, dflt) {
   const n = Number.isFinite(+v) ? Math.floor(+v) : dflt;
   return Math.max(lo, Math.min(hi, n));
+}
+
+function tenantIdFor(env, userId, explicitTenantId) {
+  return String(explicitTenantId || env.TENANT_ID || userId);
 }

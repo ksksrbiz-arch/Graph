@@ -15,6 +15,7 @@ import { recall as vectorRecall } from './vector.js';
 const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const DEFAULT_BUDGET_MS = 15_000;
 const DEFAULT_BUDGET_STEPS = 6;
+const INTERNAL_BRAIN_FLAG = 'CORTEX_INTERNAL_BRAIN_ENABLED';
 const SYSTEM_PROMPT = `You are CORTEX — a reasoning agent embedded in a personal knowledge graph.
 
 You will see a question and a set of TOOLS. Pick exactly ONE next action and stop.
@@ -58,7 +59,7 @@ export async function think(env, { userId, tenantId, roles, correlationId, quest
   const ctx = { userId, tenantId: authContext.tenantId, attention, recentEvents, observations: [], recalled: [], brainContext: null };
   // Diagnostic: surface what recall pulled before the loop starts.
   trace.push({ step: 0, kind: 'pre', recentCount: recentEvents.length, attentionFocus: attention.focus.length });
-  if (env.CORTEX_INTERNAL_BRAIN_ENABLED === '1') {
+  if (isEnabled(env, INTERNAL_BRAIN_FLAG)) {
     const brainContext = await getContextPackage(env, authContext, { question, topK: 10 });
     if (brainContext.ok) {
       ctx.brainContext = brainContext.data;
@@ -123,7 +124,7 @@ export async function think(env, { userId, tenantId, roles, correlationId, quest
     trace.push({ step, kind: 'action', intent: parsed.action, args: inputArgs });
     const observation = await dispatch(env, parsed.action, inputArgs, { userId });
     trace.push({ step, kind: 'observation', intent: parsed.action, ok: observation.ok, result: observation.result, error: observation.error });
-    if (env.CORTEX_INTERNAL_BRAIN_ENABLED === '1') {
+    if (isEnabled(env, INTERNAL_BRAIN_FLAG)) {
       const published = await publishObservation(env, authContext, {
         intent: parsed.action,
         args: inputArgs,
@@ -213,6 +214,10 @@ function clampInt(v, lo, hi, dflt) {
 function truncate(s, n) {
   if (!s) return '';
   return s.length <= n ? s : s.slice(0, n - 1) + '…';
+}
+
+function isEnabled(env, key) {
+  return ['1', 'true', 'yes', 'on'].includes(String(env[key] || '').toLowerCase());
 }
 
 

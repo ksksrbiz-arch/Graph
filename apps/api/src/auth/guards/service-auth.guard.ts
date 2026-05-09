@@ -35,9 +35,9 @@ export class ServiceAuthGuard implements CanActivate {
     if (!token) throw new UnauthorizedException('missing service bearer token');
 
     const payload = await this.jwt.verifyAsync<ServiceAuthClaims>(token, {
-      secret: process.env.INTERNAL_SERVICE_JWT_SECRET || this.env.JWT_SECRET,
-      audience: process.env.INTERNAL_SERVICE_JWT_AUDIENCE || SERVICE_AUDIENCE,
-      issuer: process.env.INTERNAL_SERVICE_JWT_ISSUER || SERVICE_ISSUER,
+      secret: this.env.INTERNAL_SERVICE_JWT_SECRET || this.env.JWT_SECRET,
+      audience: this.env.INTERNAL_SERVICE_JWT_AUDIENCE || SERVICE_AUDIENCE,
+      issuer: this.env.INTERNAL_SERVICE_JWT_ISSUER || SERVICE_ISSUER,
       clockTolerance: 30,
     });
 
@@ -57,7 +57,9 @@ export class ServiceAuthGuard implements CanActivate {
 
   private extractBearer(request: Request): string | null {
     const header = request.header('authorization') ?? '';
-    const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-    return match?.[1] ?? null;
+    const prefix = 'bearer ';
+    const trimmed = header.trim();
+    if (!trimmed.toLowerCase().startsWith(prefix)) return null;
+    return trimmed.slice(prefix.length).trim() || null;
   }
 }

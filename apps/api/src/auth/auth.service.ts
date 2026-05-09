@@ -36,8 +36,8 @@ export class AuthService {
     private readonly users: UsersService,
   ) {}
 
-  async signAccessToken(payload: AccessTokenPayload): Promise<string> {
-    return this.jwt.signAsync(payload);
+  async signAccessToken(payload: Pick<AccessTokenPayload, 'sub' | 'email'> & Partial<AccessTokenPayload>): Promise<string> {
+    return this.jwt.signAsync(this.withDefaultClaims(payload.sub, payload.email, payload));
   }
 
   async register(
@@ -90,14 +90,7 @@ export class AuthService {
     userId: string,
     email: string,
   ): Promise<TokenPair> {
-    const accessToken = await this.jwt.signAsync({
-      sub: userId,
-      email,
-      tenantId: userId,
-      roles: ['user'],
-      aud: 'graph-worker',
-      iss: 'graph-api',
-    });
+    const accessToken = await this.jwt.signAsync(this.withDefaultClaims(userId, email));
 
     const raw = randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
     const hash = this.hashToken(raw);
@@ -112,5 +105,20 @@ export class AuthService {
 
   private hashToken(raw: string): string {
     return createHash('sha256').update(raw).digest('hex');
+  }
+
+  private withDefaultClaims(
+    userId: string,
+    email: string,
+    overrides: Partial<AccessTokenPayload> = {},
+  ): AccessTokenPayload {
+    return {
+      sub: userId,
+      email,
+      tenantId: overrides.tenantId || userId,
+      roles: overrides.roles || ['user'],
+      aud: overrides.aud || 'graph-worker',
+      iss: overrides.iss || 'graph-api',
+    };
   }
 }
