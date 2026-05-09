@@ -20,8 +20,8 @@ export interface ServiceAuthedRequest extends Request {
   serviceAuth: ServiceAuthClaims;
 }
 
-const SERVICE_ISSUER = 'graph-worker';
-const SERVICE_AUDIENCE = 'graph-api-brain';
+const DEFAULT_SERVICE_ISSUER = 'graph-worker';
+const DEFAULT_SERVICE_AUDIENCE = 'graph-api-brain';
 
 @Injectable()
 export class ServiceAuthGuard implements CanActivate {
@@ -36,8 +36,8 @@ export class ServiceAuthGuard implements CanActivate {
 
     const payload = await this.jwt.verifyAsync<ServiceAuthClaims>(token, {
       secret: this.env.INTERNAL_SERVICE_JWT_SECRET || this.env.JWT_SECRET,
-      audience: this.env.INTERNAL_SERVICE_JWT_AUDIENCE || SERVICE_AUDIENCE,
-      issuer: this.env.INTERNAL_SERVICE_JWT_ISSUER || SERVICE_ISSUER,
+      audience: this.env.INTERNAL_SERVICE_JWT_AUDIENCE || DEFAULT_SERVICE_AUDIENCE,
+      issuer: this.env.INTERNAL_SERVICE_JWT_ISSUER || DEFAULT_SERVICE_ISSUER,
       clockTolerance: 30,
     });
 

@@ -182,6 +182,6 @@ function clampInt(v, lo, hi, dflt) {
 
 function tenantIdFor(env, userId, explicitTenantId) {
   const tenantId = String(explicitTenantId || env.TENANT_ID || userId || '').trim();
-  if (!tenantId) throw new Error('tenantId is required');
+  if (!tenantId) throw new Error('tenantId could not be resolved from explicitTenantId, TENANT_ID, or userId');
   return tenantId;
 }
