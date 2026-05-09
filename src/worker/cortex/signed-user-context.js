@@ -1,4 +1,4 @@
-const S2S_MAX_SKEW_MS = 5 * 60_000;
+const SIGNED_CONTEXT_MAX_SKEW_MS = 5 * 60_000;
 
 export async function verifySignedUserContext(request, env, expectedUserId) {
   const secret = (env.CORTEX_S2S_SECRET || '').toString();
@@ -8,7 +8,7 @@ export async function verifySignedUserContext(request, env, expectedUserId) {
   const sig = (request.headers.get('x-cortex-signature') || '').trim();
   if (!userId || !tsRaw || !sig || userId !== expectedUserId) return false;
   const ts = Number(tsRaw);
-  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > S2S_MAX_SKEW_MS) return false;
+  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > SIGNED_CONTEXT_MAX_SKEW_MS) return false;
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),

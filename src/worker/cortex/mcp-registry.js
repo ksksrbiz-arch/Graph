@@ -36,6 +36,8 @@ function isSameHost(url) {
 }
 
 const TOOL_PREFIX = 'mcp:';
+// auth_token format version tag:
+//   enc1:<base64(iv||ciphertext)> = AES-256-GCM encrypted with MCP_TOKEN_KEK_BASE64
 const AUTH_TOKEN_PREFIX = 'enc1:';
 const DEFAULT_RETRY_ATTEMPTS = 2;
 const DEFAULT_LIST_TIMEOUT_MS = 8_000;
@@ -372,7 +374,7 @@ async function decryptAuthToken(env, encoded) {
 async function mcpTokenKey(env) {
   const b64 = (env?.MCP_TOKEN_KEK_BASE64 || '').toString().trim();
   if (!b64) {
-    throw new Error('MCP_TOKEN_KEK_BASE64 is required for encrypting/decrypting MCP auth tokens');
+    throw new Error('MCP_TOKEN_KEK_BASE64 is required for encrypting/decrypting MCP auth tokens (set via: wrangler secret put MCP_TOKEN_KEK_BASE64)');
   }
   const raw = base64ToBytes(b64);
   if (raw.byteLength !== 32) {

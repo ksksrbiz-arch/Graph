@@ -110,7 +110,9 @@ export class AgentPermissionStore implements OnModuleInit {
       }
       this.log.log(`loaded ${result.rows.length} agent permission grants from Postgres`);
     } catch (err) {
-      this.log.warn(`failed to initialize durable agent permissions: ${(err as Error).message}`);
+      this.log.warn(
+        `failed to initialize durable agent permissions (continuing in in-memory mode): ${(err as Error).message}`,
+      );
     }
   }
 
@@ -137,6 +139,9 @@ export class AgentPermissionStore implements OnModuleInit {
       grantedAt: new Date().toISOString(),
     };
     this.upsertLocal(grant);
+    // Persist asynchronously to preserve the existing synchronous API surface
+    // used throughout AgentService/controller paths. This is intentionally
+    // eventually consistent across process crashes.
     void this.persistGrant(grant);
     return grant;
   }
