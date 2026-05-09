@@ -20,36 +20,43 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     return null;
   }
 
-  const fg = window.ForceGraph3D({
-    controlType: 'orbit',
-    rendererConfig: { antialias: true, alpha: true },
-  })(container)
-    .backgroundColor('rgba(8,10,16,1)')
-    .showNavInfo(false)
-    .nodeId('id')
-    .nodeLabel((n) => `${escapeLabel(n.label || n.id)} — ${n.type}`)
-    .nodeRelSize(state.config.nodeRelSize)
-    .nodeVal((n) => Math.max(1, Math.sqrt(n.__degree || 1) * 3))
-    .nodeColor((n) => nodeColor(n))
-    .nodeOpacity(state.config.nodeOpacity ?? 0.95)
-    .nodeResolution(16)
-    .linkColor((l) => edgeColor(l))
-    .linkOpacity(state.config.edgeOpacity ?? 0.35)
-    .linkWidth((l) => 0.2 + (l.weight || 0.3) * (state.config.edgeWidthScale ?? 1.6) * 0.5)
-    .linkCurvature((l) => state.config.edgeCurvature || 0)
-    .linkCurveRotation((l) => (hashStr(linkKey(l)) % 628) / 100)
-    .linkDirectionalParticles(state.config.linkParticles ?? 1)
-    .linkDirectionalParticleWidth((l) => 0.6 + (l.weight || 0.3) * 1.4)
-    .linkDirectionalParticleSpeed(() => 0.004 * (state.config.pulseSpeed ?? 1))
-    .linkDirectionalParticleColor((l) => particleColor(l))
-    .onNodeHover((n) => {
-      container.style.cursor = n ? 'pointer' : 'default';
-      callbacks.onHover?.(n ? n.id : null);
-    })
-    .onNodeClick((n) => callbacks.onClick?.(n))
-    .onNodeRightClick((n, evt) => callbacks.onRightClick?.(n, evt))
-    .onBackgroundClick(() => callbacks.onBackgroundClick?.())
-    .onBackgroundRightClick((evt) => callbacks.onBackgroundRightClick?.(evt));
+  let fg;
+  try {
+    fg = window.ForceGraph3D({
+      controlType: 'orbit',
+      rendererConfig: { antialias: true, alpha: true },
+    })(container)
+      .backgroundColor('rgba(8,10,16,1)')
+      .showNavInfo(false)
+      .nodeId('id')
+      .nodeLabel((n) => `${escapeLabel(n.label || n.id)} — ${n.type}`)
+      .nodeRelSize(state.config.nodeRelSize)
+      .nodeVal((n) => Math.max(1, Math.sqrt(n.__degree || 1) * 3))
+      .nodeColor((n) => nodeColor(n))
+      .nodeOpacity(state.config.nodeOpacity ?? 0.95)
+      .nodeResolution(16)
+      .linkColor((l) => edgeColor(l))
+      .linkOpacity(state.config.edgeOpacity ?? 0.35)
+      .linkWidth((l) => 0.2 + (l.weight || 0.3) * (state.config.edgeWidthScale ?? 1.6) * 0.5)
+      .linkCurvature((l) => state.config.edgeCurvature || 0)
+      .linkCurveRotation((l) => (hashStr(linkKey(l)) % 628) / 100)
+      .linkDirectionalParticles(state.config.linkParticles ?? 1)
+      .linkDirectionalParticleWidth((l) => 0.6 + (l.weight || 0.3) * 1.4)
+      .linkDirectionalParticleSpeed(() => 0.004 * (state.config.pulseSpeed ?? 1))
+      .linkDirectionalParticleColor((l) => particleColor(l))
+      .onNodeHover((n) => {
+        container.style.cursor = n ? 'pointer' : 'default';
+        callbacks.onHover?.(n ? n.id : null);
+      })
+      .onNodeClick((n) => callbacks.onClick?.(n))
+      .onNodeRightClick((n, evt) => callbacks.onRightClick?.(n, evt))
+      .onBackgroundClick(() => callbacks.onBackgroundClick?.())
+      .onBackgroundRightClick((evt) => callbacks.onBackgroundRightClick?.(evt));
+  } catch (err) {
+    console.warn('[graph-3d] renderer init failed', err);
+    container.innerHTML = '';
+    return null;
+  }
 
   // Bloom postprocessing — adds the "neural glow"
   let bloomPass = null;
@@ -215,7 +222,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
       if (!firstSync3d && !seenNodes3d.has(n.id)) newNodeIds.push(n.id);
       seenNodes3d.add(n.id);
     }
-    for (const e of graph.links || graph.edges || []) {
+    for (const e of graphLinks(graph)) {
       const k = `${srcId(e)}::${tgtId(e)}`;
       if (!firstSync3d && !seenEdges3d.has(k)) newEdges.push(e);
       seenEdges3d.add(k);
@@ -284,7 +291,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
         const data = fg.graphData?.();
         if (data) {
           const want = new Set(outs.map((e) => `${srcId(e)}::${tgtId(e)}`));
-          for (const link of data.links) {
+          for (const link of graphLinks(data)) {
             const k = `${srcId(link)}::${tgtId(link)}`;
             if (want.has(k)) {
               try { fg.emitParticle(link); } catch {}
@@ -305,7 +312,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
         const data = fg.graphData?.();
         if (!data) return;
         const want = `${srcId(edge)}::${tgtId(edge)}`;
-        for (const link of data.links) {
+        for (const link of graphLinks(data)) {
           if (`${srcId(link)}::${tgtId(link)}` === want) {
             try { fg.emitParticle(link); } catch {}
             break;
@@ -321,7 +328,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
       let depth = 0;
       const data = fg.graphData?.();
       const linkByKey = new Map();
-      if (data) for (const l of data.links) linkByKey.set(`${srcId(l)}::${tgtId(l)}`, l);
+      if (data) for (const l of graphLinks(data)) linkByKey.set(`${srcId(l)}::${tgtId(l)}`, l);
       while (frontier.length && depth < 4) {
         const next = [];
         for (const id of frontier) {
@@ -367,6 +374,10 @@ function hashStr(s) {
 
 function linkKey(l) {
   return `${srcId(l)}::${tgtId(l)}`;
+}
+
+function graphLinks(graph) {
+  return graph?.links || graph?.edges || [];
 }
 
 function parseTime(v) {

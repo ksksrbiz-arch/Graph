@@ -6,7 +6,7 @@ import {
   state, subscribe, setSelected, setFocusRoot, setHovered,
   setMinEdgeWeight, toggleFilterType, visibleNodeIds, setConfig, setDimensions,
 } from '../state.js';
-import { colorForType, escape, fmtDate, srcId, tgtId, truncate, el } from '../util.js';
+import { colorForType, escape, fmtDate, srcId, tgtId, truncate, el, showToast } from '../util.js';
 import { regionForNode, styleForRegion } from '../cortex.js';
 import { createBrainClient } from '../brain.js';
 import { createBrainAnimation } from '../brain-animation.js';
@@ -299,6 +299,8 @@ function buildOrUpdate() {
 
 function rebuildRenderer() {
   const container = document.getElementById('canvas');
+  const requestedDimensions = state.config.dimensions;
+  const requested3d = requestedDimensions === 3 || requestedDimensions === 4;
   if (renderer) {
     try { brain?.stop(); } catch {}
     try { brainOverlay?.destroy(); } catch {}
@@ -313,11 +315,11 @@ function rebuildRenderer() {
     onBackgroundClick: () => { setSelected(null); closeContextMenu(); },
     onBackgroundRightClick: (evt) => { evt.preventDefault?.(); closeContextMenu(); },
   };
-  if (state.config.dimensions === 3 || state.config.dimensions === 4) {
+  if (requested3d) {
     renderer = create3DRenderer({
       container,
       callbacks,
-      fourD: state.config.dimensions === 4,
+      fourD: requestedDimensions === 4,
     });
   }
   if (!renderer) {
@@ -327,6 +329,11 @@ function rebuildRenderer() {
     // Both 3D and 2D renderers failed to initialise (vendor scripts not loaded).
     console.error('[graph] renderer could not be created — vendor scripts may not be loaded');
     return;
+  }
+  if (requested3d && renderer.kind !== '3d' && renderer.kind !== '4d') {
+    state.config.dimensions = 2;
+    reflectModeButtons();
+    showToast('3D renderer unavailable here — showing the 2D graph instead.', 'error');
   }
   if (renderer.kind === '2d') attachLongPress(container);
   applyFilters();
