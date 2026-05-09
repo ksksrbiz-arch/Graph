@@ -1,5 +1,5 @@
 // Semantic recall layer — wraps Workers AI BGE embeddings + Vectorize index.
-// Stored vector id = `${userId}:${nodeId}` so multi-tenant search is a hard
+// Stored vector id = `${tenantId}:${nodeId}` so multi-tenant search is a hard
 // filter, not a soft hint. Metadata mirrors the node row so the reasoner can
 // render results without a second D1 lookup.
 //
@@ -13,7 +13,7 @@ const QUERY_TOPK_DEFAULT = 6;
 
 /** SHA-derived stable id (string) so a node id like a UUID is preserved
  *  in the vector index. We pass through unchanged but namespace by user. */
-const vectorId = (userId, nodeId) => `${userId}:${nodeId}`;
+const vectorId = (tenantId, nodeId) => `${tenantId}:${nodeId}`;
 
 /** Build the text we embed for a node — label dominates, type adds the
  *  semantic shape ("a `bookmark` called …"), metadata.excerpt etc. fold in. */
@@ -67,11 +67,13 @@ export async function upsertNodes(env, userId, nodes) {
       console.warn(`[vector] embed shape mismatch: got ${vectors.length} for ${chunk.length}`);
       continue;
     }
+    const tenantId = tenantIdFor(env, userId);
     const items = chunk.map((n, j) => ({
-      id: vectorId(userId, n.id),
+      id: vectorId(tenantId, n.id),
       values: vectors[j],
       metadata: {
         userId,
+        tenantId,
         nodeId: n.id,
         type:  String(n.type || 'note').slice(0, 60),
         label: String(n.label || '').slice(0, 240),
@@ -99,6 +101,7 @@ export async function upsertNodes(env, userId, nodes) {
 export async function recall(env, userId, query, opts = {}) {
   if (!env.VECTORS || !env.AI || !query) return { ok: false, error: 'vectorize/AI binding missing or empty query', matches: [] };
   const k = clampInt(opts.topK, 1, 50, QUERY_TOPK_DEFAULT);
+  const tenantId = tenantIdFor(env, userId, opts.tenantId);
   let qv;
   try {
     const resp = await env.AI.run(EMBED_MODEL, { text: [query] });
@@ -114,7 +117,7 @@ export async function recall(env, userId, query, opts = {}) {
     res = await env.VECTORS.query(qv, {
       topK: k,
       returnMetadata: 'all',
-      filter: { userId },
+      filter: { tenantId },
     });
   } catch (err) {
     console.warn('[vector] filtered query failed, retrying unfiltered:', err.message);
@@ -127,7 +130,7 @@ export async function recall(env, userId, query, opts = {}) {
   // Defense-in-depth: even if the filter silently returned everyone, narrow
   // down by metadata.userId here so cross-tenant leaks can't happen.
   const matches = (res?.matches || [])
-    .filter((m) => !m.metadata?.userId || m.metadata.userId === userId)
+    .filter((m) => (!m.metadata?.tenantId || m.metadata.tenantId === tenantId) && (!m.metadata?.userId || m.metadata.userId === userId))
     .map((m) => ({
       score: m.score,
       nodeId: m.metadata?.nodeId,
@@ -141,7 +144,7 @@ export async function recall(env, userId, query, opts = {}) {
     try {
       const fallback = await env.VECTORS.query(qv, { topK: k, returnMetadata: 'all' });
       const more = (fallback?.matches || [])
-        .filter((m) => !m.metadata?.userId || m.metadata.userId === userId)
+        .filter((m) => (!m.metadata?.tenantId || m.metadata.tenantId === tenantId) && (!m.metadata?.userId || m.metadata.userId === userId))
         .map((m) => ({
           score: m.score,
           nodeId: m.metadata?.nodeId,
@@ -158,7 +161,8 @@ export async function recall(env, userId, query, opts = {}) {
 /** Drop all vectors for a user — used by admin reset. Returns deleted count. */
 export async function deleteForUser(env, userId, ids) {
   if (!env.VECTORS || !ids?.length) return 0;
-  const targets = ids.map((id) => vectorId(userId, id));
+  const tenantId = tenantIdFor(env, userId);
+  const targets = ids.map((id) => vectorId(tenantId, id));
   let removed = 0;
   for (let i = 0; i < targets.length; i += UPSERT_BATCH) {
     try {
@@ -174,4 +178,10 @@ export async function deleteForUser(env, userId, ids) {
 function clampInt(v, lo, hi, dflt) {
   const n = Number.isFinite(+v) ? Math.floor(+v) : dflt;
   return Math.max(lo, Math.min(hi, n));
+}
+
+function tenantIdFor(env, userId, explicitTenantId) {
+  const tenantId = String(explicitTenantId || env.TENANT_ID || userId || '').trim();
+  if (!tenantId) throw new Error('tenantId could not be resolved from explicitTenantId, TENANT_ID, or userId');
+  return tenantId;
 }

@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
+import { ServiceAuthGuard } from '../auth/guards/service-auth.guard';
 import { ReasoningModule } from '../reasoning/reasoning.module';
 import { AttentionService } from './attention.service';
 import { BrainController } from './brain.controller';
@@ -12,17 +14,19 @@ import { CortexController } from './cortex.controller';
 import { CortexService } from './cortex.service';
 import { DreamService } from './dream.service';
 import { InsightsController } from './insights.controller';
+import { InternalBrainController } from './internal-brain.controller';
 import { InsightsService } from './insights.service';
 import { RecallService } from './recall.service';
 import { SensoryService } from './sensory.service';
 
 @Module({
-  imports: [ReasoningModule],
+  imports: [AuthModule, ReasoningModule],
   controllers: [
     BrainController,
     InsightsController,
     CortexController,
     CerebralStreamController,
+    InternalBrainController,
   ],
   providers: [
     BrainService,
@@ -36,6 +40,7 @@ import { SensoryService } from './sensory.service';
     InsightsService,
     CortexService,
     CerebralStreamService,
+    ServiceAuthGuard,
   ],
   exports: [
     BrainService,

@@ -27,6 +27,7 @@ import {
   upsertNodesAndEdges,
   verifyWebhookSig,
 } from './d1-store.js';
+import { authErrorResponse, requireAuthContext } from './auth.js';
 
 const MAX_URL_BYTES = 1_500_000; // 1.5 MB cap on a fetched page (we don't download images)
 const FETCH_TIMEOUT_MS = 8_000;
@@ -46,7 +47,8 @@ export async function handleIngressApi(request, env, url) {
   if (pathname === '/api/v1/public/sources' && method === 'POST') {
     const dto = await safeJson(request);
     if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
-    if (!checkUser(dto.userId, env)) return forbidden(dto.userId);
+    const auth = await authFor(request, env, dto.userId);
+    if (auth instanceof Response) return auth;
     if (!dto.kind || !dto.label) {
       return jsonResponse({ error: 'kind and label are required' }, 400);
     }
@@ -102,7 +104,8 @@ export async function handleIngressApi(request, env, url) {
   if (pathname === '/api/v1/public/ingest/batch' && method === 'POST') {
     const dto = await safeJson(request);
     if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
-    if (!checkUser(dto.userId, env)) return forbidden(dto.userId);
+    const auth = await authFor(request, env, dto.userId);
+    if (auth instanceof Response) return auth;
     if (!Array.isArray(dto.nodes)) {
       return jsonResponse({ error: 'nodes array is required' }, 400);
     }
@@ -122,7 +125,8 @@ export async function handleIngressApi(request, env, url) {
   if (pathname === '/api/v1/public/ingest/url' && method === 'POST') {
     const dto = await safeJson(request);
     if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
-    if (!checkUser(dto.userId, env)) return forbidden(dto.userId);
+    const auth = await authFor(request, env, dto.userId);
+    if (auth instanceof Response) return auth;
     const target = (dto.url || '').toString().trim();
     if (!target || !/^https?:\/\//i.test(target)) {
       return jsonResponse({ error: 'url must start with http(s)://' }, 400);
@@ -338,14 +342,12 @@ async function safeJson(request) {
   try { return await request.json(); } catch { return null; }
 }
 
-function checkUser(userId, env) {
-  if (!userId || typeof userId !== 'string') return false;
-  const csv = (env.PUBLIC_INGEST_USER_IDS || 'local').toString();
-  return csv.split(',').map((s) => s.trim()).filter(Boolean).includes(userId.trim());
-}
-
-function forbidden(userId) {
-  return jsonResponse({ error: `userId=${userId ?? '(empty)'} is not on the public ingest allowlist` }, 403);
+async function authFor(request, env, userId) {
+  try {
+    return await requireAuthContext(request, env, { expectedUserId: userId });
+  } catch (err) {
+    return authErrorResponse(err);
+  }
 }
 
 function jsonResponse(body, status = 200) {

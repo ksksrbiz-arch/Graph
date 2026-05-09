@@ -1,7 +1,7 @@
 // Accounts Payable Cortex — API router.
 //
-// All routes are under /api/v1/finance/* and require a userId that is on
-// the PUBLIC_INGEST_USER_IDS allowlist (same guard as cortex routes).
+// All routes are under /api/v1/finance/* and require an authenticated userId
+// resolved from a Worker JWT (with legacy local fallback when no JWT secret is configured).
 //
 // Routes:
 //   GET  /api/v1/finance/queue                  — approval queue (bills + proposals)
@@ -33,6 +33,7 @@ import {
 } from './store.js';
 import { extractFromText, extractFromImage } from './invoice-parser.js';
 import { upsertNodesAndEdges } from '../d1-store.js';
+import { authErrorResponse, requireAuthContext } from '../auth.js';
 
 export async function handleFinanceApi(request, env, url) {
   const { pathname } = url;
@@ -42,7 +43,8 @@ export async function handleFinanceApi(request, env, url) {
 
   const userId = getUserId(request, url);
   if (!userId) return json({ error: 'userId required (query param or JSON body)' }, 400);
-  if (!checkUser(userId, env)) return forbidden(userId);
+  const auth = await authFor(request, env, userId);
+  if (auth instanceof Response) return auth;
   if (!env.GRAPH_DB)           return json({ error: 'GRAPH_DB binding missing' }, 503);
 
   // ── Approval Queue ──────────────────────────────────────────────────
@@ -324,14 +326,12 @@ function getUserId(request, url) {
   // For GET requests the query param is the only option.
 }
 
-function checkUser(userId, env) {
-  if (!userId) return false;
-  const csv = (env.PUBLIC_INGEST_USER_IDS || 'local').toString();
-  return csv.split(',').map((s) => s.trim()).filter(Boolean).includes(userId);
-}
-
-function forbidden(userId) {
-  return json({ error: `userId=${userId} not on allowlist` }, 403);
+async function authFor(request, env, userId) {
+  try {
+    return await requireAuthContext(request, env, { expectedUserId: userId });
+  } catch (err) {
+    return authErrorResponse(err);
+  }
 }
 
 function json(body, status = 200) {

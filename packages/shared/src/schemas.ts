@@ -109,6 +109,9 @@ export const EnvSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be ≥32 bytes'),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).default(900),
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().min(3600).default(2_592_000),
+  INTERNAL_SERVICE_JWT_SECRET: z.string().min(32).optional(),
+  INTERNAL_SERVICE_JWT_ISSUER: z.string().default('graph-worker'),
+  INTERNAL_SERVICE_JWT_AUDIENCE: z.string().default('graph-api-brain'),
 
   BRAIN_AUTO_START_USER_IDS: z.string().optional(),
   BRAIN_AUTO_START_DREAM: envBoolean.default(false),

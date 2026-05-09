@@ -23,6 +23,7 @@
 // HTML/JS/CSS/data file routes.
 
 import { parseMarkdown, parseText } from './worker/text-parser.js';
+import { authErrorResponse, requireAuthContext } from './worker/auth.js';
 import { handleIngressApi } from './worker/ingress.js';
 import { handleCortexApi } from './worker/cortex/router.js';
 import { handleMcpServer } from './worker/mcp-server.js';
@@ -119,7 +120,7 @@ async function handleApi(request, env, url) {
 
   const { pathname } = url;
   const allowed = allowedUserIds(env);
-  const enabled = Boolean(env.GRAPH_KV) && allowed.size > 0;
+  const enabled = Boolean(env.GRAPH_KV) && (allowed.size > 0 || Boolean(env.JWT_SECRET || env.WORKER_JWT_SECRET));
 
   if (pathname === '/api/v1/public/ingest/health' && request.method === 'GET') {
     return jsonResponse({
@@ -132,31 +133,30 @@ async function handleApi(request, env, url) {
   if (pathname === '/api/v1/public/graph' && request.method === 'GET') {
     const userId = (url.searchParams.get('userId') || '').trim();
     if (!userId) return jsonResponse({ error: 'userId query param is required' }, 400);
-    if (!allowed.has(userId)) {
-      return jsonResponse({ error: `userId=${userId} is not on the public allowlist` }, 403);
-    }
+    const auth = await authFor(request, env, userId);
+    if (auth instanceof Response) return auth;
     if (!env.GRAPH_KV) return jsonResponse({ error: 'persistence not configured' }, 503);
     const snapshot = await readSnapshot(env.GRAPH_KV, userId);
     return jsonResponse(snapshot);
   }
 
   if (pathname === '/api/v1/public/ingest/text' && request.method === 'POST') {
-    return ingest(request, env, allowed, 'text');
+    return ingest(request, env, 'text');
   }
 
   if (pathname === '/api/v1/public/ingest/markdown' && request.method === 'POST') {
-    return ingest(request, env, allowed, 'markdown');
+    return ingest(request, env, 'markdown');
   }
 
   if (pathname === '/api/v1/public/ingest/graph' && request.method === 'POST') {
-    return ingestGraph(request, env, allowed);
+    return ingestGraph(request, env);
   }
 
   // Not an API endpoint we own — let the caller fall through.
   return null;
 }
 
-async function ingest(request, env, allowed, format) {
+async function ingest(request, env, format) {
   if (!env.GRAPH_KV) {
     return jsonResponse({ error: 'persistence not configured' }, 503);
   }
@@ -170,9 +170,8 @@ async function ingest(request, env, allowed, format) {
 
   const userId = typeof dto?.userId === 'string' ? dto.userId.trim() : '';
   if (!userId) return jsonResponse({ error: 'userId is required' }, 400);
-  if (!allowed.has(userId)) {
-    return jsonResponse({ error: `userId=${userId} is not on the public ingest allowlist` }, 403);
-  }
+  const auth = await authFor(request, env, userId);
+  if (auth instanceof Response) return auth;
 
   const contentField = format === 'markdown' ? 'markdown' : 'text';
   const content = typeof dto?.[contentField] === 'string' ? dto[contentField] : '';
@@ -208,7 +207,7 @@ async function ingest(request, env, allowed, format) {
   });
 }
 
-async function ingestGraph(request, env, allowed) {
+async function ingestGraph(request, env) {
   if (!env.GRAPH_KV) {
     return jsonResponse({ error: 'persistence not configured' }, 503);
   }
@@ -222,9 +221,8 @@ async function ingestGraph(request, env, allowed) {
 
   const userId = typeof dto?.userId === 'string' ? dto.userId.trim() : '';
   if (!userId) return jsonResponse({ error: 'userId is required' }, 400);
-  if (!allowed.has(userId)) {
-    return jsonResponse({ error: `userId=${userId} is not on the public ingest allowlist` }, 403);
-  }
+  const auth = await authFor(request, env, userId);
+  if (auth instanceof Response) return auth;
 
   if (!Array.isArray(dto.nodes)) {
     return jsonResponse({ error: 'nodes array is required' }, 400);
@@ -443,6 +441,14 @@ function allowedUserIds(env) {
       .map((s) => s.trim())
       .filter(Boolean),
   );
+}
+
+async function authFor(request, env, userId) {
+  try {
+    return await requireAuthContext(request, env, { expectedUserId: userId });
+  } catch (err) {
+    return authErrorResponse(err);
+  }
 }
 
 function defaultTitle(format) {
