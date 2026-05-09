@@ -19,47 +19,50 @@ import { upsertNodes as upsertVectors } from './vector.js';
 import { addServer as mcpAddServer, listServers as mcpListServers, removeServer as mcpRemoveServer, refreshTools as mcpRefreshTools, setEnabled as mcpSetEnabled } from './mcp-registry.js';
 import { CRON_PLAYBOOK, listSchedules, runSchedule } from './scheduler.js';
 import { think } from './reason.js';
+import { verifySignedUserContext as verifySignedUserContextSignature } from './signed-user-context.js';
 
 export async function handleCortexApi(request, env, url) {
   const { pathname } = url;
   const method = request.method;
+  const correlationId = requestCorrelationId(request);
+  const responseHeaders = { 'x-correlation-id': correlationId };
 
   if (pathname === '/api/v1/cortex/tools' && method === 'GET') {
     const requestedUserId = need(url, 'userId') || 'local';
-    const auth = await authFor(request, env, requestedUserId);
+    const auth = await authFor(request, env, requestedUserId, correlationId);
     if (auth instanceof Response) return auth;
     const { userId } = auth;
-    return jsonResponse({ tools: await describeTools(env, { userId }) });
+    return jsonResponse({ tools: await describeTools(env, { userId }) }, 200, responseHeaders);
   }
 
   if (pathname === '/api/v1/cortex/state' && method === 'GET') {
     const userId = need(url, 'userId');
-    if (!userId) return jsonResponse({ error: 'userId required' }, 400);
-    const auth = await authFor(request, env, userId);
+    if (!userId) return jsonResponse({ error: 'userId required' }, 400, responseHeaders);
+    const auth = await authFor(request, env, userId, correlationId);
     if (auth instanceof Response) return auth;
     const att = await readAttention(env.GRAPH_KV, userId);
-    return jsonResponse({ attention: att });
+    return jsonResponse({ attention: att }, 200, responseHeaders);
   }
 
   if (pathname === '/api/v1/cortex/perceive' && method === 'POST') {
     const dto = await safeJson(request);
-    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
+    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400, responseHeaders);
     const msg = stamp(dto, { clientFallback: 'unknown' });
-    if (!isPerceive(msg)) return jsonResponse({ error: 'not a perceive message (missing kind/modality)' }, 400);
+    if (!isPerceive(msg)) return jsonResponse({ error: 'not a perceive message (missing kind/modality)' }, 400, responseHeaders);
     const userId = (msg.userId || msg.payload?.userId || 'local').toString().trim();
-    const auth = await authFor(request, env, userId);
+    const auth = await authFor(request, env, userId, correlationId);
     if (auth instanceof Response) return auth;
-    const result = await perceive(env, userId, msg);
-    return jsonResponse(result, result.ok === false ? 400 : 200);
+    const result = await perceive(env, userId, msg, { correlationId });
+    return jsonResponse(result, result.ok === false ? 400 : 200, responseHeaders);
   }
 
   if (pathname === '/api/v1/cortex/think' && method === 'POST') {
     const dto = await safeJson(request);
-    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
+    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400, responseHeaders);
     const msg = stamp(dto, { clientFallback: 'unknown' });
-    if (!isThink(msg)) return jsonResponse({ error: 'not a think message' }, 400);
+    if (!isThink(msg)) return jsonResponse({ error: 'not a think message' }, 400, responseHeaders);
     const userId = (msg.userId || 'local').toString().trim();
-    const auth = await authFor(request, env, userId);
+    const auth = await authFor(request, env, userId, correlationId);
     if (auth instanceof Response) return auth;
     const out = await think(env, {
       userId,
@@ -75,13 +78,18 @@ export async function handleCortexApi(request, env, url) {
     if (env.GRAPH_DB) {
       await recordEvent(env.GRAPH_DB, {
         userId, sourceKind: 'cortex', kind: 'think',
-        payload: { question: msg.question, finalAnswer: out.finalAnswer, steps: out.trace?.length },
+        payload: {
+          question: msg.question,
+          finalAnswer: out.finalAnswer,
+          steps: out.trace?.length,
+          correlationId,
+        },
         nodeCount: 0, edgeCount: 0,
         status: out.ok ? 'applied' : 'error',
         error: out.ok ? null : out.error,
       });
     }
-    return jsonResponse(out);
+    return jsonResponse({ ...out, correlationId }, 200, responseHeaders);
   }
 
   const actMatch = pathname.match(/^\/api\/v1\/cortex\/act\/([a-z0-9_:-]+)$/);
@@ -89,26 +97,38 @@ export async function handleCortexApi(request, env, url) {
     const intent = actMatch[1];
     const dto = await safeJson(request);
     const userId = (dto?.userId || 'local').toString().trim();
-    const auth = await authFor(request, env, userId);
+    const auth = await authFor(request, env, userId, correlationId);
     if (auth instanceof Response) return auth;
     const result = await dispatch(env, intent, dto?.args || {}, { userId, tenantId: auth.tenantId, roles: auth.roles });
-    return jsonResponse(result);
+    if (env.GRAPH_DB) {
+      await recordEvent(env.GRAPH_DB, {
+        userId,
+        sourceKind: 'cortex',
+        kind: 'act',
+        payload: { intent, args: dto?.args || {}, ok: result.ok, correlationId },
+        nodeCount: 0,
+        edgeCount: 0,
+        status: result.ok ? 'applied' : 'error',
+        error: result.ok ? null : result.error,
+      });
+    }
+    return jsonResponse(result, result.ok ? 200 : 400, responseHeaders);
   }
 
   // GET /api/v1/cortex/schedules — list configured cron cadences + last-run watermarks
   if (pathname === '/api/v1/cortex/schedules' && method === 'GET') {
     const requestedUserId = need(url, 'userId') || 'local';
-    const auth = await authFor(request, env, requestedUserId);
+    const auth = await authFor(request, env, requestedUserId, correlationId);
     if (auth instanceof Response) return auth;
     const { userId } = auth;
     const schedules = listSchedules();
     if (env.GRAPH_KV) {
       for (const sch of schedules) {
-        const ts = await env.GRAPH_KV.get('schedule:' + userId + ':' + sch.name + ':lastRun');
+        const ts = await env.GRAPH_KV.get('schedule:' + auth.tenantId + ':' + sch.name + ':lastRun');
         sch.lastRun = ts ? parseInt(ts, 10) : null;
       }
     }
-    return jsonResponse({ userId, schedules });
+    return jsonResponse({ userId, schedules }, 200, responseHeaders);
   }
 
   // POST /api/v1/cortex/schedules/:name/run — manually trigger a scheduled think
@@ -117,19 +137,19 @@ export async function handleCortexApi(request, env, url) {
   if (schedRunMatch && method === 'POST') {
     const dto = (await safeJson(request)) || {};
     const userId = (dto.userId || 'local').toString().trim();
-    const auth = await authFor(request, env, userId);
+    const auth = await authFor(request, env, userId, correlationId);
     if (auth instanceof Response) return auth;
     const out = await runSchedule({ env, userId, tenantId: auth.tenantId, name: schedRunMatch[1], force: !!dto.force });
-    return jsonResponse(out);
+    return jsonResponse(out, 200, responseHeaders);
   }
 
   // GET /api/v1/cortex/scheduled-thoughts?userId=… — recent autonomous thoughts
   if (pathname === '/api/v1/cortex/scheduled-thoughts' && method === 'GET') {
     const requestedUserId = need(url, 'userId') || 'local';
-    const auth = await authFor(request, env, requestedUserId);
+    const auth = await authFor(request, env, requestedUserId, correlationId);
     if (auth instanceof Response) return auth;
     const { userId } = auth;
-    if (!env.GRAPH_DB) return jsonResponse({ error: 'GRAPH_DB binding missing' }, 503);
+    if (!env.GRAPH_DB) return jsonResponse({ error: 'GRAPH_DB binding missing' }, 503, responseHeaders);
     const limit = clampInt(parseInt(url.searchParams.get('limit') || '20', 10), 1, 200, 20);
     const sql = "SELECT id, ts, payload_json, status, error FROM events " +
                 "WHERE user_id = ?1 AND kind = 'scheduled-think' " +
@@ -144,35 +164,35 @@ export async function handleCortexApi(request, env, url) {
         steps: payload.steps, elapsedMs: payload.elapsedMs, newCount: payload.newCount,
       };
     });
-    return jsonResponse({ userId, thoughts });
+    return jsonResponse({ userId, thoughts }, 200, responseHeaders);
   }
 
   // GET /api/v1/cortex/mcp/servers?userId=&includeTools=1
   if (pathname === '/api/v1/cortex/mcp/servers' && method === 'GET') {
     const requestedUserId = need(url, 'userId') || 'local';
-    const auth = await authFor(request, env, requestedUserId);
+    const auth = await authFor(request, env, requestedUserId, correlationId);
     if (auth instanceof Response) return auth;
     const { userId } = auth;
     const includeTools = url.searchParams.get('includeTools') === '1';
     const servers = await mcpListServers(env, { userId, includeTools });
-    return jsonResponse({ userId, servers });
+    return jsonResponse({ userId, servers }, 200, responseHeaders);
   }
 
   // POST /api/v1/cortex/mcp/servers  body:{userId, name, url, authToken?}
   if (pathname === '/api/v1/cortex/mcp/servers' && method === 'POST') {
     const dto = await safeJson(request);
-    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400);
+    if (!dto) return jsonResponse({ error: 'invalid JSON body' }, 400, responseHeaders);
     const userId = (dto.userId || 'local').toString().trim();
-    const auth = await authFor(request, env, userId);
+    const auth = await authFor(request, env, userId, correlationId);
     if (auth instanceof Response) return auth;
-    if (!dto.name || !dto.url) return jsonResponse({ error: 'name and url are required' }, 400);
+    if (!dto.name || !dto.url) return jsonResponse({ error: 'name and url are required' }, 400, responseHeaders);
     try {
       const out = await mcpAddServer(env, {
         userId, name: dto.name, url: dto.url, authToken: dto.authToken,
       });
-      return jsonResponse(out);
+      return jsonResponse(out, 200, responseHeaders);
     } catch (err) {
-      return jsonResponse({ error: err.message }, 400);
+      return jsonResponse({ error: err.message }, 400, responseHeaders);
     }
   }
 
@@ -181,10 +201,10 @@ export async function handleCortexApi(request, env, url) {
   if (mcpDelMatch && method === 'DELETE') {
     const dto = (await safeJson(request)) || {};
     const userId = (dto.userId || need(url, 'userId') || 'local').toString().trim();
-    const auth = await authFor(request, env, userId);
+    const auth = await authFor(request, env, userId, correlationId);
     if (auth instanceof Response) return auth;
     const ok = await mcpRemoveServer(env, { userId, serverId: mcpDelMatch[1] });
-    return jsonResponse({ ok });
+    return jsonResponse({ ok }, 200, responseHeaders);
   }
 
   // POST /api/v1/cortex/mcp/servers/:id/refresh  body:{userId}
@@ -192,20 +212,20 @@ export async function handleCortexApi(request, env, url) {
   if (mcpRefreshMatch && method === 'POST') {
     const dto = (await safeJson(request)) || {};
     const userId = (dto.userId || 'local').toString().trim();
-    const auth = await authFor(request, env, userId);
+    const auth = await authFor(request, env, userId, correlationId);
     if (auth instanceof Response) return auth;
     const out = await mcpRefreshTools(env, { userId, serverId: mcpRefreshMatch[1] });
-    return jsonResponse({ refreshed: out });
+    return jsonResponse({ refreshed: out }, 200, responseHeaders);
   }
 
   // POST /api/v1/cortex/mcp/refresh  body:{userId}  refresh ALL servers
   if (pathname === '/api/v1/cortex/mcp/refresh' && method === 'POST') {
     const dto = (await safeJson(request)) || {};
     const userId = (dto.userId || 'local').toString().trim();
-    const auth = await authFor(request, env, userId);
+    const auth = await authFor(request, env, userId, correlationId);
     if (auth instanceof Response) return auth;
     const out = await mcpRefreshTools(env, { userId });
-    return jsonResponse({ refreshed: out });
+    return jsonResponse({ refreshed: out }, 200, responseHeaders);
   }
 
   // POST /api/v1/cortex/admin/backfill-vectors — embed every D1 node
@@ -214,10 +234,10 @@ export async function handleCortexApi(request, env, url) {
   if (pathname === '/api/v1/cortex/admin/backfill-vectors' && method === 'POST') {
     const dto = await safeJson(request);
     const userId = (dto?.userId || 'local').toString().trim();
-    const auth = await authFor(request, env, userId);
+    const auth = await authFor(request, env, userId, correlationId);
     if (auth instanceof Response) return auth;
-    if (!env.GRAPH_DB) return jsonResponse({ error: 'GRAPH_DB binding missing' }, 503);
-    if (!env.VECTORS || !env.AI) return jsonResponse({ error: 'VECTORS or AI binding missing' }, 503);
+    if (!env.GRAPH_DB) return jsonResponse({ error: 'GRAPH_DB binding missing' }, 503, responseHeaders);
+    if (!env.VECTORS || !env.AI) return jsonResponse({ error: 'VECTORS or AI binding missing' }, 503, responseHeaders);
     const batch = clampInt(dto?.batch, 50, 1000, 200);
     const sinceTs = Number(dto?.sinceTs || 0);
     let cursor = null;
@@ -253,7 +273,7 @@ export async function handleCortexApi(request, env, url) {
       if (Date.now() - startedAt > 25_000) break; // stay under sub-request budget
       if (rows.length < batch) break;
     }
-    return jsonResponse({ ok: true, total, written, elapsedMs: Date.now() - startedAt, nextCursor: cursor });
+    return jsonResponse({ ok: true, total, written, elapsedMs: Date.now() - startedAt, nextCursor: cursor }, 200, responseHeaders);
   }
 
   return null;
@@ -273,7 +293,7 @@ function safeJson_(s) {
 // the result into the event log + attention focus so the next /think
 // picks up the new perception.
 
-async function perceive(env, userId, msg) {
+async function perceive(env, userId, msg, { correlationId } = {}) {
   const merge = env.__mergeAndPersist;
   if (typeof merge !== 'function' || !env.GRAPH_KV) {
     return { ok: false, error: 'KV merge not wired' };
@@ -385,7 +405,7 @@ async function perceive(env, userId, msg) {
     const [e] = await Promise.all([
       recordEvent(env.GRAPH_DB, {
         userId, sourceKind: msg.modality, kind,
-        payload: { source: msg.source, ...safePayload },
+        payload: { source: msg.source, correlationId: correlationId || null, ...safePayload },
         nodeCount: parsed.nodes?.length ?? 0,
         edgeCount: parsed.edges?.length ?? 0,
         status: 'applied',
@@ -416,6 +436,7 @@ async function perceive(env, userId, msg) {
     totalEdges: snap.edges.length,
     ...(transcript !== null && { transcript }),
     ...(caption    !== null && { caption }),
+    correlationId: correlationId || null,
   };
 }
 
@@ -428,19 +449,34 @@ function need(url, key) {
   const v = (url.searchParams.get(key) || '').trim();
   return v || null;
 }
-async function authFor(request, env, userId) {
+async function authFor(request, env, userId, correlationId) {
   try {
     return await requireAuthContext(request, env, { expectedUserId: userId });
   } catch (err) {
-    return authErrorResponse(err);
+    if (await verifySignedUserContextSignature(request, env, userId)) {
+      return { userId, tenantId: userId, roles: ['signed-context'] };
+    }
+    const res = authErrorResponse(err);
+    if (correlationId) res.headers.set('x-correlation-id', correlationId);
+    return res;
   }
 }
-function jsonResponse(body, status = 200) {
+function jsonResponse(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      ...extraHeaders,
+    },
   });
 }
+
+function requestCorrelationId(request) {
+  const fromHeader = (request.headers.get('x-correlation-id') || '').trim();
+  return fromHeader || crypto.randomUUID();
+}
+
 
 /** Decode a base64 string to a Uint8Array. Throws on invalid input. */
 function base64ToBytes(b64) {

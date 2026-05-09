@@ -83,6 +83,10 @@ export default {
     if (url.pathname.startsWith('/api/')) {
       const res = await handleApi(request, env, url);
       if (res) {
+        if (!res.headers.get('x-correlation-id')) {
+          const corr = (request.headers.get('x-correlation-id') || '').trim() || crypto.randomUUID();
+          res.headers.set('x-correlation-id', corr);
+        }
         for (const [k, v] of Object.entries(corsHeaders(request))) res.headers.set(k, v);
         return res;
       }
@@ -474,7 +478,8 @@ function corsHeaders(request) {
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-methods': 'GET, POST, OPTIONS',
-    'access-control-allow-headers': 'authorization, content-type, x-correlation-id',
+    'access-control-allow-headers': 'content-type, authorization, x-correlation-id, x-cortex-user, x-cortex-ts, x-cortex-signature',
+    'access-control-expose-headers': 'x-correlation-id',
     'access-control-max-age': '86400',
     vary: 'Origin',
   };
