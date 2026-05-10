@@ -1,7 +1,9 @@
 # CORTEX — implementation plan
 
-> Status: foundation shipping in commit `bb4ba50+1`. This doc is the contract;
-> code follows it. Living document — bump §10 when you ship a layer.
+> Status: foundation shipping in commit `bb4ba50+1`. This doc is the technical
+> deep-dive for the Cortex Compositor design. **Canonical roadmap tracking
+> (Phases 0–8) lives in [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).**
+> Living document — bump §10 when you ship a layer.
 
 ## 0 · Why this exists
 
@@ -244,8 +246,11 @@ Each layer is independently deployable + reversible.
 
 - [x] Layer 0–5 shipped — see commit log on `main`.
 - [x] Vectorize index — `cortex-embeddings` 768d cosine, metadata indexes on `userId` and `type`, all 28 existing nodes backfilled, embed-on-write hooked into mirrorToD1, recall tool live, RAG pre-fetched into every think() prompt.
-- [ ] Voice/vision sensors — pending mic/file pickers in SPA.
-- [ ] Cron autonomy — pending crontab in `wrangler.jsonc`.
+- [x] Voice in (Whisper) + Vision in (Llava) — shipped PR #46; mic + file-picker + drag-drop in SPA.
+- [x] Cron-driven autonomy — shipped; `wrangler.jsonc` triggers + `scheduled()` handler + `cortex/scheduler.js`.
+- [x] MCP plugin layer — shipped; `cortex/mcp-client.js` + `cortex/mcp-registry.js` + D1 `mcp_servers`.
+- [x] TTS out (Workers AI) — shipped; `cortex/sensory.js` speakText (Aura-1).
+- [ ] Capability handshake + remote clients — later; `/cortex/clients` registration UI.
 
 ## 11 · Why this design
 

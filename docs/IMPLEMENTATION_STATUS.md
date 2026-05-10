@@ -58,9 +58,124 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 | BrainService runtime levers — onSpike, setStimulationGain, setNoiseGain | ✅ | Per-user listeners on RunningBrain; stim gain applied in tick(), noise gain via SpikingSimulator.setNoiseRate() |
 | BrainGateway emitDream broadcast | ✅ | clients can show wake/sleep state |
 
-## Phases 3–8
+## Cortex compositor layers (cross-cutting — see `CORTEX-PLAN.md` for detail)
 
-⬜ Not started. Tracked here for visibility; do not rush these — each phase has its own DoD in §12 of the spec.
+| # | Layer | Status | Code |
+|---|---|---|---|
+| 0 | Cortex Protocol (types) | ✅ | `src/worker/cortex/protocol.js` |
+| 1 | Compositor routes | ✅ | `src/worker.js` → `cortex/router.js` |
+| 2 | Working-memory KV | ✅ | `src/worker/cortex/attention.js` |
+| 3 | ReAct loop + Llama 3.3 70B | ✅ | `src/worker/cortex/reason.js`, `env.AI` binding |
+| 4 | Tool registry (built-in 7) | ✅ | `src/worker/cortex/tools.js` |
+| 5 | Cortex SPA view | ✅ | `web/views/cortex.js` |
+| 6 | Vectorize semantic recall | ✅ | `cortex-embeddings` 768d cosine + `cortex/vector.js` + recall tool + RAG pre-fetch |
+| 7 | Voice in (Whisper) | ✅ | `@cf/openai/whisper` in `router.js` + MediaRecorder in `cortex.js` |
+| 8 | Vision in (Llava) | ✅ | `@cf/llava-hf/llava-1.5-7b-hf` in `router.js` + file-picker + drag-drop |
+| 9 | Cron-driven autonomy | ✅ | `cortex/scheduler.js` + `scheduled()` handler + `/schedules` admin routes |
+| 10 | Tool plugins via MCP | ✅ | `cortex/mcp-client.js` + `cortex/mcp-registry.js` + D1 `mcp_servers` |
+| 11 | TTS out (Workers AI) | ✅ | `cortex/sensory.js` speakText (Aura-1) + `tool:speak` |
+| 12 | Capability handshake + remote clients | ⬜ | `/cortex/clients` registration UI |
+| 13 | NestJS deterministic cortex | ✅ | `packages/cortex/` six-phase pipeline + `apps/api/src/brain/cortex.service.ts` |
+
+## Phase 3 — Frontend Canvas (Week 6–7) 🔜 _active_
+
+> **Goal**: migrate from the v1 static viewer under `/web` to a spec-grade, API-driven React canvas in `apps/web`.
+
+### 3a · Graph canvas core
+
+| DoD item (spec §7.2) | AC | Status | Notes |
+|-----------------------|----|--------|-------|
+| `<GraphCanvas />` renders nodes from API `/graph/subgraph` as force-directed layout | AC-F01 | ⬜ | Target: react-force-graph-2d/3d; must render 1,000 nodes < 2.5 s |
+| Node colour encodes `NodeType` via 12-colour contrast-compliant palette | AC-F02 | ⬜ | Palette in `packages/shared` |
+| Node size encodes degree (min 4 px, max 24 px radius) | AC-F03 | ⬜ | |
+| Hovering a node shows tooltip: `label`, `type`, `sourceUrl`, `updatedAt` | AC-F04 | ⬜ | |
+| Click opens side panel with full metadata + outgoing/incoming edges | AC-F05 | ⬜ | |
+| Double-click re-centres on ego-network (depth-2) | AC-F06 | ⬜ | Uses `GET /graph/subgraph` |
+| Right-click context menu: Open source, Copy link, Delete node, Expand neighbourhood | AC-F07 | ⬜ | |
+| Multi-select (Shift+Click); bulk delete (Delete key) | AC-F08 | ⬜ | |
+| Filter panel — client-side node/edge masking without re-fetch | AC-F09 | ⬜ | |
+| Zoom (scroll/pinch) + Pan (drag) | AC-F10 | ⬜ | |
+| Fit-to-screen button (shortcut `F`) | AC-F11 | ⬜ | |
+| Minimap (collapsible, bottom-right) | AC-F12 | ⬜ | |
+| 60 fps @ 5,000 nodes on 2021-era desktop (Chrome 120+) | AC-F13 | ⬜ | |
+| 30 fps @ 5,000 nodes on mid-range mobile (Safari iOS 17+) | AC-F14 | ⬜ | |
+
+### 3b · Command palette & navigation
+
+| DoD item | Status | Notes |
+|----------|--------|-------|
+| `<CommandPalette />` via `Cmd/Ctrl+K` — fuzzy search over labels, connectors, actions | ⬜ | `localStorage`-persisted recent commands |
+| Keyboard navigation: Tab/Shift+Tab focus nodes, Enter opens panel, Esc closes, Delete deletes, +/- zoom, Arrow pan | ⬜ | Full map in spec §7.7 |
+
+### 3c · Timeline view
+
+| DoD item | Status | Notes |
+|----------|--------|-------|
+| `<TimelineView />` — virtualized list, `createdAt` desc, date-range picker | ⬜ | Click item → highlight node in canvas |
+
+### 3d · Reasoning-path overlay (Jarvis explainability)
+
+| DoD item | Status | Notes |
+|----------|--------|-------|
+| Invoke `POST /api/v1/brain/cortex/think` from graph context | ⬜ | Deterministic pipeline in `packages/cortex` |
+| Render reasoning path (seeds → memory → association → conclusion) as highlighted edges on canvas | ⬜ | "Why this node?" trace |
+| Show confidence + proposed motor actions in side panel | ⬜ | Motor proposals: attend / stimulate / propose-edge / investigate |
+
+### 3e · Quality gates
+
+| DoD item | Status | Notes |
+|----------|--------|-------|
+| Lighthouse Performance ≥ 95 | ⬜ | CI job already gated on phase-3 config |
+| All AC-F01 through AC-F14 pass (manual + automated checks) | ⬜ | |
+
+## Phase 4 — Connector: GitHub (Week 8)
+
+| DoD item | Status | Notes |
+|----------|--------|-------|
+| GitHub OAuth2 flow complete | ⬜ | OAuth scaffold exists in Phase 1 |
+| Incremental sync via Events API | ⬜ | |
+| Connector transform unit tests: 95% coverage | ⬜ | |
+| E2E journey 1: connect GitHub → view repos in graph | ⬜ | |
+
+## Phase 5 — Connectors: Gmail + Google Calendar (Week 9)
+
+| DoD item | Status | Notes |
+|----------|--------|-------|
+| Gmail OAuth2 + incremental sync (`historyId`) | ⬜ | |
+| Google Calendar OAuth2 + incremental sync (`syncToken`) | ⬜ | |
+| NLP pipeline stages 1–5 operational | ⬜ | |
+| Rate-limit handling with exponential back-off | ⬜ | |
+
+## Phase 6 — Connectors: Notion + Obsidian + Bookmarks (Week 10)
+
+| DoD item | Status | Notes |
+|----------|--------|-------|
+| Notion OAuth2 + incremental sync | ⬜ | |
+| Obsidian ZIP upload + wikilink parsing | ⬜ | |
+| Bookmark OPML/HTML import | ⬜ | |
+| Embedding generation (NLP stage 6) wired to Neo4j nodes | ⬜ | |
+
+## Phase 7 — Connectors: Outlook, Todoist, Linear, GitLab (Week 11)
+
+| DoD item | Status | Notes |
+|----------|--------|-------|
+| All four connectors implemented and tested | ⬜ | |
+| All connector unit tests: 95% coverage | ⬜ | |
+| Sync status dashboard in UI (progress bars, error messages) | ⬜ | |
+
+## Phase 8 — Hardening, Accessibility & Launch (Week 12)
+
+| DoD item | Status | Notes |
+|----------|--------|-------|
+| WCAG 2.2 AA audit passes (axe-core + manual screen-reader test) | ⬜ | |
+| GDPR delete + export endpoints tested with E2E tests | ⬜ | |
+| k6 load test passes (p95 < 200 ms @ 200 concurrent users) | ⬜ | |
+| Security review: OWASP Top 10 checklist complete | ⬜ | |
+| Mutation score ≥ 70% on domain layer | ⬜ | |
+| All 6 E2E user journeys green | ⬜ | |
+| `docker compose up --build` produces fully working stack with seed data | ⬜ | |
+| Architecture Decision Records written for all major choices | 🟡 | 10 ADRs already in `docs/adr/` |
+| API documentation auto-generated (Swagger UI + GraphQL Playground) | 🟡 | Swagger wired; GraphQL Playground not yet gated |
 
 ---
 
