@@ -63,7 +63,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 | # | Layer | Status | Code |
 |---|---|---|---|
 | 0 | Cortex Protocol (types) | ✅ | `src/worker/cortex/protocol.js` |
-| 1 | Compositor routes | ✅ | `src/worker.js` mounts `cortex/router.js` |
+| 1 | Compositor routes | ✅ | `src/worker.js` → `cortex/router.js` |
 | 2 | Working-memory KV | ✅ | `src/worker/cortex/attention.js` |
 | 3 | ReAct loop + Llama 3.3 70B | ✅ | `src/worker/cortex/reason.js`, `env.AI` binding |
 | 4 | Tool registry (built-in 7) | ✅ | `src/worker/cortex/tools.js` |
@@ -85,7 +85,7 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 
 | DoD item (spec §7.2) | AC | Status | Notes |
 |-----------------------|----|--------|-------|
-| `<GraphCanvas />` renders nodes from API `/graph/subgraph` as force-directed layout | AC-F01 | ⬜ | Target: react-force-graph-2d/3d; must render 1 000 nodes < 2.5 s |
+| `<GraphCanvas />` renders nodes from API `/graph/subgraph` as force-directed layout | AC-F01 | ⬜ | Target: react-force-graph-2d/3d; must render 1,000 nodes < 2.5 s |
 | Node colour encodes `NodeType` via 12-colour contrast-compliant palette | AC-F02 | ⬜ | Palette in `packages/shared` |
 | Node size encodes degree (min 4 px, max 24 px radius) | AC-F03 | ⬜ | |
 | Hovering a node shows tooltip: `label`, `type`, `sourceUrl`, `updatedAt` | AC-F04 | ⬜ | |
@@ -97,8 +97,8 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 | Zoom (scroll/pinch) + Pan (drag) | AC-F10 | ⬜ | |
 | Fit-to-screen button (shortcut `F`) | AC-F11 | ⬜ | |
 | Minimap (collapsible, bottom-right) | AC-F12 | ⬜ | |
-| 60 fps @ 5 000 nodes on 2021-era desktop (Chrome 120+) | AC-F13 | ⬜ | |
-| 30 fps @ 5 000 nodes on mid-range mobile (Safari iOS 17+) | AC-F14 | ⬜ | |
+| 60 fps @ 5,000 nodes on 2021-era desktop (Chrome 120+) | AC-F13 | ⬜ | |
+| 30 fps @ 5,000 nodes on mid-range mobile (Safari iOS 17+) | AC-F14 | ⬜ | |
 
 ### 3b · Command palette & navigation
 
