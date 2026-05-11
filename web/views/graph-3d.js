@@ -12,6 +12,13 @@ import { regionForNode, styleForRegion } from '../cortex.js';
 import { bloomStrengthFor, getQualityTier } from '../hud/quality.js';
 
 const PULSE_DURATION_MS = 700;
+const LARGE_GRAPH_NODE_THRESHOLD = 2000;
+const CURVE_ROTATION_RAD_SCALE = 628; // 2π in centi-radians.
+const CURVE_ROTATION_DIVISOR = 100;
+const MAX_RETAINED_Z_ABS = 2000;
+const MAX_RENDERER_DPR = 2; // Capped to keep fragment fill-rate under control.
+const TEMPORAL_FALLBACK_MIN_STRETCH = 120;
+const TEMPORAL_FALLBACK_STRETCH_FACTOR = 0.35;
 
 export function create3DRenderer({ container, callbacks, fourD = false }) {
   container.innerHTML = '';
@@ -157,7 +164,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
 
   function applyConfig() {
     const nodeCount = fg.graphData?.()?.nodes?.length ?? 0;
-    const largeGraph = nodeCount > 2000;
+    const largeGraph = nodeCount > LARGE_GRAPH_NODE_THRESHOLD;
 
     const charge = fg.d3Force('charge');
     if (charge) {
@@ -184,7 +191,11 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     fg.linkOpacity(state.config.edgeOpacity ?? 0.35);
     const curvature = state.config.edgeCurvature || 0;
     fg.linkCurvature(curvature);
-    fg.linkCurveRotation((l) => (curvature > 0 && !largeGraph) ? ((hashStr(linkKey(l)) % 628) / 100) : 0);
+    fg.linkCurveRotation((l) => (
+      curvature > 0 && !largeGraph
+        ? ((hashStr(linkKey(l)) % CURVE_ROTATION_RAD_SCALE) / CURVE_ROTATION_DIVISOR)
+        : 0
+    ));
     // Disable directional particles on large graphs; they add significant GPU
     // load and are hard to read at high density.
     fg.linkDirectionalParticles(largeGraph ? 0 : (state.config.linkParticles ?? 1));
@@ -196,7 +207,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     if (typeof fg.d3AlphaDecay === 'function') fg.d3AlphaDecay(alphaDecay);
     const webglRenderer = fg.renderer?.();
     if (webglRenderer && typeof webglRenderer.setPixelRatio === 'function') {
-      const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+      const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, MAX_RENDERER_DPR));
       webglRenderer.setPixelRatio(largeGraph ? 1 : dpr);
     }
     if (bloomPass) {
@@ -220,7 +231,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     if (fourD) applyTemporal(graph);
     else for (const n of graph.nodes) {
       delete n.fz;
-      if (typeof n.z === 'number' && Number.isFinite(n.z) && Math.abs(n.z) > 2000) n.z = 0;
+      if (typeof n.z === 'number' && Number.isFinite(n.z) && Math.abs(n.z) > MAX_RETAINED_Z_ABS) n.z = 0;
     }
     fg.graphData(graph);
     // Ensure the force simulation is running after data load. In pure 3D mode
@@ -417,7 +428,7 @@ function normaliseTemporalSamples(graph, field) {
 }
 
 function applyTemporalFallback(graph, stretch) {
-  const usable = Math.max(120, stretch * 0.35);
+  const usable = Math.max(TEMPORAL_FALLBACK_MIN_STRETCH, stretch * TEMPORAL_FALLBACK_STRETCH_FACTOR);
   for (const n of graph.nodes) {
     const h = (hashStr(String(n.id || '')) >>> 0) / 0xffffffff;
     n.fz = (h - 0.5) * usable;
