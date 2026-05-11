@@ -193,6 +193,7 @@ input[type="search"]:focus, input[type="text"]:focus {
 .view { position: absolute; inset: 0; display: none; overflow: auto; }
 .view.active { display: block; }
 #view-graph { overflow: hidden; }
+#view-graph { --graph-statsbar-h: 40px; }
 
 .view-header { padding: 1.1rem 1.4rem 0.8rem; border-bottom: 1px solid var(--border); background: var(--bg-elev); position: sticky; top: 0; z-index: var(--z-canvas, 1); }
 .view-header h2 { margin: 0 0 0.25rem; font-size: 1.1rem; }
@@ -201,7 +202,7 @@ input[type="search"]:focus, input[type="text"]:focus {
 
 /* ── Graph toolbar / canvas ──────────────────────────── */
 .graph-toolbar {
-  position: absolute; top: 0; left: 0; right: 0; z-index: var(--z-canvas-frame, 2);
+  position: absolute; top: var(--graph-statsbar-h); left: 0; right: 0; z-index: var(--z-canvas-frame, 2);
   display: flex; justify-content: space-between; align-items: center;
   gap: 0.8rem;
   padding: 0.6rem 1rem;
@@ -305,7 +306,7 @@ input[type="search"]:focus, input[type="text"]:focus {
 
 /* ── HUD overlay ─────────────────────────────────────── */
 .hud {
-  position: absolute; top: 4.2rem; right: 1rem; z-index: var(--z-overlay, 3);
+  position: absolute; top: calc(var(--graph-statsbar-h) + 1rem); right: 1rem; z-index: var(--z-overlay, 3);
   font-size: 0.72rem; color: var(--text-dim);
   display: flex; flex-direction: column; gap: 0.2rem;
   background: rgba(17,20,27,0.6); backdrop-filter: blur(6px);
@@ -498,7 +499,7 @@ input[type="search"]:focus, input[type="text"]:focus {
 }
 
 .focus-banner {
-  position: absolute; top: 4rem; left: 50%; transform: translateX(-50%); z-index: var(--z-overlay, 3);
+  position: absolute; top: calc(var(--graph-statsbar-h) + 0.8rem); left: 50%; transform: translateX(-50%); z-index: var(--z-overlay, 3);
   background: rgba(17,20,27,0.95); backdrop-filter: blur(6px);
   border: 1px solid var(--accent); border-radius: 8px;
   padding: 0.4rem 0.8rem; display: flex; align-items: center; gap: 0.7rem;
@@ -1128,7 +1129,7 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
 /* ── Brain ingest panel (docked, top-right of #/graph view) ── */
 .ingest-panel {
   position: absolute;
-  top: 4.2rem;
+  top: calc(var(--graph-statsbar-h) + 1rem);
   right: 1rem;
   z-index: 5;
   width: 320px;
@@ -1141,6 +1142,90 @@ body.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 .ingest-panel.hidden { display: none; }
+
+/* HUD fallback styles for static deployments where /src/styles/*.scss is unavailable. */
+.stats-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  min-height: var(--graph-statsbar-h);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.55rem;
+  z-index: 5;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.18);
+  background: rgba(4, 13, 20, 0.86);
+  backdrop-filter: blur(8px);
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+.stats-bar .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.18rem 0.42rem;
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(0, 212, 255, 0.06);
+  font: 10px/1.2 var(--text-mono, ui-monospace, monospace);
+  color: var(--text-dim);
+}
+.stats-bar .chip .v { color: var(--text); }
+.stats-bar .marquee { min-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.stats-bar .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
+.stats-bar .status-dot.active { background: var(--success); box-shadow: 0 0 8px rgba(95,208,164,0.5); }
+.stats-bar .status-dot.thinking { background: var(--warn); box-shadow: 0 0 8px rgba(240,168,104,0.55); }
+
+.brain-controls {
+  position: absolute;
+  left: 0.55rem;
+  bottom: 0.55rem;
+  z-index: 5;
+  width: min(320px, calc(100vw - 1.1rem));
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(4, 13, 20, 0.86);
+  backdrop-filter: blur(8px);
+  padding: 0.45rem;
+}
+.brain-controls .bc-head {
+  display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+  font: 11px/1.2 var(--text-mono, ui-monospace, monospace);
+  color: var(--text-dim);
+}
+.brain-controls .bc-body { display: none; margin-top: 0.4rem; }
+.brain-controls.open .bc-body { display: block; }
+.brain-controls .bc-row { display: flex; gap: 0.35rem; margin-bottom: 0.45rem; }
+.brain-controls .bc-btn { flex: 1; font-size: 0.82rem; }
+.brain-controls .bc-slider label { display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--text-dim); }
+.brain-controls .bc-slider input[type="range"] { width: 100%; }
+.brain-controls .bc-insights { list-style: none; margin: 0.35rem 0 0; padding: 0; max-height: 7.5rem; overflow-y: auto; }
+.brain-controls .bc-insights li { font-size: 0.76rem; color: var(--text); margin-bottom: 0.25rem; }
+
+.mini-map {
+  position: absolute;
+  right: 0.55rem;
+  bottom: 0.55rem;
+  width: 160px;
+  height: 120px;
+  z-index: 5;
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(4, 13, 20, 0.72);
+}
+.mini-map canvas { width: 100%; height: 100%; display: block; }
+.mini-map .mm-label {
+  position: absolute;
+  left: 0.4rem;
+  bottom: 0.3rem;
+  font: 10px/1 var(--text-mono, ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
 
 .ingest-panel-head {
   display: flex;

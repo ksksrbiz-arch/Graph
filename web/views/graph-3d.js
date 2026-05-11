@@ -182,7 +182,9 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     fg.nodeResolution(largeGraph ? 8 : 16);
     fg.nodeOpacity(state.config.nodeOpacity ?? 0.95);
     fg.linkOpacity(state.config.edgeOpacity ?? 0.35);
-    fg.linkCurvature(state.config.edgeCurvature || 0);
+    const curvature = state.config.edgeCurvature || 0;
+    fg.linkCurvature(curvature);
+    fg.linkCurveRotation((l) => (curvature > 0 && !largeGraph) ? ((hashStr(linkKey(l)) % 628) / 100) : 0);
     // Disable directional particles on large graphs; they add significant GPU
     // load and are hard to read at high density.
     fg.linkDirectionalParticles(largeGraph ? 0 : (state.config.linkParticles ?? 1));
@@ -192,10 +194,16 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
       ? Math.max(state.config.alphaDecay, 0.04)
       : state.config.alphaDecay;
     if (typeof fg.d3AlphaDecay === 'function') fg.d3AlphaDecay(alphaDecay);
+    const webglRenderer = fg.renderer?.();
+    if (webglRenderer && typeof webglRenderer.setPixelRatio === 'function') {
+      const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+      webglRenderer.setPixelRatio(largeGraph ? 1 : dpr);
+    }
     if (bloomPass) {
       // Spec §5: the `bloom` master toggle still hard-disables; otherwise
       // the bloom strength is driven entirely by the quality tier.
-      bloomPass.strength = state.config.bloom === false ? 0 : bloomStrengthFor(getQualityTier());
+      const perfClamp = largeGraph && getQualityTier() !== 'ultra';
+      bloomPass.strength = (state.config.bloom === false || perfClamp) ? 0 : bloomStrengthFor(getQualityTier());
     }
     fg.refresh?.();
   }
@@ -210,7 +218,10 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
 
   function setData(graph) {
     if (fourD) applyTemporal(graph);
-    else for (const n of graph.nodes) { delete n.fz; }
+    else for (const n of graph.nodes) {
+      delete n.fz;
+      if (typeof n.z === 'number' && Number.isFinite(n.z) && Math.abs(n.z) > 2000) n.z = 0;
+    }
     fg.graphData(graph);
     // Ensure the force simulation is running after data load. In pure 3D mode
     // (no fz pinning) the simulation must be active for nodes to spread out;
@@ -236,18 +247,21 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
   }
 
   function applyTemporal(graph) {
-    const field = state.config.temporalField || 'createdAt';
-    const ts = graph.nodes.map((n) => parseTime(n[field] || n.createdAt));
-    const valid = ts.filter((t) => Number.isFinite(t));
-    if (valid.length === 0) return;
-    const min = Math.min(...valid);
-    const max = Math.max(...valid);
-    const span = Math.max(1, max - min);
     const stretch = 800 * (state.config.temporalScale ?? 1);
+    const primary = normaliseTemporalSamples(graph, state.config.temporalField || 'createdAt');
+    const usablePrimary = primary && primary.span >= 1;
+    const fallbackField = (state.config.temporalField || 'createdAt') === 'createdAt' ? 'updatedAt' : 'createdAt';
+    const secondary = usablePrimary ? null : normaliseTemporalSamples(graph, fallbackField);
+    const active = usablePrimary ? primary : (secondary && secondary.span >= 1 ? secondary : null);
+    if (!active) {
+      applyTemporalFallback(graph, stretch);
+      return;
+    }
     for (let i = 0; i < graph.nodes.length; i++) {
-      const t = ts[i];
-      const u = Number.isFinite(t) ? (t - min) / span : 0.5;
+      const t = active.values[i];
+      const u = Number.isFinite(t) ? (t - active.min) / active.span : 0.5;
       graph.nodes[i].fz = (u - 0.5) * stretch;
+      graph.nodes[i].z = graph.nodes[i].fz;
     }
   }
 
@@ -387,6 +401,28 @@ function parseTime(v) {
   if (typeof v === 'number') return v;
   const t = Date.parse(v);
   return Number.isFinite(t) ? t : NaN;
+}
+
+function normaliseTemporalSamples(graph, field) {
+  const values = graph.nodes.map((n) => parseTime(n[field]));
+  let min = Infinity;
+  let max = -Infinity;
+  for (const t of values) {
+    if (!Number.isFinite(t)) continue;
+    if (t < min) min = t;
+    if (t > max) max = t;
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  return { values, min, max, span: Math.max(0, max - min) };
+}
+
+function applyTemporalFallback(graph, stretch) {
+  const usable = Math.max(120, stretch * 0.35);
+  for (const n of graph.nodes) {
+    const h = (hashStr(String(n.id || '')) >>> 0) / 0xffffffff;
+    n.fz = (h - 0.5) * usable;
+    n.z = n.fz;
+  }
 }
 
 function parseHex(color) {
