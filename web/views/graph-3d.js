@@ -13,12 +13,13 @@ import { bloomStrengthFor, getQualityTier } from '../hud/quality.js';
 
 const PULSE_DURATION_MS = 700;
 const LARGE_GRAPH_NODE_THRESHOLD = 2000;
-const CURVE_ROTATION_RAD_SCALE = 628; // 2π in centi-radians.
+const CURVE_ROTATION_RAD_SCALE = 628; // 2π scaled by CURVE_ROTATION_DIVISOR.
 const CURVE_ROTATION_DIVISOR = 100;
 const MAX_RETAINED_Z_ABS = 2000;
 const MAX_RENDERER_DPR = 2; // Capped to keep fragment fill-rate under control.
 const TEMPORAL_FALLBACK_MIN_STRETCH = 120;
 const TEMPORAL_FALLBACK_STRETCH_FACTOR = 0.35;
+const MAX_UINT32 = 0xffffffff;
 
 export function create3DRenderer({ container, callbacks, fourD = false }) {
   container.innerHTML = '';
@@ -231,7 +232,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
     if (fourD) applyTemporal(graph);
     else for (const n of graph.nodes) {
       delete n.fz;
-      if (typeof n.z === 'number' && Number.isFinite(n.z) && Math.abs(n.z) > MAX_RETAINED_Z_ABS) n.z = 0;
+      clampExcessiveZCoordinate(n);
     }
     fg.graphData(graph);
     // Ensure the force simulation is running after data load. In pure 3D mode
@@ -272,6 +273,7 @@ export function create3DRenderer({ container, callbacks, fourD = false }) {
       const t = active.values[i];
       const u = Number.isFinite(t) ? (t - active.min) / active.span : 0.5;
       graph.nodes[i].fz = (u - 0.5) * stretch;
+      // Keep the visible z coordinate aligned with the fixed temporal axis.
       graph.nodes[i].z = graph.nodes[i].fz;
     }
   }
@@ -430,9 +432,15 @@ function normaliseTemporalSamples(graph, field) {
 function applyTemporalFallback(graph, stretch) {
   const usable = Math.max(TEMPORAL_FALLBACK_MIN_STRETCH, stretch * TEMPORAL_FALLBACK_STRETCH_FACTOR);
   for (const n of graph.nodes) {
-    const h = (hashStr(String(n.id || '')) >>> 0) / 0xffffffff;
+    const h = (hashStr(String(n.id || '')) >>> 0) / MAX_UINT32;
     n.fz = (h - 0.5) * usable;
     n.z = n.fz;
+  }
+}
+
+function clampExcessiveZCoordinate(node) {
+  if (typeof node.z === 'number' && Number.isFinite(node.z) && Math.abs(node.z) > MAX_RETAINED_Z_ABS) {
+    node.z = 0;
   }
 }
 
