@@ -7,6 +7,7 @@
 // the NestJS API over Socket.IO or polling this endpoint on workers.dev.
 
 const WINDOW_MS = 30_000;
+const ONE_HOUR_MS = 60 * 60_000;
 
 const NODE_TYPE_TO_REGION = {
   email: 'sensory',
@@ -129,7 +130,7 @@ export async function buildBrainInsightsSummary(env, userId) {
   const recentFormations = [];
   if (env.GRAPH_DB) {
     try {
-      const since = Date.now() - 60 * 60_000; // last hour
+      const since = Date.now() - ONE_HOUR_MS; // last hour
       const { results } = await env.GRAPH_DB
         .prepare(
           'SELECT ts, edge_count FROM events ' +
@@ -164,7 +165,7 @@ export async function buildBrainInsightsSummary(env, userId) {
   const growth = [];
   if (env.GRAPH_DB) {
     try {
-      const since = Date.now() - 60 * 60_000;
+      const since = Date.now() - ONE_HOUR_MS;
       const { results } = await env.GRAPH_DB
         .prepare(
           'SELECT ts, node_count, edge_count FROM events ' +
