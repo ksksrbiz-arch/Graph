@@ -19,6 +19,7 @@ import { upsertNodes as upsertVectors } from './vector.js';
 import { addServer as mcpAddServer, listServers as mcpListServers, removeServer as mcpRemoveServer, refreshTools as mcpRefreshTools, setEnabled as mcpSetEnabled } from './mcp-registry.js';
 import { CRON_PLAYBOOK, WATERMARK_KEY, listSchedules, runSchedule } from './scheduler.js';
 import { think } from './reason.js';
+import { buildBrainInsightsSummary } from '../brain-insights.js';
 import { verifySignedUserContext as verifySignedUserContextSignature } from './signed-user-context.js';
 
 export async function handleCortexApi(request, env, url) {
@@ -274,6 +275,19 @@ export async function handleCortexApi(request, env, url) {
       if (rows.length < batch) break;
     }
     return jsonResponse({ ok: true, total, written, elapsedMs: Date.now() - startedAt, nextCursor: cursor }, 200, responseHeaders);
+  }
+
+  // GET /api/v1/brain/insights/summary?userId=…
+  // Worker-native brain insights — synthesised from KV graph snapshot + D1
+  // event log. Returns a BrainInsightsSummary-compatible payload so the Brain
+  // Insights SPA view renders correctly even on workers.dev hosts where the
+  // NestJS Socket.IO brain is not available.
+  if (pathname === '/api/v1/brain/insights/summary' && method === 'GET') {
+    const requestedUserId = need(url, 'userId') || 'local';
+    const auth = await authFor(request, env, requestedUserId, correlationId);
+    if (auth instanceof Response) return auth;
+    const summary = await buildBrainInsightsSummary(env, auth.userId);
+    return jsonResponse(summary, 200, responseHeaders);
   }
 
   return null;

@@ -40,6 +40,7 @@ const EMPTY_ANIM_RING_PHASE_STEP = Math.PI * 0.5;
 const EMPTY_ANIM_RING_SWEEP = Math.PI * 1.6;
 
 let socket = null;
+let pollTimer = null;
 let lastSummary = null;
 let placeholderRaf = 0;
 let placeholderState = null;
@@ -58,14 +59,20 @@ export function initBrainView() {
 function maybeConnect() {
   const isActive = location.hash === '#/brain';
   if (isActive) ensureSocket();
-  else disposeSocket();
+  else { disposeSocket(); disposePolling(); }
 }
 
 function ensureSocket() {
-  if (socket || typeof io === 'undefined') return;
+  if (socket || pollTimer !== null) return;
   const config = window.GRAPH_CONFIG || {};
   if (!shouldAttemptBrainSocket(config.apiBaseUrl)) {
-    setStatus('offline (no brain api configured for this host)');
+    // No Socket.IO brain on this host — use the Worker's brain insights REST
+    // endpoint instead. This is the native Cloudflare Worker brain layer.
+    startPolling(config);
+    return;
+  }
+  if (typeof io === 'undefined') {
+    startPolling(config);
     return;
   }
   const socketUrl = socketNamespaceUrl(config.apiBaseUrl, '/brain');
@@ -98,6 +105,44 @@ function ensureSocket() {
   socket.on('spike', () => {
     bumpHeartbeat();
   });
+}
+
+const POLL_INTERVAL_MS = 5_000;
+
+function startPolling(config) {
+  if (pollTimer !== null) return;
+  const userId = config.brainUserId || FALLBACK_USER_ID;
+  const base = (config.apiBaseUrl || '').replace(/\/+$/, '');
+
+  async function poll() {
+    try {
+      const res = await fetch(
+        `${base}/api/v1/brain/insights/summary?userId=${encodeURIComponent(userId)}`,
+      );
+      if (res.ok) {
+        const summary = await res.json();
+        lastSummary = summary;
+        setStatus(summary.running ? 'live (worker brain)' : 'idle (worker brain)');
+        setPulseState('live');
+        renderSummary(summary);
+      } else {
+        setStatus(`offline (${res.status})`);
+        setPulseState('reconnecting');
+      }
+    } catch (err) {
+      setStatus(`offline (${err.message})`);
+      setPulseState('reconnecting');
+    }
+    pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
+  }
+
+  setStatus('connecting…');
+  poll();
+}
+
+function disposePolling() {
+  if (pollTimer !== null) clearTimeout(pollTimer);
+  pollTimer = null;
 }
 
 function disposeSocket() {
