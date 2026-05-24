@@ -53,20 +53,14 @@ export class GraphView {
       console.warn('[GraphView] Could not load 2D renderer yet', e);
     }
 
-    // Basic brain system integration (will become much richer)
+    // === Full Brain + Renderer Integration (Maximum Effort) ===
     import('../brain/BrainSystem.js').then(({ BrainSystem }) => {
       this.brainSystem = new BrainSystem(this.state);
-      
+
       this.brainSystem.subscribe((snap) => {
-        // In the future this will drive rich visual effects on the renderer
-        if (this.renderer && this.renderer.updateNodeVisual) {
-          for (const [id, act] of snap.nodeActivity) {
-            this.renderer.updateNodeVisual(id, {
-              __heat: act.heat || act.activation * 0.7,
-              __brainScale: 1 + (act.activation || 0) * 0.6,
-              __brainAlpha: 0.6 + (act.activation || 0) * 0.4,
-            });
-          }
+        // Push the rich brain state into the renderer every frame
+        if (this.renderer && this.renderer.applyBrainState) {
+          this.renderer.applyBrainState(snap);
         }
       });
     });
@@ -88,6 +82,12 @@ export class GraphView {
 
     if (this.renderer) {
       this.renderer.setData(this.state.get());
+    }
+
+    // Feed new nodes into the brain system so it feels alive immediately
+    if (this.brainSystem && graphData.nodes) {
+      const ids = graphData.nodes.map(n => n.id);
+      this.brainSystem.onNodesArrived(ids, 0.65);
     }
   }
 

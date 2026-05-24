@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Graph UI v2 — Demo (Early Build)</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; background:#0a0a0f; color:#ddd; font-family: system-ui, sans-serif; }
+    #canvas { width: 100%; height: 100%; }
+    .overlay {
+      position: absolute; top: 20px; left: 20px;
+      background: rgba(15,15,25,0.85); padding: 12px 18px; border-radius: 8px;
+      font-size: 13px; border: 1px solid rgba(100,120,255,0.2);
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas" style="width:100%; height:100%;"></div>
+  <div class="overlay">
+    Graph UI v2 — High-Effort Rebuild (Early Scaffolding)<br>
+    <small>BrainSystem + advanced renderer integration active</small>
+  </div>
+
+  <script type="module">
+    import { createGraphUI } from './index.js';
+
+    const container = document.getElementById('canvas');
+
+    const ui = createGraphUI(container, {
+      initialState: {
+        config: { dimensions: 2 }
+      }
+    });
+
+    // Load some demo data so it looks alive
+    setTimeout(() => {
+      const demoNodes = Array.from({ length: 42 }, (_, i) => ({
+        id: `n${i}`,
+        label: `Node ${i}`,
+        type: i % 5 === 0 ? 'person' : (i % 3 === 0 ? 'note' : 'concept'),
+        __degree: 2 + Math.floor(Math.random() * 7)
+      }));
+
+      const demoEdges = [];
+      for (let i = 0; i < 65; i++) {
+        const a = Math.floor(Math.random() * demoNodes.length);
+        let b = Math.floor(Math.random() * demoNodes.length);
+        if (b === a) b = (a + 1) % demoNodes.length;
+        demoEdges.push({ source: demoNodes[a].id, target: demoNodes[b].id, weight: 0.3 + Math.random() * 0.7 });
+      }
+
+      ui.setGraph({ nodes: demoNodes, edges: demoEdges });
+
+      // Fire some brain activity so the new system shows off
+      setTimeout(() => {
+        if (ui.brainSystem) {
+          ui.brainSystem.onNodesArrived(demoNodes.slice(0, 8).map(n => n.id), 0.85);
+          ui.brainSystem.focusOn(demoNodes[3].id, 1.1);
+        }
+      }, 800);
+    }, 400);
+
+    console.log('%c[UI v2 Demo] Loaded. This is early scaffolding of the high-effort rebuild.', 'color:#7aa2f7');
+  </script>
+</body>
+</html>
