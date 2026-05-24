@@ -140,9 +140,25 @@ export class GraphView {
     if (this._isDestroyed) return;
     this._isDestroyed = true;
 
+    if (this.interactionManager?.destroy) this.interactionManager.destroy();
     if (this.renderer?.destroy) this.renderer.destroy();
     if (this.brainSystem?.destroy) this.brainSystem.destroy();
 
     this.container.innerHTML = '';
+  }
+
+  // ==================== Event System (for future consumers) ====================
+  _events = new Map();
+
+  on(event, handler) {
+    if (!this._events.has(event)) this._events.set(event, new Set());
+    this._events.get(event).add(handler);
+    return () => this._events.get(event)?.delete(handler);
+  }
+
+  _emit(event, payload) {
+    this._events.get(event)?.forEach(fn => {
+      try { fn(payload); } catch (e) { console.warn('[GraphView] event handler error', e); }
+    });
   }
 }

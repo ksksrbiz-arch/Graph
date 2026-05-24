@@ -40,6 +40,16 @@
       createControls(container, ui);
     });
 
+    // Live stats overlay (maximum effort polish)
+    const stats = document.createElement('div');
+    stats.style.cssText = 'position:absolute; bottom:60px; left:16px; font-size:11px; opacity:0.7; font-family:monospace;';
+    container.appendChild(stats);
+
+    ui.state?.subscribe?.(s => {
+      const activity = ui.brainSystem?.getSnapshot?.().nodeActivity?.size || 0;
+      stats.innerHTML = `Nodes: ${s.nodes?.size || 0} | Active: ${activity}`;
+    });
+
     // === Impressive Interactive Demo ===
     let demoNodes = [];
     let demoEdges = [];
