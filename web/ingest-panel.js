@@ -293,31 +293,59 @@ export function createIngestPanel({ container, onIngested } = {}) {
       return;
     }
     urlBtn.disabled = true;
-    setStatus(urlStatus, 'Fetching…', 'info');
-    let cleaned;
-    try {
-      const res = await fetch(url, { mode: 'cors' });
-      const html = await res.text();
-      cleaned = stripHtml(html).slice(0, URL_FETCH_BYTE_CAP);
-      if (cleaned.length < 12) throw new Error('No readable text');
-    } catch (e) {
-      setStatus(urlStatus, `Couldn't fetch (${e.message || 'CORS blocked'}). Paste the text instead.`, 'err');
-      urlBtn.disabled = false;
-      return;
+    setStatus(urlStatus, 'Ingesting via server…', 'info');
+
+    // Prefer server-side fetch (works for sites that block browser CORS, better extraction)
+    let result = await tryServerUrlIngest(url);
+    if (!result || !result.ok) {
+      // Fallback: classic client-side fetch + strip (for fully static v1 deployments)
+      setStatus(urlStatus, 'Server fetch unavailable, trying direct…', 'info');
+      let cleaned;
+      try {
+        const res = await fetch(url, { mode: 'cors' });
+        const html = await res.text();
+        cleaned = stripHtml(html).slice(0, URL_FETCH_BYTE_CAP);
+        if (cleaned.length < 12) throw new Error('No readable text');
+      } catch (e) {
+        setStatus(urlStatus, `Couldn't fetch (${e.message || 'CORS blocked'}). Paste the text instead.`, 'err');
+        urlBtn.disabled = false;
+        return;
+      }
+      result = await ingestPublicText({ text: cleaned, title: url, format: 'text' });
     }
-    setStatus(urlStatus, 'Sending to brain…', 'info');
-    const result = await ingestPublicText({ text: cleaned, title: url, format: 'text' });
-    if (result.ok) {
+
+    if (result?.ok) {
       setStatus(urlStatus, `+${result.nodes ?? 0} nodes / ${result.edges ?? 0} edges`, 'ok');
       pushHistory({ source: url, status: 'ok', addedNodes: result.nodes ?? 0 });
       try { onIngested?.(result); } catch {}
       urlInput.value = '';
     } else {
-      setStatus(urlStatus, `Failed (${result.status || 'network'}): ${result.message || result.error || 'unknown'}`, 'err');
+      const msg = result?.message || result?.error || (result?.status ? `status ${result.status}` : 'unknown');
+      setStatus(urlStatus, `Failed: ${msg}`, 'err');
       pushHistory({ source: url, status: 'err', addedNodes: 0 });
     }
     urlBtn.disabled = false;
   });
+
+  async function tryServerUrlIngest(url) {
+    try {
+      // These are now exported from data.js
+      const { publicApiUrl, brainUserId } = await import('./data.js');
+      const urlEndpoint = publicApiUrl?.('/api/v1/public/ingest/url');
+      if (!urlEndpoint) return null;
+
+      const uid = (typeof brainUserId === 'function' ? brainUserId() : null) || 'local';
+      const res = await fetch(urlEndpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ userId: uid, url }),
+      });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, ...body };
+    } catch {
+      return null;
+    }
+  }
 
   textBtn.addEventListener('click', async () => {
     const raw = textInput.value.trim();
@@ -381,7 +409,15 @@ function stripHtml(html) {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+    .replace(/<aside[\s\S]*?<\/aside>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\/?(h[1-6]|p|li|div|section)[^>]*>/gi, '\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&[a-z]+;/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

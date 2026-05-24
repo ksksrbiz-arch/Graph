@@ -27,7 +27,7 @@ import {
 
 export interface PublicIngestRequest {
   userId: string;
-  format: 'text' | 'markdown';
+  format: 'text' | 'markdown' | 'url';
   content: string;
   title?: string;
 }
@@ -194,11 +194,132 @@ export class PublicIngestService {
     if (typeof timer.unref === 'function') timer.unref();
     this.reloadTimers.set(userId, timer);
   }
+
+  /**
+   * Web-based URL ingest: server fetches the page (bypasses browser CORS),
+   * extracts readable main content + title, then feeds it through the normal
+   * text parser + persist + brain perceive pipeline.
+   */
+  async ingestUrl(userId: string, url: string, title?: string): Promise<PublicIngestResult> {
+    // We don't know the final text length yet — fetch first, then gate.
+    const extracted = await this.fetchAndExtract(url);
+
+    const finalTitle = (title || extracted.title || url).slice(0, 200);
+    const contentLength = Buffer.byteLength(extracted.text, 'utf8');
+
+    // Now apply allowlist + size gate on the *extracted* text
+    if (!this.allowedUserIds.has(userId)) {
+      throw new ForbiddenException(`userId=${userId} is not on the public ingest allowlist`);
+    }
+    if (contentLength > this.maxBytes) {
+      throw new PayloadTooLargeException(
+        `extracted content exceeds ${this.maxBytes} bytes (got ${contentLength})`,
+      );
+    }
+
+    return this.ingest({
+      userId,
+      format: 'text',
+      content: extracted.text,
+      title: finalTitle,
+    });
+  }
+
+  private async fetchAndExtract(rawUrl: string): Promise<{ title: string; text: string }> {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 12_000);
+
+    try {
+      const res = await fetch(rawUrl, {
+        signal: ctrl.signal,
+        redirect: 'follow',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (compatible; GraphIngestBot/1.0; +https://github.com/ksksrbiz-arch/Graph)',
+          Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      }
+
+      const html = await res.text();
+      return this.extractReadableText(html, rawUrl);
+    } catch (err: any) {
+      if (err.name === 'AbortError') throw new Error('fetch timed out');
+      throw new Error(`Failed to fetch URL: ${err.message || err}`);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  /** Lightweight but effective server-side article extractor (no extra deps). */
+  private extractReadableText(html: string, baseUrl: string): { title: string; text: string } {
+    // Title extraction (priority order)
+    let title = '';
+    const titleTag = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if (titleTag) title = this.cleanText(titleTag[1]);
+
+    const ogTitle =
+      html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([\s\S]*?)["']/i) ||
+      html.match(/<meta[^>]+name=["']title["'][^>]+content=["']([\s\S]*?)["']/i);
+    if (ogTitle) title = this.cleanText(ogTitle[1]);
+
+    // Try to isolate main content container
+    let bodyHtml = html;
+    const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+    if (articleMatch && articleMatch[1].length > 300) {
+      bodyHtml = articleMatch[1];
+    } else {
+      const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+      if (mainMatch && mainMatch[1].length > 300) bodyHtml = mainMatch[1];
+    }
+
+    // Remove noise
+    let cleaned = bodyHtml
+      .replace(/<head[\s\S]*?<\/head>/gi, '')
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+      .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+      .replace(/<aside[\s\S]*?<\/aside>/gi, '')
+      .replace(/<form[\s\S]*?<\/form>/gi, '')
+      .replace(/<header[\s\S]*?<\/header>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      // Turn structural block elements into paragraph breaks
+      .replace(/<\/?(h[1-6]|p|li|div|section|article|blockquote|pre)[^>]*>/gi, '\n\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      // Strip remaining tags
+      .replace(/<[^>]+>/g, ' ')
+      // Decode common entities
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&[a-z]+;/gi, ' ')
+      // Collapse whitespace
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Final safety cap
+    cleaned = cleaned.slice(0, 180_000);
+
+    const finalTitle = title || new URL(baseUrl).hostname;
+    return { title: finalTitle, text: cleaned };
+  }
+
+  private cleanText(s: string): string {
+    return s.replace(/\s+/g, ' ').trim();
+  }
 }
 
 function defaultTitle(req: PublicIngestRequest): string {
   const stamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-  return req.format === 'markdown'
-    ? `Pasted markdown — ${stamp}`
-    : `Pasted text — ${stamp}`;
+  if (req.format === 'markdown') return `Pasted markdown — ${stamp}`;
+  if (req.format === 'url') return `Web page — ${stamp}`;
+  return `Pasted text — ${stamp}`;
 }

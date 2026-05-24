@@ -60,6 +60,7 @@ export function parseText(text: string, options: ParseOptions): ParseResult {
     upsertEdge(ctx, { source: parent.id, target: note.id, relation: 'PART_OF', weight: 0.6 });
     extractTags(paragraph, ctx, note);
     extractUrls(paragraph, ctx, note);
+    extractCodeBlocks(paragraph, ctx, note);
   }
 
   return finish(ctx);
@@ -88,6 +89,8 @@ export function parseMarkdown(text: string, options: ParseOptions): ParseResult 
     extractTags(section.body, ctx, note);
     extractUrls(section.body, ctx, note);
     extractWikilinks(section.body, ctx, note);
+    extractMarkdownImages(section.body, ctx, note);
+    extractCodeBlocks(section.body, ctx, note);
   }
 
   return finish(ctx);
@@ -194,11 +197,20 @@ function extractUrls(text: string, ctx: ParseContext, parent: KGNode): void {
 
 function extractWikilinks(text: string, ctx: ParseContext, parent: KGNode): void {
   const seen = new Set<string>();
-  for (const match of text.matchAll(/\[\[([^\]\n]+)\]\]/g)) {
+  // Supports [[Target]], [[Target|Alias]], [[Target#Section|Alias]]
+  for (const match of text.matchAll(/\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]/g)) {
     const target = match[1]?.trim();
+    const section = match[2]?.trim();
+    const alias = match[3]?.trim();
     if (!target || seen.has(target)) continue;
     seen.add(target);
-    const node = upsertNode(ctx, { label: target, type: 'note', metadata: { wikilink: true } });
+
+    const label = alias || target;
+    const meta: Record<string, unknown> = { wikilink: true };
+    if (section) meta.section = section;
+    if (alias) meta.alias = alias;
+
+    const node = upsertNode(ctx, { label, type: 'note', metadata: meta });
     upsertEdge(ctx, { source: parent.id, target: node.id, relation: 'LINKS_TO', weight: 0.55 });
   }
 }
@@ -206,6 +218,42 @@ function extractWikilinks(text: string, ctx: ParseContext, parent: KGNode): void
 function extractFirstHeading(md: string): string | null {
   const m = md.match(/^\s*#\s+(.+?)\s*$/m);
   return m?.[1]?.trim() || null;
+}
+
+function extractMarkdownImages(text: string, ctx: ParseContext, parent: KGNode): void {
+  // ![alt](url) or ![alt](url "title")
+  const re = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]+)")?\)/g;
+  for (const m of text.matchAll(re)) {
+    const alt = (m[1] || '').trim();
+    const url = m[2]!.trim();
+    if (!url) continue;
+    const label = alt || safeUrlLabel(url);
+    const node = upsertNode(ctx, {
+      label,
+      type: 'image',
+      metadata: { url, alt, sourceUrl: url },
+    });
+    upsertEdge(ctx, { source: parent.id, target: node.id, relation: 'REFERENCES', weight: 0.35 });
+  }
+}
+
+function extractCodeBlocks(text: string, ctx: ParseContext, parent: KGNode): void {
+  // ```lang\ncode\n```
+  const re = /```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g;
+  let idx = 0;
+  for (const m of text.matchAll(re)) {
+    idx++;
+    const lang = (m[1] || '').trim();
+    const code = (m[2] || '').trim();
+    if (!code) continue;
+    const label = lang ? `${lang} snippet` : `code block ${idx}`;
+    const node = upsertNode(ctx, {
+      label: truncate(label, PARAGRAPH_MAX_LABEL),
+      type: 'code',
+      metadata: { language: lang || 'text', length: code.length },
+    });
+    upsertEdge(ctx, { source: parent.id, target: node.id, relation: 'PART_OF', weight: 0.5 });
+  }
 }
 
 interface MdSection {

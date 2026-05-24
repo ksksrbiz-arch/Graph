@@ -34,6 +34,12 @@ class IngestMarkdownDto {
   title?: string;
 }
 
+class IngestUrlDto {
+  userId!: string;
+  url!: string;
+  title?: string;
+}
+
 @ApiTags('public')
 @Controller('public')
 // Tighter ceiling than the global 100/min — ingest is more expensive than a
@@ -48,7 +54,7 @@ export class PublicController {
     return {
       ok: true,
       enabled: this.ingest.isEnabled(),
-      formats: ['text', 'markdown'],
+      formats: ['text', 'markdown', 'url'],
     };
   }
 
@@ -84,6 +90,19 @@ export class PublicController {
       content: dto.markdown,
       ...(dto.title ? { title: dto.title } : {}),
     });
+  }
+
+  @Post('ingest/url')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Provide a public URL; server fetches, extracts main text, and ingests' })
+  async ingestUrl(@Body() dto: IngestUrlDto): Promise<PublicIngestResult> {
+    requireString(dto as unknown as Record<string, unknown>, 'userId');
+    requireString(dto as unknown as Record<string, unknown>, 'url');
+    // basic URL validation
+    try { new URL(dto.url); } catch {
+      throw new BadRequestException('url must be a valid http(s) URL');
+    }
+    return this.ingest.ingestUrl(dto.userId, dto.url, dto.title);
   }
 
   @Get('graph')

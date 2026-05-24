@@ -35,6 +35,7 @@ export async function parseText(text, options) {
     await upsertEdge(ctx, { source: parent.id, target: note.id, relation: 'PART_OF', weight: 0.6 });
     await extractTags(paragraph, ctx, note);
     await extractUrls(paragraph, ctx, note);
+    await extractCodeBlocks(paragraph, ctx, note);
   }
 
   return finish(ctx);
@@ -63,6 +64,8 @@ export async function parseMarkdown(text, options) {
     await extractTags(section.body, ctx, note);
     await extractUrls(section.body, ctx, note);
     await extractWikilinks(section.body, ctx, note);
+    await extractMarkdownImages(section.body, ctx, note);
+    await extractCodeBlocks(section.body, ctx, note);
   }
 
   return finish(ctx);
@@ -154,11 +157,20 @@ async function extractUrls(text, ctx, parent) {
 
 async function extractWikilinks(text, ctx, parent) {
   const seen = new Set();
-  for (const match of text.matchAll(/\[\[([^\]\n]+)\]\]/g)) {
+  // Supports [[Target]], [[Target|Alias]], [[Target#Section|Alias]]
+  for (const match of text.matchAll(/\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]/g)) {
     const target = match[1]?.trim();
+    const section = match[2]?.trim();
+    const alias = match[3]?.trim();
     if (!target || seen.has(target)) continue;
     seen.add(target);
-    const node = await upsertNode(ctx, { label: target, type: 'note', metadata: { wikilink: true } });
+
+    const label = alias || target;
+    const meta = { wikilink: true };
+    if (section) meta.section = section;
+    if (alias) meta.alias = alias;
+
+    const node = await upsertNode(ctx, { label, type: 'note', metadata: meta });
     await upsertEdge(ctx, { source: parent.id, target: node.id, relation: 'LINKS_TO', weight: 0.55 });
   }
 }
@@ -166,6 +178,40 @@ async function extractWikilinks(text, ctx, parent) {
 function extractFirstHeading(md) {
   const m = md.match(/^\s*#\s+(.+?)\s*$/m);
   return m?.[1]?.trim() || null;
+}
+
+async function extractMarkdownImages(text, ctx, parent) {
+  const re = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]+)")?\)/g;
+  for (const m of text.matchAll(re)) {
+    const alt = (m[1] || '').trim();
+    const url = m[2].trim();
+    if (!url) continue;
+    const label = alt || safeUrlLabel(url);
+    const node = await upsertNode(ctx, {
+      label,
+      type: 'image',
+      metadata: { url, alt, sourceUrl: url },
+    });
+    await upsertEdge(ctx, { source: parent.id, target: node.id, relation: 'REFERENCES', weight: 0.35 });
+  }
+}
+
+async function extractCodeBlocks(text, ctx, parent) {
+  const re = /```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g;
+  let idx = 0;
+  for (const m of text.matchAll(re)) {
+    idx++;
+    const lang = (m[1] || '').trim();
+    const code = (m[2] || '').trim();
+    if (!code) continue;
+    const label = lang ? `${lang} snippet` : `code block ${idx}`;
+    const node = await upsertNode(ctx, {
+      label: truncate(label, PARAGRAPH_MAX_LABEL),
+      type: 'code',
+      metadata: { language: lang || 'text', length: code.length },
+    });
+    await upsertEdge(ctx, { source: parent.id, target: node.id, relation: 'PART_OF', weight: 0.5 });
+  }
 }
 
 function splitMarkdownSections(md) {

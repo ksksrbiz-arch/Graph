@@ -148,12 +148,62 @@ async function handleApi(request, env, url) {
     return ingest(request, env, 'markdown');
   }
 
+  if (pathname === '/api/v1/public/ingest/url' && request.method === 'POST') {
+    return ingest(request, env, 'url');
+  }
+
   if (pathname === '/api/v1/public/ingest/graph' && request.method === 'POST') {
     return ingestGraph(request, env);
   }
 
   // Not an API endpoint we own — let the caller fall through.
   return null;
+}
+
+async function fetchAndExtractReadable(rawUrl) {
+  const res = await fetch(rawUrl, {
+    redirect: 'follow',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; GraphIngestBot/1.0; +https://github.com/ksksrbiz-arch/Graph)',
+      Accept: 'text/html,application/xhtml+xml',
+    },
+  });
+  if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+  const html = await res.text();
+
+  // Title
+  let title = '';
+  const t = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (t) title = t[1].replace(/\s+/g, ' ').trim();
+  const og = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([\s\S]*?)["']/i);
+  if (og) title = og[1].replace(/\s+/g, ' ').trim();
+
+  // Content isolation (rough but effective)
+  let body = html;
+  const art = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+  if (art) body = art[1];
+  else {
+    const m = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+    if (m) body = m[1];
+  }
+
+  let text = body
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+    .replace(/<aside[\s\S]*?<\/aside>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\/?(h[1-6]|p|li|div|section|article)[^>]*>/gi, '\n\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&[a-z]+;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180_000);
+
+  return { title: title || new URL(rawUrl).hostname, text };
 }
 
 async function ingest(request, env, format) {
@@ -173,25 +223,44 @@ async function ingest(request, env, format) {
   const auth = await authFor(request, env, userId);
   if (auth instanceof Response) return auth;
 
-  const contentField = format === 'markdown' ? 'markdown' : 'text';
-  const content = typeof dto?.[contentField] === 'string' ? dto[contentField] : '';
-  if (!content.trim()) return jsonResponse({ error: `${contentField} is required` }, 400);
-  if (content.length > TEXT_MAX_LENGTH) {
-    return jsonResponse({ error: `${contentField} exceeds ${TEXT_MAX_LENGTH} characters` }, 413);
+  let content = '';
+  let finalTitle = '';
+  let effectiveFormat = format;
+
+  if (format === 'url') {
+    const rawUrl = typeof dto?.url === 'string' ? dto.url.trim() : '';
+    if (!rawUrl) return jsonResponse({ error: 'url is required' }, 400);
+    try {
+      new URL(rawUrl);
+    } catch {
+      return jsonResponse({ error: 'invalid url' }, 400);
+    }
+
+    const extracted = await fetchAndExtractReadable(rawUrl);
+    content = extracted.text;
+    finalTitle = (typeof dto?.title === 'string' && dto.title.trim() ? dto.title.trim() : extracted.title) || rawUrl;
+    effectiveFormat = 'text'; // after extraction we treat it as plain text for parsing
+  } else {
+    const contentField = format === 'markdown' ? 'markdown' : 'text';
+    content = typeof dto?.[contentField] === 'string' ? dto[contentField] : '';
+    if (!content.trim()) return jsonResponse({ error: `${contentField} is required` }, 400);
+    if (content.length > TEXT_MAX_LENGTH) {
+      return jsonResponse({ error: `${contentField} exceeds ${TEXT_MAX_LENGTH} characters` }, 413);
+    }
+    finalTitle = (typeof dto?.title === 'string' && dto.title.trim().length > 0
+      ? dto.title.trim()
+      : defaultTitle(format)
+    ).slice(0, TITLE_MAX_LENGTH);
   }
 
-  const title = (typeof dto?.title === 'string' && dto.title.trim().length > 0
-    ? dto.title.trim()
-    : defaultTitle(format)
-  ).slice(0, TITLE_MAX_LENGTH);
-
-  const sourceId = format === 'markdown' ? 'obsidian' : 'bookmarks';
-  const parsed = format === 'markdown'
+  const title = finalTitle.slice(0, TITLE_MAX_LENGTH);
+  const sourceId = format === 'markdown' ? 'obsidian' : (format === 'url' ? 'web' : 'bookmarks');
+  const parsed = effectiveFormat === 'markdown'
     ? await parseMarkdown(content, { userId, sourceId, title })
     : await parseText(content, { userId, sourceId, title });
 
   const snapshot = await mergeAndPersist(env.GRAPH_KV, userId, parsed, sourceId);
-  const evt = await mirrorToD1(env, { userId, sourceId, sourceKind: format, kind: format, parsed, payload: { format, title, length: content.length } });
+  const evt = await mirrorToD1(env, { userId, sourceId, sourceKind: format, kind: effectiveFormat, parsed, payload: { format, title, length: content.length } });
 
   return jsonResponse({
     userId,

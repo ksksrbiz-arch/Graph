@@ -22,7 +22,7 @@ const ENDPOINT_LOCAL_INGEST = '/api/ingest';
 let _localIngestSupported = null;
 let _publicApiAvailable = null;
 
-function publicApiUrl(path) {
+export function publicApiUrl(path) {
   const base = (window.GRAPH_CONFIG?.apiBaseUrl || '').trim() || window.location.origin;
   try {
     return new URL(path, base).toString();
@@ -31,7 +31,7 @@ function publicApiUrl(path) {
   }
 }
 
-function brainUserId() {
+export function brainUserId() {
   return window.GRAPH_CONFIG?.brainUserId || 'local';
 }
 

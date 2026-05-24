@@ -159,14 +159,14 @@ animation overlay that lights up freshly-arrived nodes in real time.
 
 | Tab  | What it sends                                                                    |
 | ---- | -------------------------------------------------------------------------------- |
-| URL  | `fetch(url)` in your browser, strips tags, posts cleaned text to `/api/v1/public/ingest/text`. CORS will block many sites — the panel surfaces that as a clear error and falls back to "paste the text yourself". |
+| URL  | Prefers server-side fetch + smart article extraction (`/api/v1/public/ingest/url`). Falls back to browser `fetch` + improved stripping when the server endpoint is unavailable. Much more reliable for sites that block CORS. |
 | Text | Pastes text or markdown directly. Auto-detects markdown (headings or `[[wikilinks]]`) and routes to `/markdown` accordingly. |
 | Batch | Drop or pick a whole project folder. The browser walks the tree, routes each file to a parser (markdown, text, source code, JSON, CSV/TSV, HTML, README/LICENSE, YAML/TOML/INI), and posts the resulting nodes/edges to `/api/v1/public/ingest/graph` in chunks. Skips `.git`, `node_modules`, `dist`, `build`, lockfiles, binaries, and files >1 MiB. See [`docs/batch-upload.md`](docs/batch-upload.md). |
 | Log  | In-memory history of recent ingestion attempts with status + node counts.        |
 
 Backend wiring:
 
-- `POST /api/v1/public/ingest/text` and `POST /api/v1/public/ingest/markdown` — parse text into `KGNode`s + `KGEdge`s, persist via Neo4j, perceive into the running brain, and queue a debounced connectome reload.
+- `POST /api/v1/public/ingest/text`, `/markdown`, and `/url` — server can fetch URLs directly (bypassing browser CORS), parse into `KGNode`s + `KGEdge`s (richer wikilinks, images, code blocks), persist via Neo4j, perceive into the running brain.
 - `GET /api/v1/public/graph/delta?userId=…&since=<ISO|epoch_ms>` — returns nodes + edges with `createdAt > since`. Drives the SPA poll loop (`web/graph-live.js`, default 3s cadence).
 
 **Live animations** (overlay over `force-graph`, 2D mode):
