@@ -31,11 +31,13 @@
       }
     });
 
-    // Mount beautiful brain status HUD
+    // Mount beautiful brain status HUD + controls
     import('./hud/BrainStatus.js').then(({ createBrainStatus }) => {
-      if (ui.brainSystem) {
-        createBrainStatus(container, ui.brainSystem);
-      }
+      if (ui.brainSystem) createBrainStatus(container, ui.brainSystem);
+    });
+
+    import('./hud/Controls.js').then(({ createControls }) => {
+      createControls(container, ui);
     });
 
     // === Impressive Interactive Demo ===
