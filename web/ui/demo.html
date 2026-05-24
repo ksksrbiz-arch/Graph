@@ -77,35 +77,32 @@
       }, 650);
     }
 
-    // Click to focus (triggers brain attention)
+    // Robust click-to-focus with brain attention
     container.addEventListener('click', (e) => {
       if (!ui.renderer || !ui.brainSystem) return;
 
-      // Simple hit test using force-graph internal (rough but works for demo)
       const rect = container.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
-      // Ask the underlying force-graph for the node under cursor (hacky but effective)
       const fg = ui.renderer._fg;
-      if (fg && typeof fg.centerAt === 'function') {
-        // Find closest node
-        let closest = null;
-        let minDist = Infinity;
-        const nodes = fg.graphData().nodes || [];
+      if (!fg) return;
 
-        nodes.forEach(n => {
-          if (n.x == null) return;
-          const dist = Math.hypot(n.x - x, n.y - y);
-          if (dist < minDist && dist < 28) {
-            minDist = dist;
-            closest = n;
-          }
-        });
+      const nodes = fg.graphData().nodes || [];
+      let closest = null;
+      let minDist = Infinity;
 
-        if (closest) {
-          ui.brainSystem.focusOn(closest.id, 1.15);
+      for (const n of nodes) {
+        if (n.x == null || n.y == null) continue;
+        const dist = Math.hypot(n.x - x, n.y - y);
+        if (dist < minDist && dist < 38) {
+          minDist = dist;
+          closest = n;
         }
+      }
+
+      if (closest) {
+        ui.brainSystem.focusOn(closest.id, 1.2);
       }
     });
 
