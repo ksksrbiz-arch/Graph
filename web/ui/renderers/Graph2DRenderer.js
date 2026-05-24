@@ -37,6 +37,11 @@ export function createGraph2DRenderer(container, options = {}) {
   fg.nodeCanvasObject(drawNode);
   fg.linkCanvasObject(drawLink);
 
+  // Draw brain particles on top after the main graph is rendered
+  fg.onRenderFramePost((ctx, globalScale) => {
+    drawParticles(ctx, globalScale);
+  });
+
   let brainSnapshot = null;
   let particles = [];
 
@@ -110,6 +115,77 @@ export function createGraph2DRenderer(container, options = {}) {
     ctx.moveTo(start.x, start.y);
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawParticles(ctx, globalScale) {
+    const particles = api._pendingParticles || [];
+    if (!particles.length) return;
+
+    ctx.save();
+
+    for (const p of particles) {
+      const progress = p.progress || 0;
+      const alpha = (p.opacity || 0.7) * (1 - Math.min(1, progress * 1.1));
+
+      if (alpha <= 0.02) continue;
+
+      let x, y;
+
+      if (p.type === 'ripple' || p.type === 'dream-wave') {
+        // Expanding circles from a node
+        const centerNode = fg.graphData().nodes.find(n => n.id === p.fromNodeId);
+        if (!centerNode) continue;
+
+        const radius = (p.size || 4) * (0.3 + progress * 2.8);
+        ctx.strokeStyle = p.color || '#a5b4fc';
+        ctx.globalAlpha = alpha * 0.7;
+        ctx.lineWidth = (p.type === 'dream-wave' ? 2.5 : 1.8) / globalScale;
+
+        ctx.beginPath();
+        ctx.arc(centerNode.x, centerNode.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+      } else if (p.toNodeId) {
+        // Traveling particles (spike, inference, ambient)
+        const from = fg.graphData().nodes.find(n => n.id === p.fromNodeId);
+        const to = fg.graphData().nodes.find(n => n.id === p.toNodeId);
+        if (!from || !to) continue;
+
+        const t = Math.min(1, progress);
+        x = from.x + (to.x - from.x) * t;
+        y = from.y + (to.y - from.y) * t;
+
+        ctx.fillStyle = p.color || '#c7d2fe';
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(x, y, (p.size || 2) / globalScale, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Small trail
+        ctx.globalAlpha = alpha * 0.4;
+        ctx.beginPath();
+        ctx.arc(x - (to.x - from.x) * 0.08, y - (to.y - from.y) * 0.08, (p.size || 2) * 0.6 / globalScale, 0, Math.PI * 2);
+        ctx.fill();
+
+      } else {
+        // Simple particle from a node
+        const from = fg.graphData().nodes.find(n => n.id === p.fromNodeId);
+        if (!from) continue;
+
+        const angle = (p.angle || 0) + progress * 6;
+        const dist = (p.size || 8) * progress * 1.5;
+        x = from.x + Math.cos(angle) * dist;
+        y = from.y + Math.sin(angle) * dist;
+
+        ctx.fillStyle = p.color || '#a5b4fc';
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(x, y, (p.size || 2) / globalScale, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     ctx.restore();
   }
 

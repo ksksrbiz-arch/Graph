@@ -31,35 +31,120 @@
       }
     });
 
-    // Load some demo data so it looks alive
-    setTimeout(() => {
-      const demoNodes = Array.from({ length: 42 }, (_, i) => ({
+    // Mount beautiful brain status HUD
+    import('./hud/BrainStatus.js').then(({ createBrainStatus }) => {
+      if (ui.brainSystem) {
+        createBrainStatus(container, ui.brainSystem);
+      }
+    });
+
+    // === Impressive Interactive Demo ===
+    let demoNodes = [];
+    let demoEdges = [];
+
+    function generateDemoGraph(count = 55) {
+      demoNodes = Array.from({ length: count }, (_, i) => ({
         id: `n${i}`,
-        label: `Node ${i}`,
-        type: i % 5 === 0 ? 'person' : (i % 3 === 0 ? 'note' : 'concept'),
-        __degree: 2 + Math.floor(Math.random() * 7)
+        label: `Concept ${i}`,
+        type: i % 4 === 0 ? 'person' : (i % 3 === 0 ? 'note' : 'concept'),
+        __degree: 2 + Math.floor(Math.random() * 9)
       }));
 
-      const demoEdges = [];
-      for (let i = 0; i < 65; i++) {
-        const a = Math.floor(Math.random() * demoNodes.length);
-        let b = Math.floor(Math.random() * demoNodes.length);
-        if (b === a) b = (a + 1) % demoNodes.length;
-        demoEdges.push({ source: demoNodes[a].id, target: demoNodes[b].id, weight: 0.3 + Math.random() * 0.7 });
+      demoEdges = [];
+      for (let i = 0; i < count * 1.4; i++) {
+        const a = Math.floor(Math.random() * count);
+        let b = Math.floor(Math.random() * count);
+        if (b === a) b = (a + 1) % count;
+        demoEdges.push({ 
+          source: demoNodes[a].id, 
+          target: demoNodes[b].id, 
+          weight: 0.25 + Math.random() * 0.75 
+        });
       }
+    }
 
+    function loadGraph() {
+      generateDemoGraph(55);
       ui.setGraph({ nodes: demoNodes, edges: demoEdges });
 
-      // Fire some brain activity so the new system shows off
+      // Initial brain activity
       setTimeout(() => {
         if (ui.brainSystem) {
-          ui.brainSystem.onNodesArrived(demoNodes.slice(0, 8).map(n => n.id), 0.85);
-          ui.brainSystem.focusOn(demoNodes[3].id, 1.1);
+          const active = demoNodes.slice(0, 9).map(n => n.id);
+          ui.brainSystem.onNodesArrived(active, 0.9);
+          ui.brainSystem.focusOn(demoNodes[2].id, 1.0);
         }
-      }, 800);
-    }, 400);
+      }, 650);
+    }
 
-    console.log('%c[UI v2 Demo] Loaded. This is early scaffolding of the high-effort rebuild.', 'color:#7aa2f7');
+    // Click to focus (triggers brain attention)
+    container.addEventListener('click', (e) => {
+      if (!ui.renderer || !ui.brainSystem) return;
+
+      // Simple hit test using force-graph internal (rough but works for demo)
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // Ask the underlying force-graph for the node under cursor (hacky but effective)
+      const fg = ui.renderer._fg;
+      if (fg && typeof fg.centerAt === 'function') {
+        // Find closest node
+        let closest = null;
+        let minDist = Infinity;
+        const nodes = fg.graphData().nodes || [];
+
+        nodes.forEach(n => {
+          if (n.x == null) return;
+          const dist = Math.hypot(n.x - x, n.y - y);
+          if (dist < minDist && dist < 28) {
+            minDist = dist;
+            closest = n;
+          }
+        });
+
+        if (closest) {
+          ui.brainSystem.focusOn(closest.id, 1.15);
+        }
+      }
+    });
+
+    // Keyboard controls
+    document.addEventListener('keydown', (e) => {
+      if (!ui.brainSystem) return;
+
+      if (e.key.toLowerCase() === 'd') {
+        ui.brainSystem.enterDreamMode(0.85);
+      }
+      if (e.key.toLowerCase() === 'a') {
+        ui.brainSystem.exitDreamMode();
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        if (ui.renderer) ui.renderer.fit(380);
+      }
+    });
+
+    // Load impressive demo
+    setTimeout(() => {
+      loadGraph();
+
+      // Periodic brain "life"
+      setInterval(() => {
+        if (ui.brainSystem && demoNodes.length > 0) {
+          const randomNodes = [];
+          for (let i = 0; i < 3; i++) {
+            randomNodes.push(demoNodes[Math.floor(Math.random() * demoNodes.length)].id);
+          }
+          ui.brainSystem.onNodesArrived(randomNodes, 0.55);
+        }
+      }, 4200);
+    }, 380);
+
+    console.log('%c[UI v2 Demo] High-effort rebuild demo loaded. Click nodes, press D for dream mode, R to fit, A to wake up.', 'color:#67e8f9');
   </script>
+
+  <div style="position:absolute; bottom:16px; right:16px; font-size:11px; opacity:0.6;">
+    Click nodes to focus • Press <b>D</b> = Dream • <b>A</b> = Awake • <b>R</b> = Fit
+  </div>
 </body>
 </html>
