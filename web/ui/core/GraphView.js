@@ -97,16 +97,30 @@ export class GraphView {
   /**
    * Load a new graph dataset.
    */
-  setGraph(graphData) {
-    this.state.setGraph(graphData);
+  async setGraph(graphData) {
+    // Use DataBridge to support both new v2 shape and legacy project data
+    let normalized;
+    try {
+      const { DataBridge } = await import('./DataBridge.js');
+      const bridge = new DataBridge();
+      normalized = bridge.normalizeGraph(graphData);
+    } catch (e) {
+      console.warn('[GraphView] DataBridge import failed, using raw data', e);
+      normalized = {
+        nodes: (graphData.nodes || graphData.graph?.nodes || []).map(n => ({ ...n })),
+        edges: (graphData.edges || graphData.graph?.edges || []).map(e => ({ ...e })),
+      };
+    }
+
+    this.state.setGraph(normalized);
 
     if (this.renderer) {
       this.renderer.setData(this.state.get());
     }
 
-    // Feed new nodes into the brain system so it feels alive immediately
-    if (this.brainSystem && graphData.nodes) {
-      const ids = graphData.nodes.map(n => n.id);
+    // Feed new nodes into the brain system
+    if (this.brainSystem && normalized.nodes?.length) {
+      const ids = normalized.nodes.map(n => n.id);
       this.brainSystem.onNodesArrived(ids, 0.65);
     }
   }

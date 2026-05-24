@@ -63,9 +63,9 @@
       }
     }
 
-    function loadGraph() {
+    async function loadGraph() {
       generateDemoGraph(55);
-      ui.setGraph({ nodes: demoNodes, edges: demoEdges });
+      await ui.setGraph({ nodes: demoNodes, edges: demoEdges });
 
       // Initial brain activity
       setTimeout(() => {
@@ -95,9 +95,9 @@
       }
     });
 
-    // Load impressive demo
-    setTimeout(() => {
-      loadGraph();
+    // Load impressive demo with async DataBridge support
+    setTimeout(async () => {
+      await loadGraph();   // now uses the bridge under the hood
 
       // Periodic brain "life"
       setInterval(() => {
