@@ -71,6 +71,26 @@ export class GraphView {
       this.interactionManager.init(this.container);
     });
 
+    // React to selection/hover changes for renderer visuals
+    this.state.subscribe('selectedId', (id) => {
+      if (this.renderer && this.renderer.applyBrainState) {
+        const snap = this.brainSystem?.getSnapshot?.() || {};
+        this.renderer.applyBrainState(snap);
+        // Force selected visual
+        if (this.renderer._fg?.graphData) {
+          const nodes = this.renderer._fg.graphData().nodes || [];
+          nodes.forEach(n => n.__selected = n.id === id);
+        }
+      }
+    });
+
+    this.state.subscribe('hoveredId', (id) => {
+      if (this.renderer && this.renderer._fg?.graphData) {
+        const nodes = this.renderer._fg.graphData().nodes || [];
+        nodes.forEach(n => n.__hovered = n.id === id);
+      }
+    });
+
     console.log('%c[Graph UI v2] High-effort rebuild initialized. BrainSystem + Renderer foundation wired.', 'color:#7aa2f7');
   }
 

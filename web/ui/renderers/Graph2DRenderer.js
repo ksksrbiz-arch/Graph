@@ -96,6 +96,19 @@ export function createGraph2DRenderer(container, options = {}) {
       ctx.stroke();
     }
 
+    // Zoom-aware labels (high effort polish)
+    const labelZoomThreshold = 1.8;
+    if (globalScale > labelZoomThreshold && node.label) {
+      const fontSize = Math.max(2.8, 11 / globalScale);
+      ctx.font = `${fontSize}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = `rgba(226, 232, 255, ${Math.min(0.95, (globalScale - labelZoomThreshold) * 0.6)})`;
+
+      const label = node.label.length > 22 ? node.label.slice(0, 20) + '…' : node.label;
+      ctx.fillText(label, node.x, node.y + r + fontSize + 2);
+    }
+
     ctx.restore();
   }
 
