@@ -49,26 +49,30 @@
       }
     });
 
-    // Live stats + brain intensity control (maximum effort polish)
-    const stats = document.createElement('div');
-    stats.style.cssText = 'position:absolute; bottom:60px; left:16px; font-size:11px; opacity:0.75; font-family:monospace; display:flex; align-items:center; gap:8px;';
-    container.appendChild(stats);
+    import('./hud/StatsBar.js').then(({ createStatsBar }) => {
+      createStatsBar(container, ui.state, ui.brainSystem);
+    });
+
+    // Brain intensity control
+    const intensityContainer = document.createElement('div');
+    intensityContainer.style.cssText = 'position:absolute; bottom:60px; left:16px; font-size:11px; opacity:0.75; display:flex; align-items:center; gap:6px;';
+    container.appendChild(intensityContainer);
 
     const intensityLabel = document.createElement('span');
-    intensityLabel.textContent = 'Brain:';
+    intensityLabel.textContent = 'Brain Intensity';
     const intensitySlider = document.createElement('input');
     intensitySlider.type = 'range';
     intensitySlider.min = '0.2';
-    intensitySlider.max = '1.5';
+    intensitySlider.max = '1.6';
     intensitySlider.step = '0.05';
     intensitySlider.value = '1.0';
-    intensitySlider.style.width = '90px';
+    intensitySlider.style.width = '100px';
 
     intensitySlider.oninput = () => {
       ui.configure({ brainIntensity: parseFloat(intensitySlider.value) });
     };
 
-    stats.append(intensityLabel, intensitySlider);
+    intensityContainer.append(intensityLabel, intensitySlider);
 
     ui.state?.subscribe?.(s => {
       const activity = ui.brainSystem?.getSnapshot?.().nodeActivity?.size || 0;

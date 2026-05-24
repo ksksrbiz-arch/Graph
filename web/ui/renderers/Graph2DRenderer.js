@@ -147,12 +147,21 @@ export function createGraph2DRenderer(container, options = {}) {
     if (!start || !end || !start.x) return;
 
     const brainFlow = ((start.__heat || 0) + (end.__heat || 0)) * 0.5;
+    const isActive = brainFlow > 0.2;
 
     ctx.save();
-    ctx.strokeStyle = brainFlow > 0.15 
-      ? `rgba(170, 210, 255, ${0.28 + brainFlow * 0.45})`
-      : 'rgba(120, 140, 255, 0.22)';
-    ctx.lineWidth = (0.85 + (link.weight || 0.3) * 3.5) / globalScale;
+
+    if (isActive) {
+      // Energetic brain-active edges
+      ctx.strokeStyle = `rgba(180, 220, 255, ${0.35 + brainFlow * 0.5})`;
+      ctx.lineWidth = (1.1 + (link.weight || 0.3) * 4.0) / globalScale;
+      ctx.shadowBlur = 4 / globalScale;
+      ctx.shadowColor = 'rgba(140, 200, 255, 0.4)';
+    } else {
+      ctx.strokeStyle = 'rgba(120, 140, 255, 0.22)';
+      ctx.lineWidth = (0.85 + (link.weight || 0.3) * 3.2) / globalScale;
+    }
+
     ctx.beginPath();
     ctx.moveTo(start.x, start.y);
     ctx.lineTo(end.x, end.y);
@@ -166,11 +175,25 @@ export function createGraph2DRenderer(container, options = {}) {
 
     ctx.save();
 
+    const bounds = {
+      left: -50,
+      right: fg.width() + 50,
+      top: -50,
+      bottom: fg.height() + 50
+    };
+
     for (const p of particles) {
       const progress = p.progress || 0;
       const alpha = (p.opacity || 0.7) * (1 - Math.min(1, progress * 1.1));
 
       if (alpha <= 0.02) continue;
+
+      // Simple culling for performance
+      if (p.x !== undefined && p.y !== undefined) {
+        if (p.x < bounds.left || p.x > bounds.right || p.y < bounds.top || p.y > bounds.bottom) {
+          continue;
+        }
+      }
 
       let x, y;
 
