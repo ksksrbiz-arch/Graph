@@ -161,4 +161,33 @@ export class GraphView {
       try { fn(payload); } catch (e) { console.warn('[GraphView] event handler error', e); }
     });
   }
+
+  /**
+   * Configure the view at runtime (brain intensity, visual settings, etc.)
+   */
+  configure(config = {}) {
+    if (config.brainIntensity !== undefined && this.brainSystem) {
+      this.brainSystem.modes.intensity = config.brainIntensity;
+    }
+
+    if (this.state) {
+      this.state.setConfig(config);
+    }
+
+    if (this.renderer) {
+      // Allow renderer to react to config changes
+      this.renderer.applyBrainState?.(this.brainSystem?.getSnapshot?.());
+    }
+  }
+
+  /**
+   * Clean public API for consumers
+   */
+  get brain() {
+    return this.brainSystem;
+  }
+
+  get rendererApi() {
+    return this.renderer;
+  }
 }

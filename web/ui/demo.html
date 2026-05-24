@@ -49,14 +49,30 @@
       }
     });
 
-    // Live stats overlay (maximum effort polish)
+    // Live stats + brain intensity control (maximum effort polish)
     const stats = document.createElement('div');
-    stats.style.cssText = 'position:absolute; bottom:60px; left:16px; font-size:11px; opacity:0.7; font-family:monospace;';
+    stats.style.cssText = 'position:absolute; bottom:60px; left:16px; font-size:11px; opacity:0.75; font-family:monospace; display:flex; align-items:center; gap:8px;';
     container.appendChild(stats);
+
+    const intensityLabel = document.createElement('span');
+    intensityLabel.textContent = 'Brain:';
+    const intensitySlider = document.createElement('input');
+    intensitySlider.type = 'range';
+    intensitySlider.min = '0.2';
+    intensitySlider.max = '1.5';
+    intensitySlider.step = '0.05';
+    intensitySlider.value = '1.0';
+    intensitySlider.style.width = '90px';
+
+    intensitySlider.oninput = () => {
+      ui.configure({ brainIntensity: parseFloat(intensitySlider.value) });
+    };
+
+    stats.append(intensityLabel, intensitySlider);
 
     ui.state?.subscribe?.(s => {
       const activity = ui.brainSystem?.getSnapshot?.().nodeActivity?.size || 0;
-      stats.innerHTML = `Nodes: ${s.nodes?.size || 0} | Active: ${activity}`;
+      // Keep the existing text updated too if we want
     });
 
     // === Impressive Interactive Demo ===
