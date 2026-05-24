@@ -47,25 +47,31 @@ export function createGraph2DRenderer(container, options = {}) {
 
   function drawNode(node, ctx, globalScale) {
     const r = (node.__size || 5) * (node.__brainScale || 1.0);
-    const baseColor = node.__color || '#7aa2f7';
-
+    const baseColor = node.__color || getNodeColor(node);
     const heat = node.__heat || 0;
     const glow = node.__glow || 0;
     const alpha = node.__brainAlpha ?? 0.95;
+    const isFocused = node.__focused;
+    const isSelected = node.__selected;
+    const isHovered = node.__hovered;
 
     ctx.save();
     ctx.globalAlpha = alpha;
 
-    // Outer glow (brain heat / activation)
-    if (heat > 0.05 || glow > 0.05) {
-      const glowSize = r * (1.6 + heat * 1.8 + glow * 0.8);
+    // === Layer 1: Strong outer brain glow (very premium look) ===
+    if (heat > 0.04 || glow > 0.04 || isFocused) {
+      const glowIntensity = Math.max(heat, glow * 0.8, isFocused ? 0.9 : 0);
+      const glowSize = r * (1.8 + glowIntensity * 2.2);
+
       const gradient = ctx.createRadialGradient(
-        node.x, node.y, r * 0.6,
+        node.x, node.y, r * 0.4,
         node.x, node.y, glowSize
       );
-      gradient.addColorStop(0, `rgba(165, 180, 252, ${0.35 * Math.min(1, heat + glow)})`);
-      gradient.addColorStop(0.4, `rgba(165, 180, 252, ${0.12 * Math.min(1, heat + glow)})`);
-      gradient.addColorStop(1, 'rgba(165, 180, 252, 0)');
+
+      const coreAlpha = 0.4 * Math.min(1, glowIntensity);
+      gradient.addColorStop(0, `rgba(180, 200, 255, ${coreAlpha})`);
+      gradient.addColorStop(0.35, `rgba(160, 190, 255, ${coreAlpha * 0.5})`);
+      gradient.addColorStop(1, 'rgba(140, 170, 255, 0)');
 
       ctx.fillStyle = gradient;
       ctx.beginPath();
@@ -73,43 +79,66 @@ export function createGraph2DRenderer(container, options = {}) {
       ctx.fill();
     }
 
-    // Core node
+    // === Layer 2: Main node body ===
     ctx.beginPath();
     ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
     ctx.fillStyle = baseColor;
     ctx.fill();
 
-    // Bright core when highly active
-    if (heat > 0.3 || node.__focused) {
+    // === Layer 3: Inner bright core (when highly activated) ===
+    if (heat > 0.25 || isFocused) {
+      const innerR = r * (0.45 + heat * 0.25);
       ctx.beginPath();
-      ctx.arc(node.x, node.y, r * 0.55, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.arc(node.x, node.y, innerR, 0, Math.PI * 2);
+      ctx.fillStyle = isFocused ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.55)';
       ctx.fill();
     }
 
-    // Selection / Focus ring
-    if (node.__selected || node.__focused) {
-      ctx.strokeStyle = node.__focused ? '#67e8f9' : '#e0e7ff';
-      ctx.lineWidth = (node.__focused ? 4.5 : 2.8) / globalScale;
+    // === Layer 4: Selection / Focus / Hover rings ===
+    if (isFocused || isSelected || isHovered) {
+      ctx.strokeStyle = isFocused ? '#67e8f9' : (isSelected ? '#e0e7ff' : '#c7d2fe');
+      ctx.lineWidth = (isFocused ? 4.2 : isSelected ? 3.0 : 2.2) / globalScale;
+
       ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 3, 0, Math.PI * 2);
+      ctx.arc(node.x, node.y, r + (isFocused ? 4.5 : 3), 0, Math.PI * 2);
       ctx.stroke();
+
+      // Double ring on strong focus
+      if (isFocused) {
+        ctx.lineWidth = 1.6 / globalScale;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r + 7.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
 
-    // Zoom-aware labels (high effort polish)
-    const labelZoomThreshold = 1.8;
+    // === Layer 5: Zoom-aware labels (high quality) ===
+    const labelZoomThreshold = 1.65;
     if (globalScale > labelZoomThreshold && node.label) {
-      const fontSize = Math.max(2.8, 11 / globalScale);
-      ctx.font = `${fontSize}px system-ui, sans-serif`;
+      const fontSize = Math.max(2.6, 12.5 / globalScale);
+      ctx.font = `500 ${fontSize}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = `rgba(226, 232, 255, ${Math.min(0.95, (globalScale - labelZoomThreshold) * 0.6)})`;
 
-      const label = node.label.length > 22 ? node.label.slice(0, 20) + '…' : node.label;
-      ctx.fillText(label, node.x, node.y + r + fontSize + 2);
+      const labelAlpha = Math.min(0.92, (globalScale - labelZoomThreshold) * 0.75);
+      ctx.fillStyle = `rgba(230, 235, 255, ${labelAlpha})`;
+
+      const label = node.label.length > 26 ? node.label.slice(0, 24) + '…' : node.label;
+      ctx.fillText(label, node.x, node.y + r + fontSize * 0.95 + 1.5);
     }
 
     ctx.restore();
+  }
+
+  function getNodeColor(node) {
+    // Simple but effective type-based coloring for v2
+    const type = (node.type || '').toLowerCase();
+    if (type.includes('person')) return '#f472b6';
+    if (type.includes('note')) return '#60a5fa';
+    if (type.includes('code') || type.includes('commit')) return '#34d399';
+    if (type.includes('task')) return '#fbbf24';
+    if (type.includes('image')) return '#a78bfa';
+    return '#7aa2f7'; // default
   }
 
   function drawLink(link, ctx, globalScale) {
