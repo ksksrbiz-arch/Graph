@@ -50,6 +50,7 @@ export function createIngestPanel({ container, onIngested } = {}) {
         </div>
         <p class="ingest-help">Fetched in your browser. Sites without permissive CORS will fall back to "paste the text yourself".</p>
         <div class="ingest-status" data-status></div>
+        <button type="button" class="wiz-link" style="margin-top:6px;font-size:12px;">→ Open in full Wizard (with preview)</button>
       </div>
       <div class="ingest-tab hidden" data-pane="text">
         <textarea class="ingest-text" rows="6" placeholder="Paste any text, notes, or content. Hashtags + [[wikilinks]] become edges."></textarea>
@@ -96,6 +97,16 @@ export function createIngestPanel({ container, onIngested } = {}) {
   // — querySelectorAll returns a static NodeList and the placeholder we just
   // replaced would otherwise still be in `panes`.
   const panes = root.querySelectorAll('.ingest-tab');
+
+  // Hook "Open in full Wizard" from the URL tab
+  const urlWizardLink = root.querySelector('.wiz-link');
+  if (urlWizardLink) {
+    urlWizardLink.onclick = () => {
+      import('./views/ingest-wizard.js').then(m => {
+        m.openQuickUrlWizard?.({ onSuccess: onIngested });
+      });
+    };
+  }
 
   let connectorsRendered = false;
 

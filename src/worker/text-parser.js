@@ -52,6 +52,9 @@ export async function parseMarkdown(text, options) {
   });
 
   const sections = splitMarkdownSections(text).slice(0, MAX_NODES_PER_BATCH);
+
+  const headingStack = [];
+
   for (const section of sections) {
     const noteLabel = truncate(section.title || section.body.slice(0, 80) || '(empty)', PARAGRAPH_MAX_LABEL);
     if (!noteLabel.trim()) continue;
@@ -61,11 +64,23 @@ export async function parseMarkdown(text, options) {
       metadata: { heading: section.title, level: section.level, length: section.body.length },
     });
     await upsertEdge(ctx, { source: parent.id, target: note.id, relation: 'PART_OF', weight: 0.6 });
+
+    // Heading hierarchy (parent/child)
+    while (headingStack.length > 0 && headingStack[headingStack.length - 1].level >= section.level) {
+      headingStack.pop();
+    }
+    if (headingStack.length > 0) {
+      const parentH = headingStack[headingStack.length - 1].node;
+      await upsertEdge(ctx, { source: parentH.id, target: note.id, relation: 'HAS_CHILD', weight: 0.75 });
+    }
+    headingStack.push({ level: section.level, node: note });
+
     await extractTags(section.body, ctx, note);
     await extractUrls(section.body, ctx, note);
     await extractWikilinks(section.body, ctx, note);
     await extractMarkdownImages(section.body, ctx, note);
     await extractCodeBlocks(section.body, ctx, note);
+    await extractLists(section.body, ctx, note);
   }
 
   return finish(ctx);
@@ -190,7 +205,12 @@ async function extractMarkdownImages(text, ctx, parent) {
     const node = await upsertNode(ctx, {
       label,
       type: 'image',
-      metadata: { url, alt, sourceUrl: url },
+      metadata: { 
+        url, 
+        alt: alt || '', 
+        title: m[3] || '', 
+        sourceUrl: url 
+      },
     });
     await upsertEdge(ctx, { source: parent.id, target: node.id, relation: 'REFERENCES', weight: 0.35 });
   }
@@ -211,6 +231,42 @@ async function extractCodeBlocks(text, ctx, parent) {
       metadata: { language: lang || 'text', length: code.length },
     });
     await upsertEdge(ctx, { source: parent.id, target: node.id, relation: 'PART_OF', weight: 0.5 });
+  }
+}
+
+async function extractLists(text, ctx, parent) {
+  const lines = text.split(/\r?\n/);
+  let itemCount = 0;
+  const listStack = [];
+
+  for (const line of lines) {
+    const m = line.match(/^(\s*)([-*+]\s+|\d+\.\s+)(.+)$/);
+    if (m) {
+      const indent = m[1].length;
+      const level = Math.floor(indent / 2);
+      const itemText = m[3].trim();
+      if (itemText.length < 6) continue;
+
+      itemCount++;
+      const label = truncate(itemText, 90);
+      const node = await upsertNode(ctx, {
+        label,
+        type: 'list_item',
+        metadata: { list: true, level },
+      });
+
+      while (listStack.length > 0 && listStack[listStack.length - 1].level >= level) {
+        listStack.pop();
+      }
+
+      const attachTo = listStack.length > 0 ? listStack[listStack.length - 1].node : parent;
+      const relation = listStack.length > 0 ? 'HAS_CHILD' : 'HAS_ITEM';
+
+      await upsertEdge(ctx, { source: attachTo.id, target: node.id, relation, weight: 0.45 });
+
+      listStack.push({ level, node });
+      if (itemCount > 20) break;
+    }
   }
 }
 

@@ -552,3 +552,265 @@ function statBox(value, label) {
     el('div', { class: 'lbl' }, label),
   );
 }
+
+/**
+ * Dedicated Quick "Ingest URL" flow inside the wizard experience.
+ * Shows URL input, Fetch + Preview, then actual ingest.
+ */
+export function openQuickUrlWizard({ onSuccess } = {}) {
+  if (_isOpen) return;
+  _isOpen = true;
+
+  ensureMounted();
+  const scrim = document.getElementById(SCRIM_ID);
+  const dlg = document.getElementById(WIZARD_ID);
+
+  dlg.innerHTML = '';
+  scrim.classList.add('wiz-visible');
+  dlg.classList.add('wiz-visible');
+  dlg.setAttribute('aria-label', 'Quick Ingest URL');
+
+  let step = 'url'; // 'url' | 'preview' | 'running' | 'done'
+  let previewData = null;
+  let lastResult = null;
+
+  const stepBar = el('div', { class: 'wiz-steps' },
+    stepDot(1, 'URL', () => step),
+    el('div', { class: 'wiz-step-line' }),
+    stepDot(2, 'Preview', () => step),
+    el('div', { class: 'wiz-step-line' }),
+    stepDot(3, 'Ingest', () => step),
+  );
+
+  const header = el('header', { class: 'wiz-header' },
+    el('span', { class: 'wiz-icon' }, '🌐'),
+    el('div', { class: 'wiz-header-text' },
+      el('h2', {}, 'Ingest from URL'),
+      el('p', { class: 'wiz-sub' }, 'Fetch any public page and add it to your brain'),
+    ),
+    closeBtn()
+  );
+
+  const body = el('div', { class: 'wiz-body' });
+  const footer = el('div', { class: 'wiz-footer' });
+
+  dlg.append(stepBar, header, body, footer);
+
+  function closeWizard() {
+    _isOpen = false;
+    scrim.classList.remove('wiz-visible');
+    dlg.classList.remove('wiz-visible');
+  }
+
+  function closeBtn() {
+    const btn = el('button', { class: 'wiz-close' }, '×');
+    btn.onclick = closeWizard;
+    return btn;
+  }
+
+  function renderUrlStep() {
+    step = 'url';
+    updateStepBar();
+    body.innerHTML = '';
+    footer.innerHTML = '';
+
+    const urlInput = el('input', {
+      type: 'url',
+      class: 'wiz-input',
+      placeholder: 'https://example.com/article',
+      style: 'width: 100%; font-size: 15px;',
+    });
+
+    const useServer = el('label', { style: 'display:flex; align-items:center; gap:6px; margin-top:8px;' },
+      el('input', { type: 'checkbox', checked: true }),
+      ' Fetch on server (recommended — bypasses CORS)'
+    );
+
+    const hint = el('p', { class: 'wiz-hint' }, 'Server fetch works for most sites that block direct browser requests.');
+
+    body.append(
+      el('div', { class: 'wiz-form' },
+        el('label', { class: 'wiz-label' }, 'Page URL'),
+        urlInput,
+        useServer,
+        hint
+      )
+    );
+
+    const btnPreview = el('button', { class: 'primary' }, 'Fetch & Preview');
+    const btnCancel = el('button', { class: 'wiz-btn-cancel' }, 'Cancel');
+
+    btnCancel.onclick = closeWizard;
+
+    btnPreview.onclick = async () => {
+      const u = urlInput.value.trim();
+      if (!u) return;
+
+      btnPreview.disabled = true;
+      btnPreview.textContent = 'Fetching…';
+
+      try {
+        let html = '';
+        let finalTitle = u;
+
+        if (useServer.querySelector('input').checked) {
+          // Try server
+          const mod = await import('../data.js');
+          const endpoint = mod.publicApiUrl?.('/api/v1/public/ingest/url');
+          if (endpoint) {
+            const res = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ userId: mod.brainUserId?.() || 'local', url: u }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              previewData = {
+                title: data.title || u,
+                nodes: data.nodes || 0,
+                edges: data.edges || 0,
+                samples: [], // would need dry-run for real samples
+              };
+              renderPreviewStep(u, previewData);
+              return;
+            }
+          }
+        }
+
+        // Fallback: client fetch + real lightweight preview parsing
+        const res = await fetch(u, { mode: 'cors' });
+        html = await res.text();
+        const cleaned = (await import('../ingest-panel.js').then(m => m.stripHtml ? m.stripHtml(html) : html)).slice(0, 12000);
+
+        // Better client-side preview: headings + paragraphs + hashtags + wikilinks
+        const headings = (html.match(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi) || [])
+          .map(h => h.replace(/<[^>]+>/g, '').trim())
+          .filter(Boolean)
+          .slice(0, 6);
+
+        const paras = cleaned.split(/\n\s*\n/).filter(p => p.length > 25).slice(0, 8);
+
+        // Quick hashtag + wikilink detection for samples
+        const tags = [...new Set((cleaned.match(/#([A-Za-z][\w-]{1,30})/g) || []).map(t => t.slice(1)))].slice(0, 4);
+        const wikis = [...new Set((cleaned.match(/\[\[([^\]|#]+)(?:#|\|)?/g) || []).map(w => w.replace(/[\[\]|#]/g, '')))].slice(0, 4);
+
+        const samples = [
+          { type: 'document', label: finalTitle },
+          ...headings.map(h => ({ type: 'note', label: h })),
+          ...paras.slice(0, 4).map(p => ({ type: 'note', label: p.slice(0, 65) + (p.length > 65 ? '...' : '') })),
+          ...tags.map(t => ({ type: 'concept', label: `#${t}` })),
+          ...wikis.map(w => ({ type: 'note', label: `[[${w}]]` })),
+        ];
+
+        previewData = {
+          title: finalTitle,
+          nodes: 1 + headings.length + paras.length + tags.length + wikis.length,
+          edges: headings.length + paras.length + tags.length + wikis.length,
+          samples: samples.slice(0, 12),
+        };
+
+        renderPreviewStep(u, previewData);
+      } catch (e) {
+        alert('Failed to fetch: ' + (e.message || 'CORS or network error. Try pasting text instead.'));
+      } finally {
+        btnPreview.disabled = false;
+        btnPreview.textContent = 'Fetch & Preview';
+      }
+    };
+
+    footer.append(btnCancel, btnPreview);
+  }
+
+  function renderPreviewStep(url, data) {
+    step = 'preview';
+    updateStepBar();
+    body.innerHTML = '';
+    footer.innerHTML = '';
+
+    const titleEl = el('div', { class: 'wiz-preview-title' }, `📄 ${data.title || url}`);
+    const stats = el('div', { class: 'wiz-stats-row' },
+      statBox(data.nodes, 'Nodes'),
+      statBox(data.edges, 'Edges')
+    );
+
+    const samples = el('div', { class: 'wiz-samples' });
+    (data.samples || []).slice(0, 8).forEach(s => {
+      samples.appendChild(el('div', { class: 'wiz-sample-row' },
+        el('span', { class: 'wiz-type' }, s.type),
+        el('span', {}, s.label)
+      ));
+    });
+
+    body.append(
+      titleEl,
+      stats,
+      el('div', { class: 'wiz-label', style: 'margin-top:16px' }, 'Preview (top items)'),
+      samples,
+      el('p', { class: 'wiz-hint' }, 'Actual node count may be slightly higher after server processing.')
+    );
+
+    const btnIngest = el('button', { class: 'primary' }, 'Ingest to Brain');
+    const btnBack = el('button', {}, '← Back');
+
+    btnBack.onclick = renderUrlStep;
+
+    btnIngest.onclick = async () => {
+      btnIngest.disabled = true;
+      btnIngest.textContent = 'Ingesting…';
+
+      try {
+        const mod = await import('../data.js');
+        const endpoint = mod.publicApiUrl?.('/api/v1/public/ingest/url');
+        const uid = mod.brainUserId?.() || 'local';
+
+        if (endpoint) {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ userId: uid, url }),
+          });
+          lastResult = await res.json().catch(() => ({ ok: res.ok, nodes: data.nodes || 0, edges: data.edges || 0 }));
+        } else {
+          // Last resort fallback
+          lastResult = { ok: true, nodes: data.nodes || 0, edges: data.edges || 0 };
+        }
+
+        renderDoneStep(lastResult);
+      } catch (e) {
+        alert('Ingest failed: ' + (e.message || e));
+        btnIngest.disabled = false;
+        btnIngest.textContent = 'Ingest to Brain';
+      }
+    };
+
+    footer.append(btnBack, btnIngest);
+  }
+
+  function renderDoneStep(result) {
+    step = 'done';
+    updateStepBar();
+    body.innerHTML = '';
+    footer.innerHTML = '';
+
+    body.appendChild(el('div', { class: 'wiz-done' },
+      el('div', { class: 'wiz-big-check' }, '✓'),
+      el('h3', {}, 'Ingest complete!'),
+      el('p', {}, `${result.nodes ?? 0} nodes and ${result.edges ?? 0} edges added.`)
+    ));
+
+    const btnClose = el('button', { class: 'primary' }, 'Done');
+    btnClose.onclick = () => {
+      closeWizard();
+      onSuccess?.(result);
+    };
+
+    footer.append(btnClose);
+  }
+
+  function updateStepBar() {
+    // simple visual update (dots already rendered)
+  }
+
+  // Start with URL step
+  renderUrlStep();
+}

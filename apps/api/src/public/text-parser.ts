@@ -77,20 +77,39 @@ export function parseMarkdown(text: string, options: ParseOptions): ParseResult 
   });
 
   const sections = splitMarkdownSections(text).slice(0, MAX_NODES_PER_BATCH);
+
+  // Build heading hierarchy (parent/child edges)
+  const headingStack: Array<{ level: number; node: KGNode }> = [];
+
   for (const section of sections) {
     const noteLabel = truncate(section.title || section.body.slice(0, 80) || '(empty)', PARAGRAPH_MAX_LABEL);
     if (!noteLabel.trim()) continue;
+
     const note = upsertNode(ctx, {
       label: noteLabel,
       type: 'note',
       metadata: { heading: section.title, level: section.level, length: section.body.length },
     });
+
+    // Attach to document or previous heading
     upsertEdge(ctx, { source: parent.id, target: note.id, relation: 'PART_OF', weight: 0.6 });
+
+    // Heading hierarchy
+    while (headingStack.length > 0 && headingStack[headingStack.length - 1].level >= section.level) {
+      headingStack.pop();
+    }
+    if (headingStack.length > 0) {
+      const parentHeading = headingStack[headingStack.length - 1].node;
+      upsertEdge(ctx, { source: parentHeading.id, target: note.id, relation: 'HAS_CHILD', weight: 0.75 });
+    }
+    headingStack.push({ level: section.level, node: note });
+
     extractTags(section.body, ctx, note);
     extractUrls(section.body, ctx, note);
     extractWikilinks(section.body, ctx, note);
     extractMarkdownImages(section.body, ctx, note);
     extractCodeBlocks(section.body, ctx, note);
+    extractLists(section.body, ctx, note);
   }
 
   return finish(ctx);
@@ -231,7 +250,12 @@ function extractMarkdownImages(text: string, ctx: ParseContext, parent: KGNode):
     const node = upsertNode(ctx, {
       label,
       type: 'image',
-      metadata: { url, alt, sourceUrl: url },
+      metadata: { 
+        url, 
+        alt: alt || '', 
+        title: m[3] || '', 
+        sourceUrl: url 
+      },
     });
     upsertEdge(ctx, { source: parent.id, target: node.id, relation: 'REFERENCES', weight: 0.35 });
   }
@@ -253,6 +277,43 @@ function extractCodeBlocks(text: string, ctx: ParseContext, parent: KGNode): voi
       metadata: { language: lang || 'text', length: code.length },
     });
     upsertEdge(ctx, { source: parent.id, target: node.id, relation: 'PART_OF', weight: 0.5 });
+  }
+}
+
+function extractLists(text: string, ctx: ParseContext, parent: KGNode): void {
+  const lines = text.split(/\r?\n/);
+  let itemCount = 0;
+  const listStack: Array<{ level: number; node: KGNode }> = []; // for nesting
+
+  for (const line of lines) {
+    const m = line.match(/^(\s*)([-*+]\s+|\d+\.\s+)(.+)$/);
+    if (m) {
+      const indent = m[1].length;
+      const level = Math.floor(indent / 2); // 2 spaces = 1 level
+      const itemText = m[3].trim();
+      if (itemText.length < 6) continue;
+
+      itemCount++;
+      const label = truncate(itemText, 90);
+      const node = upsertNode(ctx, {
+        label,
+        type: 'list_item',
+        metadata: { list: true, level },
+      });
+
+      // Attach to closest parent list item or the section
+      while (listStack.length > 0 && listStack[listStack.length - 1].level >= level) {
+        listStack.pop();
+      }
+
+      const attachTo = listStack.length > 0 ? listStack[listStack.length - 1].node : parent;
+      const relation = listStack.length > 0 ? 'HAS_CHILD' : 'HAS_ITEM';
+
+      upsertEdge(ctx, { source: attachTo.id, target: node.id, relation, weight: 0.45 });
+
+      listStack.push({ level, node });
+      if (itemCount > 20) break;
+    }
   }
 }
 
