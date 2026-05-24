@@ -61,6 +61,7 @@ export function parseText(text: string, options: ParseOptions): ParseResult {
     extractTags(paragraph, ctx, note);
     extractUrls(paragraph, ctx, note);
     extractCodeBlocks(paragraph, ctx, note);
+    extractTaskLists(paragraph, ctx, note);
   }
 
   return finish(ctx);
@@ -110,6 +111,7 @@ export function parseMarkdown(text: string, options: ParseOptions): ParseResult 
     extractMarkdownImages(section.body, ctx, note);
     extractCodeBlocks(section.body, ctx, note);
     extractLists(section.body, ctx, note);
+    extractTaskLists(section.body, ctx, note);
   }
 
   return finish(ctx);
@@ -314,6 +316,24 @@ function extractLists(text: string, ctx: ParseContext, parent: KGNode): void {
       listStack.push({ level, node });
       if (itemCount > 20) break;
     }
+  }
+}
+
+function extractTaskLists(text: string, ctx: ParseContext, parent: KGNode): void {
+  const re = /^\s*-\s*\[([ xX])\]\s+(.+)$/gm;
+  let count = 0;
+  for (const m of text.matchAll(re)) {
+    if (count++ > 10) break;
+    const checked = m[1].toLowerCase() === 'x';
+    const itemText = m[2].trim();
+    if (itemText.length < 5) continue;
+
+    const node = upsertNode(ctx, {
+      label: truncate(itemText, 85),
+      type: 'task',
+      metadata: { task: true, done: checked },
+    });
+    upsertEdge(ctx, { source: parent.id, target: node.id, relation: checked ? 'COMPLETED' : 'HAS_TASK', weight: 0.5 });
   }
 }
 

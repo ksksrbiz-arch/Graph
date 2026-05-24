@@ -28,6 +28,7 @@ import {
   startGitHubOAuth,
   loadGraph,
 } from '../data.js';
+import { parseForPreview } from '../preview-parser.js';
 import { setGraph } from '../state.js';
 import { showToast, el } from '../util.js';
 import { loadSavedConfig, saveConfig } from './connector-config.js';
@@ -677,36 +678,18 @@ export function openQuickUrlWizard({ onSuccess } = {}) {
           }
         }
 
-        // Fallback: client fetch + real lightweight preview parsing
+        // Fallback: client fetch + accurate preview using the shared utility
         const res = await fetch(u, { mode: 'cors' });
         html = await res.text();
-        const cleaned = (await import('../ingest-panel.js').then(m => m.stripHtml ? m.stripHtml(html) : html)).slice(0, 12000);
+        const cleaned = (await import('../ingest-panel.js').then(m => m.stripHtml ? m.stripHtml(html) : html)).slice(0, 15000);
 
-        // Better client-side preview: headings + paragraphs + hashtags + wikilinks
-        const headings = (html.match(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi) || [])
-          .map(h => h.replace(/<[^>]+>/g, '').trim())
-          .filter(Boolean)
-          .slice(0, 6);
-
-        const paras = cleaned.split(/\n\s*\n/).filter(p => p.length > 25).slice(0, 8);
-
-        // Quick hashtag + wikilink detection for samples
-        const tags = [...new Set((cleaned.match(/#([A-Za-z][\w-]{1,30})/g) || []).map(t => t.slice(1)))].slice(0, 4);
-        const wikis = [...new Set((cleaned.match(/\[\[([^\]|#]+)(?:#|\|)?/g) || []).map(w => w.replace(/[\[\]|#]/g, '')))].slice(0, 4);
-
-        const samples = [
-          { type: 'document', label: finalTitle },
-          ...headings.map(h => ({ type: 'note', label: h })),
-          ...paras.slice(0, 4).map(p => ({ type: 'note', label: p.slice(0, 65) + (p.length > 65 ? '...' : '') })),
-          ...tags.map(t => ({ type: 'concept', label: `#${t}` })),
-          ...wikis.map(w => ({ type: 'note', label: `[[${w}]]` })),
-        ];
+        const preview = parseForPreview(cleaned, { format: 'text', title: finalTitle });
 
         previewData = {
           title: finalTitle,
-          nodes: 1 + headings.length + paras.length + tags.length + wikis.length,
-          edges: headings.length + paras.length + tags.length + wikis.length,
-          samples: samples.slice(0, 12),
+          nodes: preview.estimatedNodes,
+          edges: preview.estimatedEdges,
+          samples: preview.samples,
         };
 
         renderPreviewStep(u, previewData);
@@ -750,9 +733,15 @@ export function openQuickUrlWizard({ onSuccess } = {}) {
     );
 
     const btnIngest = el('button', { class: 'primary' }, 'Ingest to Brain');
+    const btnPreviewOnly = el('button', {}, 'Preview Only (no ingest)');
     const btnBack = el('button', {}, '← Back');
 
     btnBack.onclick = renderUrlStep;
+
+    btnPreviewOnly.onclick = () => {
+      showToast?.('Preview generated — nothing was ingested.');
+      // Stay in preview step so user can inspect
+    };
 
     btnIngest.onclick = async () => {
       btnIngest.disabled = true;
@@ -771,7 +760,6 @@ export function openQuickUrlWizard({ onSuccess } = {}) {
           });
           lastResult = await res.json().catch(() => ({ ok: res.ok, nodes: data.nodes || 0, edges: data.edges || 0 }));
         } else {
-          // Last resort fallback
           lastResult = { ok: true, nodes: data.nodes || 0, edges: data.edges || 0 };
         }
 
@@ -783,7 +771,7 @@ export function openQuickUrlWizard({ onSuccess } = {}) {
       }
     };
 
-    footer.append(btnBack, btnIngest);
+    footer.append(btnBack, btnPreviewOnly, btnIngest);
   }
 
   function renderDoneStep(result) {

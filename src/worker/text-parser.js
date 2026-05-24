@@ -36,6 +36,7 @@ export async function parseText(text, options) {
     await extractTags(paragraph, ctx, note);
     await extractUrls(paragraph, ctx, note);
     await extractCodeBlocks(paragraph, ctx, note);
+    await extractTaskLists(paragraph, ctx, note);
   }
 
   return finish(ctx);
@@ -267,6 +268,24 @@ async function extractLists(text, ctx, parent) {
       listStack.push({ level, node });
       if (itemCount > 20) break;
     }
+  }
+}
+
+async function extractTaskLists(text, ctx, parent) {
+  const re = /^\s*-\s*\[([ xX])\]\s+(.+)$/gm;
+  let count = 0;
+  for (const m of text.matchAll(re)) {
+    if (count++ > 10) break;
+    const checked = m[1].toLowerCase() === 'x';
+    const itemText = m[2].trim();
+    if (itemText.length < 5) continue;
+
+    const node = await upsertNode(ctx, {
+      label: truncate(itemText, 85),
+      type: 'task',
+      metadata: { task: true, done: checked },
+    });
+    await upsertEdge(ctx, { source: parent.id, target: node.id, relation: checked ? 'COMPLETED' : 'HAS_TASK', weight: 0.5 });
   }
 }
 
