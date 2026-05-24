@@ -65,7 +65,7 @@ export class GraphView {
       });
     });
 
-    // Interaction layer
+    // Full Interaction layer (now properly implemented)
     import('../interactions/InteractionManager.js').then(({ InteractionManager }) => {
       this.interactionManager = new InteractionManager(this, this.state);
       this.interactionManager.init(this.container);

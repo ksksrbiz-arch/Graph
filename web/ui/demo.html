@@ -77,34 +77,8 @@
       }, 650);
     }
 
-    // Robust click-to-focus with brain attention
-    container.addEventListener('click', (e) => {
-      if (!ui.renderer || !ui.brainSystem) return;
-
-      const rect = container.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      const fg = ui.renderer._fg;
-      if (!fg) return;
-
-      const nodes = fg.graphData().nodes || [];
-      let closest = null;
-      let minDist = Infinity;
-
-      for (const n of nodes) {
-        if (n.x == null || n.y == null) continue;
-        const dist = Math.hypot(n.x - x, n.y - y);
-        if (dist < minDist && dist < 38) {
-          minDist = dist;
-          closest = n;
-        }
-      }
-
-      if (closest) {
-        ui.brainSystem.focusOn(closest.id, 1.2);
-      }
-    });
+    // Interactions are now primarily handled by the InteractionManager (wired in GraphView).
+    // The demo still has some direct keyboard controls for convenience.
 
     // Keyboard controls
     document.addEventListener('keydown', (e) => {
