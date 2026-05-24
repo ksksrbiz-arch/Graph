@@ -37,8 +37,9 @@ export function createGraph2DRenderer(container, options = {}) {
   fg.nodeCanvasObject(drawNode);
   fg.linkCanvasObject(drawLink);
 
-  // Draw brain particles on top after the main graph is rendered
+  // Draw brain particles + energy field after main graph
   fg.onRenderFramePost((ctx, globalScale) => {
+    drawEnergyField(ctx, globalScale);
     drawParticles(ctx, globalScale);
   });
 
@@ -251,6 +252,46 @@ export function createGraph2DRenderer(container, options = {}) {
       }
     }
 
+    ctx.restore();
+  }
+
+  function drawEnergyField(ctx, globalScale) {
+    const snap = brainSnapshot;
+    if (!snap?.nodeActivity) return;
+
+    const activeCount = snap.nodeActivity.size;
+    if (activeCount < 5) return;
+
+    const intensity = Math.min(0.14, activeCount * 0.01);
+
+    ctx.save();
+    ctx.globalAlpha = intensity;
+
+    const nodes = fg.graphData().nodes || [];
+    let cx = 0, cy = 0, count = 0;
+
+    nodes.forEach(n => {
+      if ((n.__heat || 0) > 0.18) {
+        cx += n.x || 0;
+        cy += n.y || 0;
+        count++;
+      }
+    });
+
+    if (count > 0) {
+      cx /= count;
+      cy /= count;
+      const radius = 160 + Math.sin(Date.now() / 900) * 25;
+
+      const grad = ctx.createRadialGradient(cx, cy, 30, cx, cy, radius);
+      grad.addColorStop(0, 'rgba(165, 180, 252, 0.1)');
+      grad.addColorStop(1, 'rgba(165, 180, 252, 0)');
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
