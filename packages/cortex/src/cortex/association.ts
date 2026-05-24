@@ -8,6 +8,7 @@ import {
   findReasoningPath,
   predictLinks,
   type LinkPrediction,
+  type ReasoningNode,
   type ReasoningPath,
 } from '@pkg/reasoning';
 import type {

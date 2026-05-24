@@ -10,7 +10,7 @@
 //   3. investigate — tag isolated/low-strength memories that deserve deeper
 //      digging on a future think() call.
 
-import type { LinkPrediction } from '@pkg/reasoning';
+import type { LinkPrediction, ReasoningNode } from '@pkg/reasoning';
 import type {
   Association,
   CortexAction,
@@ -114,7 +114,7 @@ function countByKind(actions: CortexAction[]): string {
   return [...counts.entries()].map(([k, v]) => `${k}=${v}`).join(' ');
 }
 
-function labelOrId(n: { id: string; label?: string }): string {
+function labelOrId(n: Pick<CortexNode, 'id' | 'label'>): string {
   const label = n.label?.trim();
   if (!label) return n.id;
   return label.length > 60 ? `${label.slice(0, 59)}…` : label;

@@ -17,6 +17,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
+import type { CortexNode } from '@pkg/cortex';
 import { loadEnv } from '../config/env';
 import { splitCsvEnv } from '../config/env-utils';
 import { BrainService } from './brain.service';
@@ -40,8 +41,8 @@ export interface ThoughtEmitPayload {
     question: string;
     conclusion: string;
     confidence: number;
-    seeds: Array<{ id: string; label?: string }>;
-    memories: Array<{ id: string; label?: string }>;
+    seeds: CortexNode[];
+    memories: CortexNode[];
     actions: unknown[];
   };
 }

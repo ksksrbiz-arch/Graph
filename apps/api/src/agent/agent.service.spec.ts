@@ -1,4 +1,4 @@
-import type { CortexAction } from '@pkg/cortex';
+import type { CortexAction, CortexNode, Thought } from '@pkg/cortex';
 import type { ConnectorConfig, ConnectorId } from '@pkg/shared';
 import type { AuditService } from '../audit/audit.service';
 import type { AttentionService } from '../brain/attention.service';
@@ -11,10 +11,13 @@ import { AgentPermissionStore } from './agent-permission.store';
 import { AgentService } from './agent.service';
 
 function thoughtWith(actions: CortexAction[]): CortexThinkResult {
+  const seed: CortexNode = { id: 'seed' } as CortexNode;
+  const mem: CortexNode = { id: 'mem' } as CortexNode;
+
   return {
     question: 'q',
-    seeds: [{ id: 'seed' }],
-    memories: [{ id: 'mem' }],
+    seeds: [seed],
+    memories: [mem],
     associations: [],
     conclusion: 'concluded',
     confidence: 0.5,
@@ -22,7 +25,7 @@ function thoughtWith(actions: CortexAction[]): CortexThinkResult {
     trace: [],
     elapsedMs: 1,
     enacted: [],
-  };
+  } as CortexThinkResult;
 }
 
 interface BuildOpts {

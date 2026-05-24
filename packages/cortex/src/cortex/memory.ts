@@ -7,7 +7,7 @@
 // Each memory is annotated with the strongest source so downstream phases can
 // explain *why* the brain pulled it up.
 
-import { cosineSim, embed } from '@pkg/reasoning';
+import { cosineSim, embed, type ReasoningNode } from '@pkg/reasoning';
 import type { BrainState, CortexInput, CortexNode, ThoughtStep } from './types.js';
 
 const DEFAULT_LIMIT = 8;
@@ -43,7 +43,7 @@ export function recall(
   const scored = new Map<string, RankedMemory>();
 
   // 1) semantic recall — cosine over labels.
-  for (const node of input.graph.nodes) {
+  for (const node of input.graph.nodes as ReasoningNode[]) {
     if (seedIds.has(node.id)) continue;
     const text = node.label;
     if (!text) continue;

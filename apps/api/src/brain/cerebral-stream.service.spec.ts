@@ -3,6 +3,7 @@ import type { BrainGateway, DreamEvt } from './brain.gateway';
 import type { BrainService } from './brain.service';
 import { CerebralStreamService, type CerebralThoughtEvent } from './cerebral-stream.service';
 import type { CortexService, CortexThinkResult } from './cortex.service';
+import type { CortexNode } from '@pkg/cortex';
 import type { InsightsService } from './insights.service';
 import type { SensoryService, PerceivableNode } from './sensory.service';
 
@@ -15,10 +16,13 @@ interface Hooks {
 }
 
 function fakeThought(question = 'q'): CortexThinkResult {
+  const seed: CortexNode = { id: 'seed', label: 'Seed' } as CortexNode;
+  const mem: CortexNode = { id: 'mem', label: 'Memory' } as CortexNode;
+
   return {
     question,
-    seeds: [{ id: 'seed', label: 'Seed' }],
-    memories: [{ id: 'mem', label: 'Memory' }],
+    seeds: [seed],
+    memories: [mem],
     associations: [],
     conclusion: 'concluded',
     actions: [],
@@ -26,7 +30,7 @@ function fakeThought(question = 'q'): CortexThinkResult {
     confidence: 0.42,
     elapsedMs: 1,
     enacted: [],
-  };
+  } as CortexThinkResult;
 }
 
 function build(hooks: Hooks = {}, options = {}) {

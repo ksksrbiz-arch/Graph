@@ -1,4 +1,5 @@
 import type { ReasoningGraph } from '@pkg/reasoning';
+import type { CortexNode } from '@pkg/cortex';
 import type { AttentionFocus } from './attention.service';
 import { CortexService } from './cortex.service';
 

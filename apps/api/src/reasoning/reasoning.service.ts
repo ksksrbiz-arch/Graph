@@ -18,6 +18,8 @@ import {
   type ClassifyInput,
   type LinkPrediction,
   type LinkPredictionMethod,
+  type ReasoningEdge,
+  type ReasoningNode,
   type ReasoningPath,
 } from '@pkg/reasoning';
 import { ReasoningRepository } from './reasoning.repository';
@@ -71,7 +73,7 @@ export class ReasoningService {
     const others = all.filter((n) => n.id !== nodeId);
     const ranked = topK(
       others,
-      (n) => cosineSim(seedVec, embed(n.label)),
+      (n: ReasoningNode) => cosineSim(seedVec, embed(n.label ?? '')),
       limit,
     );
     return ranked.map((s) => ({
@@ -110,9 +112,9 @@ export class ReasoningService {
   async summarise(userId: string, nodeId: string): Promise<ReasoningSummary> {
     const graph = await this.repo.loadUserGraph(userId);
     const incident = graph.edges.filter(
-      (e) => e.source === nodeId || e.target === nodeId,
+      (e: ReasoningEdge) => e.source === nodeId || e.target === nodeId,
     );
-    if (!graph.nodes.find((n) => n.id === nodeId)) {
+    if (!graph.nodes.find((n: ReasoningNode) => n.id === nodeId)) {
       throw new NotFoundException(`node ${nodeId} not found for user`);
     }
 
@@ -120,7 +122,7 @@ export class ReasoningService {
     let topNeighbour: { id: string; label?: string; weight: number } | null = null;
     for (const e of incident) {
       const otherId = e.source === nodeId ? e.target : e.source;
-      const node = graph.nodes.find((n) => n.id === otherId);
+      const node = graph.nodes.find((n: ReasoningNode) => n.id === otherId);
       const t = node?.type ?? 'unknown';
       neighbourCounts.set(t, (neighbourCounts.get(t) ?? 0) + 1);
       const w = e.weight ?? 0.5;
@@ -137,7 +139,7 @@ export class ReasoningService {
       nodeId,
       neighbourTypes: Object.fromEntries(neighbourCounts),
       degree: new Set(
-        incident.map((e) => (e.source === nodeId ? e.target : e.source)),
+        incident.map((e: ReasoningEdge) => (e.source === nodeId ? e.target : e.source)),
       ).size,
       topNeighbour,
     };

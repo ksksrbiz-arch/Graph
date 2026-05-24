@@ -4,7 +4,7 @@
 // they come from explicit attention focus, exact label matches, or top-k
 // embedding similarity, in that priority order.
 
-import { embed, type ReasoningGraph } from '@pkg/reasoning';
+import { embed, type ReasoningGraph, type ReasoningNode } from '@pkg/reasoning';
 import type { CortexInput, CortexNode, ThoughtStep } from './types.js';
 
 const DEFAULT_SEED_LIMIT = 5;
@@ -111,7 +111,7 @@ function collectLabelMatches(
     .split(/[^a-z0-9]+/i)
     .filter((t) => t.length >= 3);
   const hits: Array<{ node: CortexNode; score: number }> = [];
-  for (const n of graph.nodes) {
+  for (const n of graph.nodes as ReasoningNode[]) {
     const label = (n.label ?? '').toLowerCase();
     if (label.length === 0) continue;
     let score = 0;
@@ -120,7 +120,7 @@ function collectLabelMatches(
     for (const tok of tokens) {
       if (label.includes(tok)) score += 1;
     }
-    if (score > 0) hits.push({ node: { ...n }, score });
+    if (score > 0) hits.push({ node: { id: n.id, label: n.label, type: n.type } as CortexNode, score });
   }
   hits.sort((a, b) => b.score - a.score);
   return hits.slice(0, limit).map((h) => h.node);
@@ -133,12 +133,12 @@ function topByCosine(
 ): CortexNode[] {
   if (limit <= 0) return [];
   const scored: Array<{ node: CortexNode; sim: number }> = [];
-  for (const n of graph.nodes) {
+  for (const n of graph.nodes as ReasoningNode[]) {
     const text = n.label;
     if (!text || text.length === 0) continue;
     const sim = cosineDot(qEmbedding, embed(text));
     if (sim <= 0) continue;
-    scored.push({ node: { ...n, similarity: sim }, sim });
+    scored.push({ node: { id: n.id, label: n.label, type: n.type, similarity: sim } as CortexNode, sim });
   }
   scored.sort((a, b) => b.sim - a.sim);
   return scored.slice(0, limit).map((s) => s.node);
@@ -156,7 +156,7 @@ function dedupe(nodes: CortexNode[], cap: number): CortexNode[] {
   return out;
 }
 
-function decorate(node: { id: string; label?: string; type?: string }, input: CortexInput): CortexNode {
+function decorate(node: ReasoningNode, input: CortexInput): CortexNode {
   const region = input.regionByNodeId?.[node.id];
   const recent = input.brainState?.recentSpikeCounts?.[node.id];
   const out: CortexNode = { ...node };

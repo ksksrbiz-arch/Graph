@@ -103,7 +103,7 @@ function describePath(a: Association): string {
   return `${a.length} hop${a.length === 1 ? '' : 's'} (${relations})`;
 }
 
-function labelOrId(n: { id: string; label?: string }): string {
+function labelOrId(n: Pick<CortexNode, 'id' | 'label'>): string {
   const label = n.label?.trim();
   if (!label) return n.id;
   return label.length > 60 ? `${label.slice(0, 59)}…` : label;
