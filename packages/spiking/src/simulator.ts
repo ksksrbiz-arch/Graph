@@ -80,9 +80,7 @@ export class SpikingSimulator {
     this.synapses.clear();
     this.outgoing.clear();
     this.incoming.clear();
-    this.pendingInput.clear();
-    this.delayedSpikes.length = 0;
-    this.tMs = 0;
+    this.reset();
 
     for (const spec of input.neurons) {
       const n = makeNeuron(spec.id, this.lif.vRest);
@@ -115,6 +113,20 @@ export class SpikingSimulator {
 
   onWeightChange(fn: (e: WeightChangeEvent) => void): void {
     this.weightListener = fn;
+  }
+
+  /** Clear dynamic neural state while preserving the loaded topology/weights. */
+  reset(): void {
+    this.pendingInput.clear();
+    this.delayedSpikes.length = 0;
+    this.tMs = 0;
+    for (const n of this.neurons.values()) {
+      n.v = this.lif.vRest;
+      n.refractoryRemainingMs = 0;
+      n.preTrace = 0;
+      n.postTrace = 0;
+      n.lastSpikeMs = Number.NEGATIVE_INFINITY;
+    }
   }
 
   /** Force-inject a spike at the next step. Useful for stimuli / tests. */

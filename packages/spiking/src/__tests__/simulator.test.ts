@@ -115,6 +115,35 @@ describe('SpikingSimulator', () => {
     expect(sim.clockMs).toBe(0);
   });
 
+  it('resets dynamic state while preserving topology and weights', () => {
+    const sim = new SpikingSimulator({
+      dtMs: 1,
+      lif: { inputGain: 350 },
+    });
+    sim.loadConnectome({
+      neurons: [{ id: 'a' }, { id: 'b' }],
+      synapses: [{ id: 'ab', pre: 'a', post: 'b', weight: 0.42, delayMs: 10 }],
+    });
+
+    sim.inject('a', 5);
+    expect(sim.step().map((spike) => spike.neuronId)).toEqual(['a']);
+    sim.inject('b', 1000);
+
+    sim.reset();
+
+    const a = sim.getNeuron('a');
+    expect(sim.clockMs).toBe(0);
+    expect(a?.v).toBe(-65);
+    expect(a?.refractoryRemainingMs).toBe(0);
+    expect(a?.preTrace).toBe(0);
+    expect(a?.postTrace).toBe(0);
+    expect(a?.lastSpikeMs).toBe(Number.NEGATIVE_INFINITY);
+    expect(sim.getSynapse('ab')?.weight).toBe(0.42);
+    expect(sim.neuronCount).toBe(2);
+    expect(sim.synapseCount).toBe(1);
+    expect(sim.run(15)).toHaveLength(0);
+  });
+
   it('ignores injections for unknown neurons', () => {
     const sim = new SpikingSimulator({ dtMs: 1 });
     sim.loadConnectome({ neurons: [{ id: 'a' }], synapses: [] });
