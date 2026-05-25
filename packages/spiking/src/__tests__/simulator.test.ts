@@ -106,6 +106,23 @@ describe('SpikingSimulator', () => {
     expect(sim.clockMs).toBeCloseTo(5, 5);
   });
 
+  it('resets clock to 0 when loading a new connectome', () => {
+    const sim = new SpikingSimulator({ dtMs: 1 });
+    sim.loadConnectome({ neurons: [{ id: 'a' }], synapses: [] });
+    sim.run(7);
+    expect(sim.clockMs).toBe(7);
+    sim.loadConnectome({ neurons: [{ id: 'b' }], synapses: [] });
+    expect(sim.clockMs).toBe(0);
+  });
+
+  it('ignores injections for unknown neurons', () => {
+    const sim = new SpikingSimulator({ dtMs: 1 });
+    sim.loadConnectome({ neurons: [{ id: 'a' }], synapses: [] });
+    for (let i = 0; i < 200; i++) sim.inject('ghost', 1000);
+    const spikes = sim.run(20);
+    expect(spikes).toHaveLength(0);
+  });
+
   it('propagates region tags from connectome through to spike events', () => {
     const sim = new SpikingSimulator({ dtMs: 1 });
     sim.loadConnectome({

@@ -82,6 +82,7 @@ export class SpikingSimulator {
     this.incoming.clear();
     this.pendingInput.clear();
     this.delayedSpikes.length = 0;
+    this.tMs = 0;
 
     for (const spec of input.neurons) {
       const n = makeNeuron(spec.id, this.lif.vRest);
@@ -118,6 +119,7 @@ export class SpikingSimulator {
 
   /** Force-inject a spike at the next step. Useful for stimuli / tests. */
   inject(neuronId: string, currentMv = 12): void {
+    if (!this.neurons.has(neuronId)) return;
     const cur = this.pendingInput.get(neuronId) ?? 0;
     this.pendingInput.set(neuronId, cur + currentMv);
   }
