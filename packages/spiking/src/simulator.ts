@@ -80,8 +80,7 @@ export class SpikingSimulator {
     this.synapses.clear();
     this.outgoing.clear();
     this.incoming.clear();
-    this.pendingInput.clear();
-    this.delayedSpikes.length = 0;
+    this.reset();
 
     for (const spec of input.neurons) {
       const n = makeNeuron(spec.id, this.lif.vRest);
@@ -116,10 +115,26 @@ export class SpikingSimulator {
     this.weightListener = fn;
   }
 
-  /** Force-inject a spike at the next step. Useful for stimuli / tests. */
-  inject(neuronId: string, currentMv = 12): void {
+  /** Clear dynamic neural state while preserving the loaded topology/weights. */
+  reset(): void {
+    this.pendingInput.clear();
+    this.delayedSpikes.length = 0;
+    this.tMs = 0;
+    for (const n of this.neurons.values()) {
+      n.v = this.lif.vRest;
+      n.refractoryRemainingMs = 0;
+      n.preTrace = 0;
+      n.postTrace = 0;
+      n.lastSpikeMs = Number.NEGATIVE_INFINITY;
+    }
+  }
+
+  /** Force-inject a spike at the next step. Returns false for unknown neurons. */
+  inject(neuronId: string, currentMv = 12): boolean {
+    if (!this.neurons.has(neuronId)) return false;
     const cur = this.pendingInput.get(neuronId) ?? 0;
     this.pendingInput.set(neuronId, cur + currentMv);
+    return true;
   }
 
   /** Adjust the spontaneous noise rate at runtime. Used by sleep/dream cycles
