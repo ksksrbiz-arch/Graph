@@ -147,7 +147,10 @@ describe('SpikingSimulator', () => {
   it('ignores injections for unknown neurons', () => {
     const sim = new SpikingSimulator({ dtMs: 1 });
     sim.loadConnectome({ neurons: [{ id: 'a' }], synapses: [] });
-    for (let i = 0; i < 200; i++) sim.inject('ghost', 1000);
+    expect(sim.inject('a', 1)).toBe(true);
+    expect(sim.inject('ghost', 1000)).toBe(false);
+    sim.reset();
+    for (let i = 0; i < 200; i++) expect(sim.inject('ghost', 1000)).toBe(false);
     const spikes = sim.run(20);
     expect(spikes).toHaveLength(0);
   });

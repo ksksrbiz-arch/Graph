@@ -129,11 +129,12 @@ export class SpikingSimulator {
     }
   }
 
-  /** Force-inject a spike at the next step. Useful for stimuli / tests. */
-  inject(neuronId: string, currentMv = 12): void {
-    if (!this.neurons.has(neuronId)) return;
+  /** Force-inject a spike at the next step. Returns false for unknown neurons. */
+  inject(neuronId: string, currentMv = 12): boolean {
+    if (!this.neurons.has(neuronId)) return false;
     const cur = this.pendingInput.get(neuronId) ?? 0;
     this.pendingInput.set(neuronId, cur + currentMv);
+    return true;
   }
 
   /** Adjust the spontaneous noise rate at runtime. Used by sleep/dream cycles
