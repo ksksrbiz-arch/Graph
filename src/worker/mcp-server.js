@@ -15,8 +15,12 @@
 //     - tools/list → returns array of {name, description, inputSchema}
 //     - tools/call {name, arguments} → returns {content:[{type:'text',text}]}
 //
-// Auth: optional Bearer token if env.MCP_BEARER is set. Without it the
-// endpoint is public (single-tenant single-userId convention).
+// Auth: optional Bearer token if env.MCP_BEARER is set. When the bearer is
+// configured, the gated endpoint trusts a first-party caller to assert the
+// active tenant via the x-cortex-user-id (or legacy x-cortex-user) header.
+// Without a bearer the endpoint is public and an asserted user id must carry
+// a signed user context (x-cortex-user + x-cortex-ts + x-cortex-signature);
+// otherwise it falls back to the single-tenant default userId convention.
 //
 // Tools exposed (curated subset of the cortex registry):
 //   recall · graph-query · recent-events · stats · write-note · summarize
@@ -250,14 +254,32 @@ function checkAuth(request, env) {
   return got === `Bearer ${required}`;
 }
 async function pickUserId(request, env) {
-  const explicit = request.headers.get('x-cortex-user');
-  if (explicit) {
-    const expected = String(explicit).trim();
-    if (!expected) return expected;
-    if (await verifySignedUserContextSignature(request, env, expected)) return expected;
-    // If a caller sends x-cortex-user but cannot prove it, fail closed to
-    // avoid silent cross-user impersonation over the public MCP surface.
-    throw new Error('invalid signed user context');
+  // A caller presenting a valid MCP_BEARER is a trusted first-party backend
+  // (e.g. the UnifyOne server, which authenticates its own users before
+  // proxying here). Because checkAuth() has already validated the bearer by
+  // the time we reach this point, such a caller may assert the active
+  // user/tenant id directly via x-cortex-user-id (preferred) or the legacy
+  // x-cortex-user header — no per-user HMAC signature is required. The bearer
+  // itself is the proof of trust.
+  const bearerConfigured = !!(env.MCP_BEARER || '').toString().trim();
+  if (bearerConfigured) {
+    const asserted = (
+      request.headers.get('x-cortex-user-id') ||
+      request.headers.get('x-cortex-user') ||
+      ''
+    ).trim();
+    if (asserted) return asserted;
+    // No asserted id on a trusted call → fall through to the default below.
+  } else {
+    // Public surface (no bearer gate): an asserted user id must be proven with
+    // a signed user context to avoid silent cross-user impersonation.
+    const explicit = request.headers.get('x-cortex-user');
+    if (explicit) {
+      const expected = String(explicit).trim();
+      if (!expected) return expected;
+      if (await verifySignedUserContextSignature(request, env, expected)) return expected;
+      throw new Error('invalid signed user context');
+    }
   }
   const csv = (env.PUBLIC_INGEST_USER_IDS || 'local').toString();
   return (csv.split(',')[0] || 'local').trim();
@@ -275,7 +297,7 @@ function corsHeaders(request) {
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-methods': 'POST, OPTIONS',
-    'access-control-allow-headers': 'content-type, mcp-session-id, authorization, x-cortex-user, x-cortex-ts, x-cortex-signature',
+    'access-control-allow-headers': 'content-type, mcp-session-id, authorization, x-cortex-user, x-cortex-user-id, x-cortex-ts, x-cortex-signature',
     'access-control-expose-headers': 'mcp-session-id',
     'access-control-max-age': '86400',
     'vary': 'Origin',
