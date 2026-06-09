@@ -1,15 +1,13 @@
 # Graph — Personal Knowledge Graph Visualization System (PKG-VS)
 
-A web app that ingests your digital footprint (email, notes, calendar, code, bookmarks…) and renders it as an interactive force-directed graph. See the full v2.0 specification at [`docs/enhanced-personal-knowledge-graph-prompt.md`](docs/enhanced-personal-knowledge-graph-prompt.md).
+A web app that ingests your digital footprint (email, notes, calendar, code, bookmarks…) and renders it as an interactive force-directed graph. See the full v2.0 specification at [docs/enhanced-personal-knowledge-graph-prompt.md](docs/enhanced-personal-knowledge-graph-prompt.md).
 
 The repo holds **two coexisting tracks**:
 
 1. **v1 static MVP** — the existing, runnable, single-user slice (no DB, no Docker, no auth). Lives under `web/`, `scripts/`, and `data/`.
 2. **v2 monorepo (Phase 0+)** — the spec-aligned implementation under `apps/` and `packages/`, backed by Neo4j + Postgres + Redis + Meilisearch.
 
-Phase progress is tracked in [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
-
----
+Phase progress is tracked in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
 
 ## Prerequisites
 
@@ -23,13 +21,13 @@ npm run ingest:claude-code   # build data/graph.json from ~/.claude/projects
 npm start                    # http://localhost:3000
 ```
 
-Zero runtime dependencies. Ingesters available: `claude-code`, `git`, `markdown`, `code` (via a local [GitNexus](https://github.com/abhigyanpatwari/GitNexus) `gitnexus serve` HTTP server — see [`scripts/ingest-code.mjs`](scripts/ingest-code.mjs) for env vars and usage).
+Zero runtime dependencies. Ingesters available: `claude-code`, `git`, `markdown`, `code` (via a local [GitNexus](https://github.com/abhigyanpatwari/GitNexus) `gitnexus serve` HTTP server — see [scripts/ingest-code.mjs](scripts/ingest-code.mjs) for env vars and usage).
 
 ### Expose the graph over MCP
 
 `scripts/mcp-server.mjs` is a stdio [Model Context Protocol](https://modelcontextprotocol.io) server that lets Claude Desktop, Cursor, Codex CLI, and other MCP clients read and search the personal knowledge graph (`data/graph.json`) without any extra plumbing. Zero dependencies — same Node 18+ as the rest of the v1 scripts.
 
-Tools: `search_nodes`, `get_node`, `subgraph`, `list_sources`, `stats`. Resources: `graph://snapshot`, `graph://sources`. See the header of [`scripts/mcp-server.mjs`](scripts/mcp-server.mjs) for the full schema.
+Tools: `search_nodes`, `get_node`, `subgraph`, `list_sources`, `stats`. Resources: `graph://snapshot`, `graph://sources`. See the header of [scripts/mcp-server.mjs](scripts/mcp-server.mjs) for the full schema.
 
 ```jsonc
 // ~/.config/Claude/claude_desktop_config.json (or your editor's MCP config)
@@ -110,8 +108,6 @@ pnpm exec wrangler secret put CORTEX_S2S_SECRET      # shared HMAC secret for si
 
 Without a KV binding the Worker still serves the static SPA, but the public ingest endpoints respond with `{ enabled: false }` and the SPA falls back to read-only mode.
 
----
-
 ## Repo layout
 
 ```
@@ -136,8 +132,6 @@ Without a KV binding the Worker still serves the static SPA, but the public inge
 └── .github/workflows/ci.yml  # lint + type-check + tests + Lighthouse + Stryker
 ```
 
----
-
 ## v1 UI
 
 | View | What it does |
@@ -161,7 +155,7 @@ animation overlay that lights up freshly-arrived nodes in real time.
 | ---- | -------------------------------------------------------------------------------- |
 | URL  | Prefers server-side fetch + smart article extraction (`/api/v1/public/ingest/url`). Falls back to browser `fetch` + improved stripping when the server endpoint is unavailable. Much more reliable for sites that block CORS. |
 | Text | Pastes text or markdown directly. Auto-detects markdown (headings or `[[wikilinks]]`) and routes to `/markdown` accordingly. |
-| Batch | Drop or pick a whole project folder. The browser walks the tree, routes each file to a parser (markdown, text, source code, JSON, CSV/TSV, HTML, README/LICENSE, YAML/TOML/INI), and posts the resulting nodes/edges to `/api/v1/public/ingest/graph` in chunks. Skips `.git`, `node_modules`, `dist`, `build`, lockfiles, binaries, and files >1 MiB. See [`docs/batch-upload.md`](docs/batch-upload.md). |
+| Batch | Drop or pick a whole project folder. The browser walks the tree, routes each file to a parser (markdown, text, source code, JSON, CSV/TSV, HTML, README/LICENSE, YAML/TOML/INI), and posts the resulting nodes/edges to `/api/v1/public/ingest/graph` in chunks. Skips `.git`, `node_modules`, `dist`, `build`, lockfiles, binaries, and files >1 MiB. See [docs/batch-upload.md](docs/batch-upload.md). |
 | Log  | In-memory history of recent ingestion attempts with status + node counts.        |
 
 Backend wiring:
@@ -223,9 +217,7 @@ Useful env vars (full list in the header of `scripts/ingest-pieces-mcp.mjs`):
 | `PIECES_QUERY_ARG`   | `question` (the string field on the tool's input schema)                      |
 | `PIECES_AUTH_TOKEN`  | _(unset)_ — local Pieces OS doesn't require one                               |
 
-A sample MCP client config (also documenting how to register Pieces with the v2 cortex MCP registry) lives at [`docs/mcp-clients/pieces.json`](docs/mcp-clients/pieces.json). The ingester reuses the same MCP HTTP client (`src/worker/cortex/mcp-client.js`) the v2 Worker uses, so JSON-RPC framing, SSE handling, and session management stay consistent across v1 ingestion and v2 dispatch.
-
----
+A sample MCP client config (also documenting how to register Pieces with the v2 cortex MCP registry) lives at [docs/mcp-clients/pieces.json](docs/mcp-clients/pieces.json). The ingester reuses the same MCP HTTP client (`src/worker/cortex/mcp-client.js`) the v2 Worker uses, so JSON-RPC framing, SSE handling, and session management stay consistent across v1 ingestion and v2 dispatch.
 
 ## v2 architecture (target — see spec §3)
 
@@ -240,8 +232,8 @@ React 18 + react-force-graph   ─┐
 External OAuth (Google, GitHub, Microsoft, Notion, Todoist, Linear)
 ```
 
-Decisions are logged in [`docs/adr/`](docs/adr/README.md).
+Decisions are logged in [docs/adr/](docs/adr/README.md).
 
 ## Roadmap
 
-The 8-phase plan from spec §12 lives in [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md). Phase 0 (Foundation) is mostly green; subsequent phases land incrementally without breaking the v1 MVP.
+The 8-phase plan from spec §12 lives in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md). Phase 0 (Foundation) is mostly green; subsequent phases land incrementally without breaking the v1 MVP.
