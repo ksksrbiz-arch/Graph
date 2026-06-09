@@ -1,4 +1,5 @@
 # Graph — Personal Knowledge Graph Visualization System (PKG-VS)
+===========================================================
 
 A web app that ingests your digital footprint (email, notes, calendar, code, bookmarks…) and renders it as an interactive force-directed graph. See the full v2.0 specification at [docs/enhanced-personal-knowledge-graph-prompt.md](docs/enhanced-personal-knowledge-graph-prompt.md).
 
@@ -10,11 +11,13 @@ The repo holds **two coexisting tracks**:
 Phase progress is tracked in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
 
 ## Prerequisites
+---------------
 
-- **v1 quick start**: Node 18+ only.
-- **v2 monorepo**: Node 18+, pnpm 9 (via `corepack`), Docker (for the local data stack).
+* **v1 quick start**: Node 18+ only.
+* **v2 monorepo**: Node 18+, pnpm 9 (via `corepack`), Docker (for the local data stack).
 
 ## v1 quick start (no install)
+-----------------------------
 
 ```bash
 npm run ingest:claude-code   # build data/graph.json from ~/.claude/projects
@@ -50,6 +53,7 @@ npm run mcp   # speaks JSON-RPC 2.0 over stdio
 > `data/graph.json` and `web/data/graph.json` are **generated locally from your own data** and are gitignored. A fresh clone has no graph until you run an ingester.
 
 ## v2 quick start (monorepo)
+---------------------------
 
 ```bash
 # 1. Install pnpm (Node 18+)
@@ -75,13 +79,14 @@ pnpm --filter @pkg/web dev   # http://localhost:3000
 Bring everything down with `pnpm stack:down`.
 
 ## Always-on deployment
+----------------------
 
-- Deploy `apps/api` as a long-running container service; the repo now includes a production-ready `apps/api/Dockerfile` and a `render.yaml` blueprint.
-- Point `POSTGRES_URL`, `NEO4J_*`, `REDIS_URL`, and `MEILI_*` at hosted services instead of the local `docker-compose.yml` stack.
-- Set `API_PUBLIC_URL` and `CORS_ORIGINS` so OAuth callbacks, browser CORS, and Socket.IO all target the hosted API correctly.
-- Set `BRAIN_AUTO_START_USER_IDS` to the user ids whose brains should resume automatically after deploys/restarts.
-- Set `PUBLIC_INGEST_USER_IDS` to the demo user ids that may write through the anonymous `/api/v1/public/ingest/*` endpoints — the Cloudflare-hosted website uses this to live-ingest pasted text/markdown directly into the public brain.
-- Keep `wrangler.jsonc`/`web/` for the static frontend and set `web/config.js` during deployment so the SPA connects to the hosted API.
+* Deploy `apps/api` as a long-running container service; the repo now includes a production-ready `apps/api/Dockerfile` and a `render.yaml` blueprint.
+* Point `POSTGRES_URL`, `NEO4J_*`, `REDIS_URL`, and `MEILI_*` at hosted services instead of the local `docker-compose.yml` stack.
+* Set `API_PUBLIC_URL` and `CORS_ORIGINS` so OAuth callbacks, browser CORS, and Socket.IO all target the hosted API correctly.
+* Set `BRAIN_AUTO_START_USER_IDS` to the user ids whose brains should resume automatically after deploys/restarts.
+* Set `PUBLIC_INGEST_USER_IDS` to the demo user ids that may write through the anonymous `/api/v1/public/ingest/*` endpoints — the Cloudflare-hosted website uses this to live-ingest pasted text/markdown directly into the public brain.
+* Keep `wrangler.jsonc`/`web/` for the static frontend and set `web/config.js` during deployment so the SPA connects to the hosted API.
 
 ### Cloudflare Worker (same-origin online API)
 
@@ -109,6 +114,7 @@ pnpm exec wrangler secret put CORTEX_S2S_SECRET      # shared HMAC secret for si
 Without a KV binding the Worker still serves the static SPA, but the public ingest endpoints respond with `{ enabled: false }` and the SPA falls back to read-only mode.
 
 ## Repo layout
+-------------
 
 ```
 .
@@ -133,6 +139,7 @@ Without a KV binding the Worker still serves the static SPA, but the public inge
 ```
 
 ## v1 UI
+---------
 
 | View | What it does |
 | ---- | ------------ |
@@ -145,6 +152,7 @@ Without a KV binding the Worker still serves the static SPA, but the public inge
 Keyboard: `Esc` closes panel / clears focus, `f` fits the graph to the viewport.
 
 ## Brain ingest features
+----------------------
 
 The graph view ships with a docked **Brain ingest** panel (top-right) and an
 animation overlay that lights up freshly-arrived nodes in real time.
@@ -160,14 +168,14 @@ animation overlay that lights up freshly-arrived nodes in real time.
 
 Backend wiring:
 
-- `POST /api/v1/public/ingest/text`, `/markdown`, and `/url` — server can fetch URLs directly (bypassing browser CORS), parse into `KGNode`s + `KGEdge`s (richer wikilinks, images, code blocks), persist via Neo4j, perceive into the running brain.
-- `GET /api/v1/public/graph/delta?userId=…&since=<ISO|epoch_ms>` — returns nodes + edges with `createdAt > since`. Drives the SPA poll loop (`web/graph-live.js`, default 3s cadence).
+* `POST /api/v1/public/ingest/text`, `/markdown`, and `/url` — server can fetch URLs directly (bypassing browser CORS), parse into `KGNode`s + `KGEdge`s (richer wikilinks, images, code blocks), persist via Neo4j, perceive into the running brain.
+* `GET /api/v1/public/graph/delta?userId=…&since=<ISO|epoch_ms>` — returns nodes + edges with `createdAt > since`. Drives the SPA poll loop (`web/graph-live.js`, default 3s cadence).
 
 **Live animations** (overlay over `force-graph`, 2D mode):
 
-- **Procedural spawn** — each newly-arrived node scales in with an axon-style particle stream from a random existing neighbour.
-- **Query trace** — focusing a node (search → click, or a graph click → ego-network) ripples a BFS wave through up to 5 hops of neighbours, raising heat on touched nodes.
-- **Inference arc** — `brainAnimation.inferenceArc(from, to, reason)` is exposed for future use (long-distance reasoning hops); not auto-fired yet.
+* **Procedural spawn** — each newly-arrived node scales in with an axon-style particle stream from a random existing neighbour.
+* **Query trace** — focusing a node (search → click, or a graph click → ego-network) ripples a BFS wave through up to 5 hops of neighbours, raising heat on touched nodes.
+* **Inference arc** — `brainAnimation.inferenceArc(from, to, reason)` is exposed for future use (long-distance reasoning hops); not auto-fired yet.
 
 **Required env on the API** (already set on Fly demo deploy):
 
@@ -180,6 +188,7 @@ BRAIN_AUTO_START_USER_IDS = "local"     # so spike-stream + STDP run on boot
 The 3D / 4D renderers don't draw the overlay yet — particles and glow are 2D-only for now. The animation engine still tracks state in 3D, so the panel and log update; only the canvas projection is gated to `renderer.kind === '2d'`.
 
 ## v1 ingesters
+----------------
 
 `scripts/ingest-*.mjs` write to `data/graph.json` via `scripts/lib/graph-store.mjs` (schema-aligned with §5 of the spec — same `KGNode` / `KGEdge` shape the v2 API will store).
 
@@ -220,6 +229,7 @@ Useful env vars (full list in the header of `scripts/ingest-pieces-mcp.mjs`):
 A sample MCP client config (also documenting how to register Pieces with the v2 cortex MCP registry) lives at [docs/mcp-clients/pieces.json](docs/mcp-clients/pieces.json). The ingester reuses the same MCP HTTP client (`src/worker/cortex/mcp-client.js`) the v2 Worker uses, so JSON-RPC framing, SSE handling, and session management stay consistent across v1 ingestion and v2 dispatch.
 
 ## v2 architecture (target — see spec §3)
+--------------------------------------
 
 ```
 React 18 + react-force-graph   ─┐
@@ -235,5 +245,6 @@ External OAuth (Google, GitHub, Microsoft, Notion, Todoist, Linear)
 Decisions are logged in [docs/adr/](docs/adr/README.md).
 
 ## Roadmap
+---------
 
 The 8-phase plan from spec §12 lives in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md). Phase 0 (Foundation) is mostly green; subsequent phases land incrementally without breaking the v1 MVP.
