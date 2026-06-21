@@ -76,7 +76,7 @@ export class OAuthService {
     private readonly configs: ConnectorConfigStore,
   ) {}
 
-  authorize(req: AuthorizeRequest): AuthorizeResult {
+  async authorize(req: AuthorizeRequest): Promise<AuthorizeResult> {
     const provider = this.registry.get(req.connectorId);
     const credentials = this.providerCredentials(req.connectorId);
     const scopes = req.scopes ?? provider.defaultScopes;
@@ -113,7 +113,7 @@ export class OAuthService {
       }
     }
 
-    this.state.put(stateEntry);
+    await this.state.put(stateEntry);
 
     const url = `${provider.authorizeUrl}?${params.toString()}`;
     this.log.log(
@@ -124,7 +124,7 @@ export class OAuthService {
 
   async handleCallback(req: CallbackRequest): Promise<ConnectorConfig> {
     const provider = this.registry.get(req.connectorId);
-    const entry = this.state.take(req.state);
+    const entry = await this.state.take(req.state);
     if (!entry) {
       throw new UnauthorizedException('invalid or expired oauth state');
     }

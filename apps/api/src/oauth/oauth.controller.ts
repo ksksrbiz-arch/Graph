@@ -40,11 +40,11 @@ export class OAuthController {
     summary:
       'Begin an OAuth handshake — returns the URL the SPA should redirect to',
   })
-  connect(
+  async connect(
     @Req() req: AuthedRequest,
     @Param('connectorId') connectorId: string,
     @Body() dto: ConnectDto,
-  ): { authorizeUrl: string; state: string } {
+  ): Promise<{ authorizeUrl: string; state: string }> {
     const id = this.assertConnectorId(connectorId);
     // The redirect URI is derived server-side from API_PUBLIC_URL. Allowing the
     // client to supply it would (a) make `connect` and `callback` disagree
