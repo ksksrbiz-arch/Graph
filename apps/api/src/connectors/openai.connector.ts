@@ -1,80 +1,91 @@
-// OpenAI connector — ingests objects the user has created in their OpenAI
-// account via the platform API: uploaded Files and Assistants.
+// OpenAI connector — ingests a user's exported ChatGPT conversation history
+// into the knowledge graph.
 //
-// Authentication: uses a plain API key (sk-…). The key is stored as
-// `accessToken` inside the encrypted CredentialPayload, matching Zotero's
-// pattern. No OAuth cycle is required.
+// Why an export, not the live API: OpenAI does not expose an API to list a
+// user's ChatGPT conversation history. Users instead request a data export
+// (Settings → Data controls → Export data) which produces a `conversations.json`
+// file. This connector reads that export — it makes NO live LLM/API calls.
 //
-// Files    → KGNode type `document`.  Covers every file purpose (fine-tune,
-//            assistants, batch, vision) and maps the OpenAI file status to
-//            metadata so the user can spot failed uploads in the graph.
+// Where the export lives: the exported JSON is handed to the connector through
+// the encrypted CredentialPayload, matching the file-based connector pattern.
+// We accept it either as a parsed object/array on `extra.export` /
+// `extra.conversations`, or as a raw JSON string in `accessToken`. This keeps
+// the connector offline and deterministic.
 //
-// Assistants → KGNode type `concept`.  Each assistant you've built is a
-//             conceptual entity that connects to the documents and tools it
-//             uses, making it a natural first-class node.
+// Mapping:
+//   Conversation → KGNode type `document` (the conversation as a whole).
+//   Message      → KGNode type `note`, linked to its conversation with a
+//                  PART_OF edge. Messages carry author role + text in metadata.
 //
-// Idempotency (Rule 12): node ids are derived from the OpenAI object id via
-// `deterministicUuid` so re-syncing the same file/assistant is a MERGE.
+// Idempotency (Rule 12): node ids are derived from the conversation/message id
+// via `deterministicUuid`, so re-importing the same export is a MERGE.
 //
-// Rate limits (Rule 13): the OpenAI API returns standard `x-ratelimit-*`
-// headers; we surface them and bail out early when remaining < 5.
-//
-// Docs:
-//   https://platform.openai.com/docs/api-reference/files/list
-//   https://platform.openai.com/docs/api-reference/assistants/listAssistants
+// Docs: https://help.openai.com/en/articles/7260999-how-do-i-export-my-chatgpt-history-and-data
 
 import { Injectable, Logger } from '@nestjs/common';
 import type { ConnectorConfig, KGEdge, KGNode } from '@pkg/shared';
 import { BaseConnector, type RawItem, type TransformResult } from './base.connector';
 import {
-  authedFetch,
   deterministicUuid,
   isoNow,
   newEdgeId,
 } from './connector-utils';
 import { OAuthService } from '../oauth/oauth.service';
 
-// ── OpenAI API shapes ─────────────────────────────────────────────────────
+// ── ChatGPT export shapes ──────────────────────────────────────────────────
 
-interface OpenAIFile {
-  id: string;
-  object: 'file';
-  bytes: number;
-  created_at: number; // unix timestamp
-  filename: string;
-  purpose: string;
-  status?: string;
+interface ChatGPTAuthor {
+  role?: string;
 }
 
-interface OpenAIAssistant {
-  id: string;
-  object: 'assistant';
-  created_at: number; // unix timestamp
-  name: string | null;
-  description: string | null;
-  model: string;
-  instructions: string | null;
-  tools: Array<{ type: string }>;
+interface ChatGPTContent {
+  content_type?: string;
+  parts?: unknown[];
 }
 
-interface OpenAIListResponse<T> {
-  object: 'list';
-  data: T[];
-  has_more: boolean;
-  last_id: string | null;
-  first_id: string | null;
+interface ChatGPTMessage {
+  id?: string;
+  author?: ChatGPTAuthor;
+  create_time?: number | null; // unix seconds
+  content?: ChatGPTContent;
 }
 
-const PAGE_SIZE = 100;
-// Safety ceiling: fetch at most 3 pages (300 items) per resource type per sync.
-// If more recent items exist beyond that cap, they land on the next scheduled or
-// manual sync instead of letting one run balloon indefinitely.
-const MAX_PAGES = 3;
-const BASE_URL = 'https://api.openai.com/v1';
-/** Weight assigned to assistant→model RELATED_TO edges — moderate confidence
- *  since the relationship is structural (the assistant is backed by this model)
- *  rather than semantic. */
-const ASSISTANT_MODEL_EDGE_WEIGHT = 0.6;
+interface ChatGPTMappingNode {
+  id?: string;
+  message?: ChatGPTMessage | null;
+  parent?: string | null;
+  children?: string[];
+}
+
+interface ChatGPTConversation {
+  id?: string;
+  conversation_id?: string;
+  title?: string;
+  create_time?: number | null; // unix seconds
+  update_time?: number | null; // unix seconds
+  mapping?: Record<string, ChatGPTMappingNode>;
+  /** Some exports inline a flat `messages` array instead of `mapping`. */
+  messages?: ChatGPTMessage[];
+}
+
+// ── Constants ──────────────────────────────────────────────────────────────
+
+const MAX_LABEL_LENGTH = 200;
+const MAX_TEXT_LENGTH = 2000;
+/** PART_OF edge weight for message→conversation: structural containment. */
+const MESSAGE_PART_OF_WEIGHT = 0.8;
+
+/** Wrapper payloads yielded by fetchIncremental and consumed by transform. */
+interface ConversationItem {
+  kind: 'conversation';
+  conversation: ChatGPTConversation;
+}
+interface MessageItem {
+  kind: 'message';
+  conversationExternalId: string;
+  message: ChatGPTMessage;
+}
+type OpenAIRaw = ConversationItem | MessageItem;
 
 @Injectable()
 export class OpenAIConnector extends BaseConnector {
@@ -92,176 +103,202 @@ export class OpenAIConnector extends BaseConnector {
     since: Date,
   ): AsyncGenerator<RawItem> {
     const creds = this.oauth.decryptCredentials(config);
-    const apiKey = creds.accessToken;
+    const conversations = parseExport(creds, this.log);
 
-    yield* this.fetchFiles(apiKey, since);
-    yield* this.fetchAssistants(apiKey, since);
+    for (const conversation of conversations) {
+      const externalId = conversationExternalId(conversation);
+      if (!externalId) {
+        this.log.warn('openai export: skipping conversation without an id');
+        continue;
+      }
+
+      // Incremental filter: a conversation's update_time (falling back to
+      // create_time) is its watermark. Skip anything not touched since `since`.
+      const touchedMs = unixToMs(
+        conversation.update_time ?? conversation.create_time,
+      );
+      if (touchedMs !== undefined && touchedMs <= since.getTime()) continue;
+
+      yield {
+        externalId,
+        raw: { kind: 'conversation', conversation } satisfies OpenAIRaw,
+      };
+
+      for (const message of collectMessages(conversation)) {
+        const role = message.author?.role;
+        // Skip system/tool scaffolding and empty messages — only user/assistant
+        // turns with real text become note nodes.
+        if (role !== 'user' && role !== 'assistant') continue;
+        if (!messageText(message)) continue;
+        if (!message.id) continue;
+        yield {
+          externalId: `message:${externalId}:${message.id}`,
+          raw: {
+            kind: 'message',
+            conversationExternalId: externalId,
+            message,
+          } satisfies OpenAIRaw,
+        };
+      }
+    }
   }
 
   transform(raw: RawItem): TransformResult {
-    const wrapper = raw.raw as { kind: 'file' | 'assistant'; data: unknown };
-    if (wrapper.kind === 'file') return this.transformFile(wrapper.data as OpenAIFile);
-    return this.transformAssistant(wrapper.data as OpenAIAssistant);
-  }
-
-  // ── private: fetch helpers ─────────────────────────────────────────────
-
-  private async *fetchFiles(
-    apiKey: string,
-    since: Date,
-  ): AsyncGenerator<RawItem> {
-    let after: string | undefined;
-
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const params = new URLSearchParams({
-        limit: String(PAGE_SIZE),
-        order: 'desc',
-      });
-      if (after) params.set('after', after);
-
-      const { res, rate } = await authedFetch(
-        `${BASE_URL}/files?${params.toString()}`,
-        apiKey,
-      );
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        this.log.warn(`openai /files ${res.status}: ${text.slice(0, 160)}`);
-        return;
-      }
-
-      const json = (await res.json()) as OpenAIListResponse<OpenAIFile>;
-      const items = json.data ?? [];
-
-      let crossedSince = false;
-      for (const f of items) {
-        if (f.created_at * 1000 <= since.getTime()) {
-          crossedSince = true;
-          break;
-        }
-        yield { externalId: `file:${f.id}`, raw: { kind: 'file', data: f } };
-      }
-
-      if (crossedSince || !json.has_more || !json.last_id) return;
-      if (rate.remaining !== undefined && rate.remaining < 5) {
-        this.log.warn(`openai rate-limit low (${rate.remaining}); stopping files`);
-        return;
-      }
-      if (page === MAX_PAGES - 1) {
-        this.log.warn(
-          `openai files hit fetch ceiling (${MAX_PAGES * PAGE_SIZE}); remaining items deferred to the next sync`,
-        );
-        return;
-      }
-      after = json.last_id;
+    const item = raw.raw as OpenAIRaw;
+    if (item.kind === 'conversation') {
+      return this.transformConversation(item.conversation);
     }
+    return this.transformMessage(item);
   }
 
-  private async *fetchAssistants(
-    apiKey: string,
-    since: Date,
-  ): AsyncGenerator<RawItem> {
-    let after: string | undefined;
+  // ── transform helpers ──────────────────────────────────────────────────
 
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const params = new URLSearchParams({
-        limit: String(PAGE_SIZE),
-        order: 'desc',
-      });
-      if (after) params.set('after', after);
+  private transformConversation(c: ChatGPTConversation): TransformResult {
+    const externalId = conversationExternalId(c) ?? 'unknown';
+    const createdAt = isoFromUnix(c.create_time) ?? isoNow();
+    const updatedAt = isoFromUnix(c.update_time) ?? createdAt;
+    const messageCount = collectMessages(c).filter((m) => {
+      const role = m.author?.role;
+      return (role === 'user' || role === 'assistant') && !!messageText(m);
+    }).length;
 
-      const { res, rate } = await authedFetch(
-        `${BASE_URL}/assistants?${params.toString()}`,
-        apiKey,
-        { headers: { 'openai-beta': 'assistants=v2' } },
-      );
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        this.log.warn(`openai /assistants ${res.status}: ${text.slice(0, 160)}`);
-        return;
-      }
-
-      const json = (await res.json()) as OpenAIListResponse<OpenAIAssistant>;
-      const items = json.data ?? [];
-
-      let crossedSince = false;
-      for (const a of items) {
-        if (a.created_at * 1000 <= since.getTime()) {
-          crossedSince = true;
-          break;
-        }
-        yield {
-          externalId: `assistant:${a.id}`,
-          raw: { kind: 'assistant', data: a },
-        };
-      }
-
-      if (crossedSince || !json.has_more || !json.last_id) return;
-      if (rate.remaining !== undefined && rate.remaining < 5) {
-        this.log.warn(
-          `openai rate-limit low (${rate.remaining}); stopping assistants`,
-        );
-        return;
-      }
-      if (page === MAX_PAGES - 1) {
-        this.log.warn(
-          `openai assistants hit fetch ceiling (${MAX_PAGES * PAGE_SIZE}); remaining items deferred to the next sync`,
-        );
-        return;
-      }
-      after = json.last_id;
-    }
-  }
-
-  // ── private: transform helpers ─────────────────────────────────────────
-
-  private transformFile(f: OpenAIFile): TransformResult {
-    const createdAt = new Date(f.created_at * 1000).toISOString();
     const node: KGNode = {
-      id: deterministicUuid('openai', `file:${f.id}`),
+      id: deterministicUuid('openai', externalId),
       type: 'document',
-      label: f.filename.slice(0, 200),
+      label: (c.title?.trim() || 'Untitled conversation').slice(0, MAX_LABEL_LENGTH),
       sourceId: 'openai',
-      sourceUrl: `https://platform.openai.com/storage/files/${f.id}`,
+      ...sourceUrlFor(c),
       createdAt,
-      updatedAt: createdAt,
+      updatedAt,
       metadata: {
-        openaiId: f.id,
-        purpose: f.purpose,
-        bytes: f.bytes,
-        status: f.status ?? null,
+        openaiConversationId: externalId,
+        messageCount,
       },
     };
     return { node, edges: [] };
   }
 
-  private transformAssistant(a: OpenAIAssistant): TransformResult {
-    const createdAt = new Date(a.created_at * 1000).toISOString();
-    const label = (a.name ?? a.id).slice(0, 200);
+  private transformMessage(item: MessageItem): TransformResult {
+    const { message, conversationExternalId: convId } = item;
+    const messageId = message.id ?? 'unknown';
+    const externalId = `message:${convId}:${messageId}`;
+    const text = messageText(message);
+    const role = message.author?.role ?? 'unknown';
+    const createdAt = isoFromUnix(message.create_time) ?? isoNow();
+
     const node: KGNode = {
-      id: deterministicUuid('openai', `assistant:${a.id}`),
-      type: 'concept',
-      label,
+      id: deterministicUuid('openai', externalId),
+      type: 'note',
+      label: labelFromText(role, text),
       sourceId: 'openai',
-      sourceUrl: `https://platform.openai.com/assistants/${a.id}`,
       createdAt,
       updatedAt: createdAt,
       metadata: {
-        openaiId: a.id,
-        model: a.model,
-        description: a.description ?? null,
-        instructions: a.instructions?.slice(0, 500) ?? null,
-        tools: a.tools.map((t) => t.type),
+        openaiMessageId: messageId,
+        conversationId: convId,
+        role,
+        text: text.slice(0, MAX_TEXT_LENGTH),
       },
     };
 
-    const edges: KGEdge[] = [];
-    // Link assistant → model concept node so the graph shows which model backs
-    // which assistant (deterministic model node keeps this idempotent).
-    const modelId = deterministicUuid('openai', `model:${a.model}`);
-    edges.push(edgeBetween(node.id, modelId, 'RELATED_TO', ASSISTANT_MODEL_EDGE_WEIGHT));
-
+    // Message PART_OF its parent conversation. The conversation node id is
+    // derived from the same deterministic scheme, so the edge resolves even
+    // though the conversation node is yielded as a separate item.
+    const conversationNodeId = deterministicUuid('openai', convId);
+    const edges: KGEdge[] = [
+      edgeBetween(node.id, conversationNodeId, 'PART_OF', MESSAGE_PART_OF_WEIGHT),
+    ];
     return { node, edges };
   }
+}
+
+// ── module-level helpers ────────────────────────────────────────────────────
+
+/** Read and normalize the exported conversations array from the credentials. */
+function parseExport(
+  creds: { accessToken?: string; extra?: Record<string, unknown> },
+  log: Logger,
+): ChatGPTConversation[] {
+  // Preferred: a parsed export object/array on `extra`.
+  const fromExtra =
+    creds.extra?.export ?? creds.extra?.conversations ?? undefined;
+  if (fromExtra !== undefined) return coerceConversations(fromExtra);
+
+  // Fallback: a raw JSON string in `accessToken`.
+  const raw = creds.accessToken?.trim();
+  if (raw) {
+    try {
+      return coerceConversations(JSON.parse(raw));
+    } catch {
+      log.warn('openai export: accessToken is not valid JSON; nothing to ingest');
+      return [];
+    }
+  }
+
+  log.warn('openai export: no export data found in credentials');
+  return [];
+}
+
+/** A ChatGPT export is either a top-level array of conversations or an object
+ *  with a `conversations` array. Normalize both into a flat array. */
+function coerceConversations(value: unknown): ChatGPTConversation[] {
+  if (Array.isArray(value)) return value as ChatGPTConversation[];
+  if (value && typeof value === 'object') {
+    const inner = (value as { conversations?: unknown }).conversations;
+    if (Array.isArray(inner)) return inner as ChatGPTConversation[];
+  }
+  return [];
+}
+
+function conversationExternalId(c: ChatGPTConversation): string | undefined {
+  return c.conversation_id ?? c.id ?? undefined;
+}
+
+/** Build the optional `sourceUrl` deep-link for a conversation, omitted when no
+ *  id is present so we never emit an `undefined` property. */
+function sourceUrlFor(c: ChatGPTConversation): { sourceUrl?: string } {
+  const id = c.conversation_id ?? c.id;
+  return id ? { sourceUrl: `https://chatgpt.com/c/${id}` } : {};
+}
+
+/** Collect messages from a conversation, supporting both the `mapping` tree and
+ *  a flat `messages` array. */
+function collectMessages(c: ChatGPTConversation): ChatGPTMessage[] {
+  if (c.mapping && typeof c.mapping === 'object') {
+    const out: ChatGPTMessage[] = [];
+    for (const key of Object.keys(c.mapping)) {
+      const msg = c.mapping[key]?.message;
+      if (msg) out.push(msg);
+    }
+    return out;
+  }
+  if (Array.isArray(c.messages)) return c.messages;
+  return [];
+}
+
+/** Join the text parts of a message into a single trimmed string. */
+function messageText(message: ChatGPTMessage): string {
+  const parts = message.content?.parts ?? [];
+  return parts
+    .filter((p): p is string => typeof p === 'string')
+    .join('\n')
+    .trim();
+}
+
+function labelFromText(role: string, text: string): string {
+  const firstLine = text.split('\n')[0]?.trim() ?? '';
+  const snippet = firstLine.length > 0 ? firstLine : text;
+  return `${role}: ${snippet}`.trim().slice(0, MAX_LABEL_LENGTH);
+}
+
+function unixToMs(seconds: number | null | undefined): number | undefined {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return undefined;
+  return seconds * 1000;
+}
+
+function isoFromUnix(seconds: number | null | undefined): string | undefined {
+  const ms = unixToMs(seconds);
+  return ms === undefined ? undefined : new Date(ms).toISOString();
 }
 
 function edgeBetween(
