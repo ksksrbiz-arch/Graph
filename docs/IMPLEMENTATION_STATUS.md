@@ -83,22 +83,27 @@ Legend: ✅ done · 🟡 partial · ⬜ not started · ❌ blocked
 
 ### 3a · Graph canvas core
 
+First slice landed in `apps/web/src/graph/` (`GraphView`, `NodePanel`,
+`FilterPanel`, `ContextMenu`, `api.ts`, `types.ts`) using `react-force-graph-2d`.
+Loads the full snapshot via `GET /api/v1/public/graph` (Phase-0 anon mode) and
+uses `GET /graph/subgraph` for ego-focus.
+
 | DoD item (spec §7.2) | AC | Status | Notes |
 |-----------------------|----|--------|-------|
-| `<GraphCanvas />` renders nodes from API `/graph/subgraph` as force-directed layout | AC-F01 | ⬜ | Target: react-force-graph-2d/3d; must render 1,000 nodes < 2.5 s |
-| Node colour encodes `NodeType` via 12-colour contrast-compliant palette | AC-F02 | ⬜ | Palette in `packages/shared` |
-| Node size encodes degree (min 4 px, max 24 px radius) | AC-F03 | ⬜ | |
-| Hovering a node shows tooltip: `label`, `type`, `sourceUrl`, `updatedAt` | AC-F04 | ⬜ | |
-| Click opens side panel with full metadata + outgoing/incoming edges | AC-F05 | ⬜ | |
-| Double-click re-centres on ego-network (depth-2) | AC-F06 | ⬜ | Uses `GET /graph/subgraph` |
-| Right-click context menu: Open source, Copy link, Delete node, Expand neighbourhood | AC-F07 | ⬜ | |
-| Multi-select (Shift+Click); bulk delete (Delete key) | AC-F08 | ⬜ | |
-| Filter panel — client-side node/edge masking without re-fetch | AC-F09 | ⬜ | |
-| Zoom (scroll/pinch) + Pan (drag) | AC-F10 | ⬜ | |
-| Fit-to-screen button (shortcut `F`) | AC-F11 | ⬜ | |
-| Minimap (collapsible, bottom-right) | AC-F12 | ⬜ | |
-| 60 fps @ 5,000 nodes on 2021-era desktop (Chrome 120+) | AC-F13 | ⬜ | |
-| 30 fps @ 5,000 nodes on mid-range mobile (Safari iOS 17+) | AC-F14 | ⬜ | |
+| `<GraphCanvas />` renders nodes from API as force-directed layout | AC-F01 | ✅ | `GraphView` via `react-force-graph-2d`; loads `GET /public/graph` snapshot. Large-graph perf benchmark still pending (see F13/F14) |
+| Node colour encodes `NodeType` via 12-colour contrast-compliant palette | AC-F02 | ✅ | `packages/shared/src/palette.ts` (`PALETTE_12`, `NODE_TYPE_COLORS`, `colorForNodeType`) |
+| Node size encodes degree (min 4 px, max 24 px radius) | AC-F03 | ✅ | `radiusOf()` — `4 + min(20, √degree·3)` |
+| Hovering a node shows tooltip: `label`, `type`, `sourceUrl`, `updatedAt` | AC-F04 | ✅ | `nodeLabel` HTML tooltip + neighbour-dimming on hover |
+| Click opens side panel with full metadata + outgoing/incoming edges | AC-F05 | ✅ | `NodePanel` (metadata, JSON, in/out connections, expand/delete) |
+| Double-click re-centres on ego-network (depth-2) | AC-F06 | ✅ | `focusEgo()` calls `GET /graph/subgraph` (local BFS fallback) + `zoomToFit` |
+| Right-click context menu: Open source, Copy link, Delete node, Expand neighbourhood | AC-F07 | ✅ | `ContextMenu` |
+| Multi-select (Shift+Click); bulk delete (Delete key) | AC-F08 | ✅ | `selectedIds` set + `Delete`/`Backspace` bulk delete |
+| Filter panel — client-side node/edge masking without re-fetch | AC-F09 | ✅ | `FilterPanel` toggles via `nodeVisibility`/`linkVisibility` (positions preserved) |
+| Zoom (scroll/pinch) + Pan (drag) | AC-F10 | ✅ | force-graph built-in |
+| Fit-to-screen button (shortcut `F`) | AC-F11 | ✅ | toolbar `Fit` + `F` key |
+| Minimap (collapsible, bottom-right) | AC-F12 | ⬜ | not yet implemented |
+| 60 fps @ 5,000 nodes on 2021-era desktop (Chrome 120+) | AC-F13 | ⬜ | not yet benchmarked; bundle code-split also pending |
+| 30 fps @ 5,000 nodes on mid-range mobile (Safari iOS 17+) | AC-F14 | ⬜ | not yet benchmarked |
 
 ### 3b · Command palette & navigation
 

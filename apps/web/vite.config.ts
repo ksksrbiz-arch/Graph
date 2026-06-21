@@ -1,9 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Phase 0 keeps the Vite config bare. The canvas migration in Phase 3 wires
-// react-force-graph + WebSocket subscribers and adds the proxy entries needed
-// to talk to the API in dev.
+// `@pkg/shared` is a workspace package built to CommonJS (dist/index.js uses
+// tslib `__exportStar`). pnpm symlinks it under node_modules but rollup
+// resolves the realpath into `packages/shared`, so it falls outside the
+// commonjs plugin's default `node_modules` include — runtime named imports
+// (e.g. colorForNodeType) then fail at build time. Widen the include + force
+// pre-bundling so the canvas can import shared values, not just types.
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -15,8 +18,15 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    include: ['@pkg/shared'],
+  },
   build: {
     outDir: 'dist',
     sourcemap: true,
+    commonjsOptions: {
+      include: [/node_modules/, /packages\/shared/],
+      transformMixedEsModules: true,
+    },
   },
 });
