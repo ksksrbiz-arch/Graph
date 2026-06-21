@@ -12,7 +12,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type MeiliSearch from 'meilisearch';
 import type { KGNode } from '@pkg/shared';
-import { MEILI_CLIENT } from './meilisearch.module';
+import { MEILI_CLIENT } from './meilisearch.tokens';
 
 export interface SearchHit {
   id: string;

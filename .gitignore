@@ -40,3 +40,6 @@ web/data/graph.json
 
 # generated seed data for local stack (pnpm stack:seed)
 data/seed/
+
+# Generated GraphQL code-first schema (written at boot)
+apps/api/schema.gql

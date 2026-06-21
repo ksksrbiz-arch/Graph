@@ -137,36 +137,39 @@ uses `GET /graph/subgraph` for ego-focus.
 
 | DoD item | Status | Notes |
 |----------|--------|-------|
-| GitHub OAuth2 flow complete | ⬜ | OAuth scaffold exists in Phase 1 |
-| Incremental sync via Events API | ⬜ | |
-| Connector transform unit tests: 95% coverage | ⬜ | |
-| E2E journey 1: connect GitHub → view repos in graph | ⬜ | |
+| GitHub OAuth2 flow complete | ✅ | `OAuthService` + GitHub provider (PKCE); state now Postgres-backed (`oauth_states`) |
+| Incremental sync via Events API | ✅ | `github.connector.ts` (cursor-based) |
+| Connector transform unit tests: 95% coverage | 🟡 | `github.connector.spec.ts` (mocked HTTP); formal coverage gate pending |
+| E2E journey 1: connect GitHub → view repos in graph | 🟡 | `api-e2e` CI job exercises the public ingest→snapshot round-trip on a live stack; OAuth-driven journey still manual |
+| Sync scheduling production-ready (BullMQ, multi-instance) | ✅ | `sync.scheduler.ts` uses BullMQ job schedulers (Redis), graceful `setInterval` fallback (ADR-005) |
 
 ## Phase 5 — Connectors: Gmail + Google Calendar (Week 9)
 
 | DoD item | Status | Notes |
 |----------|--------|-------|
-| Gmail OAuth2 + incremental sync (`historyId`) | ⬜ | |
-| Google Calendar OAuth2 + incremental sync (`syncToken`) | ⬜ | |
-| NLP pipeline stages 1–5 operational | ⬜ | |
-| Rate-limit handling with exponential back-off | ⬜ | |
+| Gmail OAuth2 + incremental sync (`historyId`) | ✅ | `gmail.connector.ts` — history delta + list fallback, quote-aware address parsing, rate-limit back-off |
+| Google Calendar OAuth2 + incremental sync (`syncToken`) | ✅ | `google-calendar.connector.ts` |
+| NLP pipeline stages 1–5 operational | 🟡 | per-connector mapping + `text-parser` heuristics; full NLP pipeline pending |
+| Rate-limit handling with exponential back-off | ✅ | shared `readRateLimit` + per-connector header fallbacks (Rule 13) |
 
 ## Phase 6 — Connectors: Notion + Obsidian + Bookmarks (Week 10)
 
 | DoD item | Status | Notes |
 |----------|--------|-------|
-| Notion OAuth2 + incremental sync | ⬜ | |
-| Obsidian ZIP upload + wikilink parsing | ⬜ | |
-| Bookmark OPML/HTML import | ⬜ | |
-| Embedding generation (NLP stage 6) wired to Neo4j nodes | ⬜ | |
+| Notion OAuth2 + incremental sync | ✅ | `notion.connector.ts` |
+| Obsidian ZIP upload + wikilink parsing | ✅ | `obsidian.connector.ts` (in-memory note list → notes + `[[wikilinks]]` + `#tags`); ZIP extraction at the upload boundary still TODO |
+| Bookmark OPML/HTML import | ✅ | `bookmarks.connector.ts` (Netscape HTML + OPML, folders → `PART_OF`, tags → `TAGGED_WITH`) |
+| Embedding generation (NLP stage 6) wired to Neo4j nodes | 🟡 | `ReasoningService.embed` exists; automatic on-ingest embedding pending |
 
 ## Phase 7 — Connectors: Outlook, Todoist, Linear, GitLab (Week 11)
 
 | DoD item | Status | Notes |
 |----------|--------|-------|
-| All four connectors implemented and tested | ⬜ | |
-| All connector unit tests: 95% coverage | ⬜ | |
-| Sync status dashboard in UI (progress bars, error messages) | ⬜ | |
+| All four connectors implemented and tested | ✅ | `outlook.connector.ts` (Graph delta), `todoist.connector.ts`, `linear.connector.ts` (GraphQL), `gitlab.connector.ts` (events API) — each with mocked-HTTP specs |
+| All connector unit tests: 95% coverage | 🟡 | specs present for all connectors; formal coverage gate pending |
+| Sync status dashboard in UI (progress bars, error messages) | ⬜ | `apps/web` connector roster shows status; richer dashboard pending |
+
+> **Registry:** all 14 connectors (incl. real OpenAI/Anthropic/Pieces/Zotero replacing the earlier mock stubs) are registered in `ConnectorRegistry`/`ConnectorsModule` and resolvable by the sync orchestrator.
 
 ## Phase 8 — Hardening, Accessibility & Launch (Week 12)
 
@@ -177,7 +180,7 @@ uses `GET /graph/subgraph` for ego-focus.
 | k6 load test passes (p95 < 200 ms @ 200 concurrent users) | ⬜ | |
 | Security review: OWASP Top 10 checklist complete | ⬜ | |
 | Mutation score ≥ 70% on domain layer | ⬜ | |
-| All 6 E2E user journeys green | ⬜ | |
+| All 6 E2E user journeys green | 🟡 | `api-e2e` CI job boots the full stack and round-trips public ingest→snapshot; full journey suite pending |
 | `docker compose up --build` produces fully working stack with seed data | ⬜ | |
 | Architecture Decision Records written for all major choices | 🟡 | 10 ADRs already in `docs/adr/` |
 | API documentation auto-generated (Swagger UI + GraphQL Playground) | 🟡 | Swagger wired; GraphQL Playground not yet gated |

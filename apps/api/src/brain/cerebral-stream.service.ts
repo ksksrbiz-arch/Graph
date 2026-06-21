@@ -16,7 +16,15 @@
 // triggers replace older queued ones since the cortex always reads the
 // current graph + brain state anyway.
 
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, forwardRef } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  Optional,
+  forwardRef,
+} from '@nestjs/common';
 import { AttentionService } from './attention.service';
 import { BrainGateway, type DreamEvt } from './brain.gateway';
 import { BrainService } from './brain.service';
@@ -115,7 +123,9 @@ export class CerebralStreamService implements OnModuleInit, OnModuleDestroy {
     private readonly gateway: BrainGateway,
     @Inject(forwardRef(() => BrainService))
     private readonly brain: BrainService,
-    options: CerebralStreamOptions = {},
+    // Not a DI provider — plain tuning options with defaults. @Optional() stops
+    // Nest trying (and failing) to resolve it during full-app instantiation.
+    @Optional() options: CerebralStreamOptions = {},
   ) {
     this.minIntervalMs = options.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS;
     this.perceiveBurst = options.perceiveBurst ?? DEFAULT_PERCEIVE_BURST;
