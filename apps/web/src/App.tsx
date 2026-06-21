@@ -19,6 +19,9 @@ import {
 } from './connectorCatalog';
 import { DEFAULT_CONNECTOR_SYNC_INTERVAL_MINUTES } from './sharedConstants';
 import { ArcPanel } from './ArcPanel';
+import { GraphView } from './graph/GraphView';
+
+type AppView = 'graph' | 'connectors';
 
 interface ApiHealth {
   ok: boolean;
@@ -49,6 +52,7 @@ export function App(): JSX.Element {
   const [notice, setNotice] = useState<string | null>(null);
   const [category, setCategory] = useState<'All' | ConnectorCategory>('All');
   const [query, setQuery] = useState('');
+  const [view, setView] = useState<AppView>('graph');
 
   useEffect(() => {
     const liveFlag = { current: true };
@@ -194,18 +198,59 @@ export function App(): JSX.Element {
   }
 
   return (
-    <main
+    <div
       style={{
         fontFamily:
           'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-        background:
-          'radial-gradient(circle at top, rgba(74,110,255,0.18), transparent 35%), #0b0f1a',
         color: '#e8edf6',
-        minHeight: '100vh',
-        padding: '2rem',
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#0b0f1a',
       }}
     >
-      <section style={{ maxWidth: 1280, margin: '0 auto' }}>
+      <nav
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '1rem',
+          padding: '0.65rem 1.1rem',
+          borderBottom: '1px solid #1a2238',
+          background: 'rgba(11,15,26,0.92)',
+          flex: '0 0 auto',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span style={{ fontWeight: 700, letterSpacing: '0.02em' }}>Graph</span>
+          <span style={{ color: '#5d678c', fontSize: '0.8rem' }}>PKG-VS</span>
+        </div>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          <NavTab active={view === 'graph'} onClick={() => setView('graph')}>
+            Graph
+          </NavTab>
+          <NavTab active={view === 'connectors'} onClick={() => setView('connectors')}>
+            Connectors
+          </NavTab>
+        </div>
+      </nav>
+
+      {view === 'graph' ? (
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <GraphView userId={DEMO_USER_ID} />
+        </div>
+      ) : (
+        <main
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            background:
+              'radial-gradient(circle at top, rgba(74,110,255,0.18), transparent 35%), #0b0f1a',
+            padding: '2rem',
+          }}
+        >
+          <section style={{ maxWidth: 1280, margin: '0 auto' }}>
         <div
           style={{
             display: 'flex',
@@ -469,7 +514,38 @@ export function App(): JSX.Element {
           })}
         </div>
       </section>
-    </main>
+        </main>
+      )}
+    </div>
+  );
+}
+
+function NavTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        borderRadius: 10,
+        border: `1px solid ${active ? '#7c9cff' : '#1f2740'}`,
+        background: active ? 'rgba(124,156,255,0.16)' : 'transparent',
+        color: active ? '#eef3ff' : '#aab3cc',
+        padding: '0.45rem 0.9rem',
+        fontWeight: 600,
+        fontSize: '0.85rem',
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
