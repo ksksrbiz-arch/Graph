@@ -1,8 +1,12 @@
-// Behaviour tests for OAuthService.authorize() — the part that doesn't hit
-// the network. We assert PKCE + state plumbing here; callback / refresh paths
-// hit the provider over fetch and are best covered with an integration test
-// (Phase 1).
+// Behaviour tests for OAuthService.authorize() and the Postgres-backed
+// OAuthStateStore. The store talks to `pg.Pool`, which we replace with a small
+// in-memory fake (NO real Postgres) that emulates the table semantics the SQL
+// relies on: upsert on `state`, single-use DELETE ... RETURNING, and
+// expires_at-based pruning. PKCE + state plumbing is asserted here; the
+// callback / refresh paths that hit the provider over fetch are covered with
+// the fetch mock below.
 
+import type { Pool, QueryResult, QueryResultRow } from 'pg';
 import { ConnectorConfigStore } from '../connectors/connector-config.store';
 import { resetEnvCache } from '../config/env';
 import { OAuthService } from './oauth.service';
@@ -12,10 +16,107 @@ import { CredentialCipher } from '../shared/crypto/credential-cipher';
 
 const KEK = Buffer.alloc(32, 1).toString('base64');
 
+interface StateRow {
+  state: string;
+  user_id: string;
+  connector_id: string;
+  redirect_uri: string;
+  code_verifier: string | null;
+  return_to: string | null;
+  created_at: Date;
+  expires_at: Date;
+}
+
+/**
+ * Minimal in-memory stand-in for `pg.Pool` covering exactly the four queries
+ * the OAuthStateStore issues. Dispatches on SQL keywords rather than exact
+ * text so harmless formatting changes don't break the tests.
+ */
+class FakePool {
+  readonly rows = new Map<string, StateRow>();
+  readonly queries: string[] = [];
+
+  query = jest.fn(
+    async <T extends QueryResultRow>(
+      sql: string,
+      params: unknown[] = [],
+    ): Promise<QueryResult<T>> => {
+      this.queries.push(sql);
+      const text = sql.trim().toUpperCase();
+
+      if (text.startsWith('INSERT INTO OAUTH_STATES')) {
+        const [
+          state,
+          userId,
+          connectorId,
+          redirectUri,
+          codeVerifier,
+          returnTo,
+          createdAt,
+          expiresAt,
+        ] = params as [
+          string,
+          string,
+          string,
+          string,
+          string | null,
+          string | null,
+          Date,
+          Date,
+        ];
+        this.rows.set(state, {
+          state,
+          user_id: userId,
+          connector_id: connectorId,
+          redirect_uri: redirectUri,
+          code_verifier: codeVerifier,
+          return_to: returnTo,
+          created_at: createdAt,
+          expires_at: expiresAt,
+        });
+        return this.result<T>([]);
+      }
+
+      if (text.startsWith('DELETE FROM OAUTH_STATES WHERE STATE')) {
+        const [state] = params as [string];
+        const row = this.rows.get(state);
+        if (row) this.rows.delete(state);
+        return this.result<T>(row ? [row as unknown as T] : []);
+      }
+
+      if (text.startsWith('DELETE FROM OAUTH_STATES WHERE EXPIRES_AT')) {
+        const now = Date.now();
+        for (const [k, v] of this.rows) {
+          if (v.expires_at.getTime() <= now) this.rows.delete(k);
+        }
+        return this.result<T>([]);
+      }
+
+      if (text.startsWith('DELETE FROM OAUTH_STATES')) {
+        this.rows.clear();
+        return this.result<T>([]);
+      }
+
+      throw new Error(`FakePool: unexpected query: ${sql}`);
+    },
+  );
+
+  private result<T extends QueryResultRow>(rows: T[]): QueryResult<T> {
+    return {
+      rows,
+      rowCount: rows.length,
+      command: '',
+      oid: 0,
+      fields: [],
+    };
+  }
+}
+
 function makeService(): {
   service: OAuthService;
   state: OAuthStateStore;
   configs: ConnectorConfigStore;
+  pool: FakePool;
 } {
   process.env.GITHUB_OAUTH_CLIENT_ID = 'gh-id';
   process.env.GITHUB_OAUTH_CLIENT_SECRET = 'gh-secret';
@@ -35,20 +136,22 @@ function makeService(): {
   resetEnvCache();
 
   const registry = new OAuthProviderRegistry();
-  const state = new OAuthStateStore();
+  const pool = new FakePool();
+  const state = new OAuthStateStore(pool as unknown as Pool);
   const cipher = new CredentialCipher();
   const configs = new ConnectorConfigStore();
   return {
     service: new OAuthService(registry, state, cipher, configs),
     state,
     configs,
+    pool,
   };
 }
 
 describe('OAuthService.authorize', () => {
-  it('builds a GitHub authorize URL with state but no PKCE', () => {
+  it('builds a GitHub authorize URL with state but no PKCE', async () => {
     const { service, state } = makeService();
-    const result = service.authorize({
+    const result = await service.authorize({
       userId: 'u1',
       connectorId: 'github',
       redirectUri: 'http://localhost:3001/api/v1/oauth/callback/github',
@@ -59,14 +162,14 @@ describe('OAuthService.authorize', () => {
     expect(url.searchParams.get('state')).toBe(result.state);
     expect(url.searchParams.get('code_challenge')).toBeNull();
 
-    const stored = state.take(result.state);
+    const stored = await state.take(result.state);
     expect(stored?.userId).toBe('u1');
     expect(stored?.codeVerifier).toBeUndefined();
   });
 
-  it('attaches PKCE for Google + access_type=offline', () => {
+  it('attaches PKCE for Google + access_type=offline', async () => {
     const { service, state } = makeService();
-    const result = service.authorize({
+    const result = await service.authorize({
       userId: 'u2',
       connectorId: 'google_calendar',
       redirectUri: 'http://localhost:3001/cb',
@@ -77,21 +180,84 @@ describe('OAuthService.authorize', () => {
     expect(url.searchParams.get('access_type')).toBe('offline');
     expect(url.searchParams.get('prompt')).toBe('consent');
 
-    const stored = state.take(result.state);
+    const stored = await state.take(result.state);
     expect(stored?.codeVerifier).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 
-  it('refuses to start a flow when client credentials are not set', () => {
+  it('persists returnTo and the exact authorize redirect_uri', async () => {
+    const { service, state } = makeService();
+    const result = await service.authorize({
+      userId: 'u3',
+      connectorId: 'github',
+      redirectUri: 'http://localhost:3001/cb-exact',
+      returnTo: '/connectors',
+    });
+    const stored = await state.take(result.state);
+    expect(stored?.returnTo).toBe('/connectors');
+    expect(stored?.redirectUri).toBe('http://localhost:3001/cb-exact');
+    expect(stored?.connectorId).toBe('github');
+  });
+
+  it('refuses to start a flow when client credentials are not set', async () => {
     delete process.env.NOTION_OAUTH_CLIENT_ID;
     delete process.env.NOTION_OAUTH_CLIENT_SECRET;
     const { service } = makeService();
-    expect(() =>
+    await expect(
       service.authorize({
         userId: 'u',
         connectorId: 'notion',
         redirectUri: 'http://localhost:3001/cb',
       }),
-    ).toThrow(/notion/i);
+    ).rejects.toThrow(/notion/i);
+  });
+});
+
+describe('OAuthStateStore', () => {
+  it('take() is single-use: a second read returns undefined', async () => {
+    const { state } = makeService();
+    await state.put({
+      state: 's1',
+      userId: 'u',
+      connectorId: 'github',
+      redirectUri: 'http://localhost/cb',
+      createdAt: Date.now(),
+    });
+    expect((await state.take('s1'))?.userId).toBe('u');
+    expect(await state.take('s1')).toBeUndefined();
+  });
+
+  it('take() treats an expired row as missing and deletes it', async () => {
+    const { state } = makeService();
+    // createdAt far in the past so expires_at (createdAt + TTL) is already past.
+    await state.put({
+      state: 's2',
+      userId: 'u',
+      connectorId: 'github',
+      redirectUri: 'http://localhost/cb',
+      createdAt: Date.now() - 60 * 60_000,
+    });
+    expect(await state.take('s2')).toBeUndefined();
+  });
+
+  it('prune() removes only expired rows', async () => {
+    const { state, pool } = makeService();
+    await state.put({
+      state: 'fresh',
+      userId: 'u',
+      connectorId: 'github',
+      redirectUri: 'http://localhost/cb',
+      createdAt: Date.now(),
+    });
+    await state.put({
+      state: 'stale',
+      userId: 'u',
+      connectorId: 'github',
+      redirectUri: 'http://localhost/cb',
+      createdAt: Date.now() - 60 * 60_000,
+    });
+    await state.prune();
+    expect(pool.rows.has('fresh')).toBe(true);
+    expect(pool.rows.has('stale')).toBe(false);
   });
 });
 
@@ -100,7 +266,7 @@ describe('OAuthService.handleCallback', () => {
     const { service } = makeService();
     const authorizeRedirectUri =
       'http://localhost:3001/api/v1/oauth/callback/github';
-    const result = service.authorize({
+    const result = await service.authorize({
       userId: 'u1',
       connectorId: 'github',
       redirectUri: authorizeRedirectUri,
@@ -132,5 +298,17 @@ describe('OAuthService.handleCallback', () => {
     const [, req] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = new URLSearchParams(String(req.body));
     expect(body.get('redirect_uri')).toBe(authorizeRedirectUri);
+  });
+
+  it('rejects an unknown/consumed state as a CSRF failure', async () => {
+    const { service } = makeService();
+    await expect(
+      service.handleCallback({
+        connectorId: 'github',
+        code: 'code-123',
+        state: 'never-issued',
+        redirectUri: 'http://localhost:3001/api/v1/oauth/callback/github',
+      }),
+    ).rejects.toThrow(/invalid or expired oauth state/i);
   });
 });

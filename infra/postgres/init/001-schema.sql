@@ -92,3 +92,22 @@ CREATE TABLE IF NOT EXISTS agent_permission_grants (
 );
 CREATE INDEX IF NOT EXISTS agent_permission_grants_user_idx
   ON agent_permission_grants (user_id, granted_at DESC);
+
+-- ── oauth_states (pending OAuth handshakes — PKCE/CSRF) ─────────────
+-- Short-lived, single-use rows: created when an authorize URL is built and
+-- deleted (read-once) on the provider callback. Persisting these means PKCE
+-- verifiers and CSRF state survive a restart and are shared across API
+-- instances. `state` is the random CSRF token we hand to the provider and the
+-- lookup key on the way back. Expired rows are pruned in the background.
+CREATE TABLE IF NOT EXISTS oauth_states (
+  state         TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL,
+  connector_id  TEXT NOT NULL,
+  redirect_uri  TEXT NOT NULL,
+  code_verifier TEXT,                       -- PKCE verifier; null when unused
+  return_to     TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at    TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS oauth_states_expires_idx
+  ON oauth_states (expires_at);
