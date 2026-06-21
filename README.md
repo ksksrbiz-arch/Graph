@@ -1,14 +1,17 @@
 # Graph — Personal Knowledge Graph Visualization System (PKG-VS)
 ===========================================================
 
-A web app that ingests your digital footprint (email, notes, calendar, code, bookmarks…) and renders it as an interactive force-directed graph. See the full v2.0 specification at [docs/enhanced-personal-knowledge-graph-prompt.md](docs/enhanced-personal-knowledge-graph-prompt.md).
+A web app that ingests your digital footprint (email, notes, calendar, code, bookmarks…) and renders it as an interactive force-directed graph, overlaid with a live "brain" (spiking neurons, STDP learning, attention, dreams, recall) and a "cortex" reasoning/agent layer. See the full v2.0 specification at [docs/enhanced-personal-knowledge-graph-prompt.md](docs/enhanced-personal-knowledge-graph-prompt.md).
 
-The repo holds **two coexisting tracks**:
+The repo holds **three coexisting tracks**:
 
-1. **v1 static MVP** — the existing, runnable, single-user slice (no DB, no Docker, no auth). Lives under `web/`, `scripts/`, and `data/`.
-2. **v2 monorepo (Phase 0+)** — the spec-aligned implementation under `apps/` and `packages/`, backed by Neo4j + Postgres + Redis + Meilisearch.
+1. **v1 static MVP** — the existing, runnable, single-user slice (no DB, no Docker, no auth). Lives under `web/`, `scripts/`, and `data/`. This is what the public demo runs.
+2. **Cloudflare Worker** — fronts the SPA on the same origin and implements the public ingest API (`/api/v1/public/*`) plus the **cortex** reasoning/agent stack (ReAct on Workers AI, Vectorize recall, voice/vision in, TTS out, MCP tool plugins, cron autonomy). Lives under `src/worker/`, `wrangler.jsonc`, and `migrations/d1/`; persists via Workers KV + D1.
+3. **v2 monorepo (Phase 0+)** — the spec-aligned implementation under `apps/` and `packages/`, backed by Neo4j + Postgres + Redis + Meilisearch. `apps/api` is a NestJS 10 service (REST + GraphQL + WebSocket + brain/motor/reasoning); `apps/web` is a Vite + React 18 scaffold.
 
-Phase progress is tracked in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
+A ground-up UI rewrite (modular orchestrator + pluggable 2D/3D renderers + first-class brain animation) is in active development under [`web/ui/`](web/ui/README.md); it does not yet replace the v1 viewer.
+
+Phase progress is tracked in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md). Day-to-day guidance for working in this repo lives in [CLAUDE.md](CLAUDE.md).
 
 ## Prerequisites
 ---------------
@@ -195,11 +198,20 @@ The 3D / 4D renderers don't draw the overlay yet — particles and glow are 2D-o
 | Script              | Source                                                          |
 | ------------------- | --------------------------------------------------------------- |
 | `claude-code`       | `~/.claude/projects/<encoded-cwd>/<session>.jsonl`              |
+| `claude-export`     | A Claude data export (`conversations.json`)                      |
 | `git`               | Local git repos (commits, files, authors)                       |
-| `markdown`         | A directory of markdown notes (wikilinks → `LINKS_TO` edges)    |
+| `github`            | GitHub repos/issues/PRs via the API                             |
+| `markdown`          | A directory of markdown notes (wikilinks → `LINKS_TO` edges)    |
+| `daily-note`        | Daily/journal markdown notes                                     |
+| `code`              | A local [GitNexus](https://github.com/abhigyanpatwari/GitNexus) `gitnexus serve` server |
+| `bookmarks`         | Browser bookmark exports (OPML/HTML)                            |
+| `webclip`           | Saved web clippings                                             |
+| `evernote`          | An Evernote `.enex` export                                       |
+| `zotero`            | A Zotero library (references)                                    |
+| `bank-csv`          | Bank/transaction CSV exports (writes to `data/`, finance graph) |
 | `pieces`            | A local [Pieces OS](https://pieces.app) MCP server (LTM memories, snippets) — see below |
 
-Re-running is idempotent — `weight` and `metadata.count` accumulate across runs.
+Run any of them as `npm run ingest:<name>`. Re-running is idempotent — `weight` and `metadata.count` accumulate across runs.
 
 ### Pieces MCP (ingest from Pieces OS LTM)
 
