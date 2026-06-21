@@ -7,6 +7,9 @@ node_modules/
 .idea/
 .vscode/
 
+# Claude Code scratch (agent git worktrees, local state)
+.claude/worktrees/
+
 # build outputs
 dist/
 build/
