@@ -6,11 +6,18 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { ConnectorId } from '@pkg/shared';
 import type { BaseConnector } from './base.connector';
 import { AnthropicConnector } from './anthropic.connector';
+import { BookmarksConnector } from './bookmarks.connector';
 import { GitHubConnector } from './github.connector';
+import { GitLabConnector } from './gitlab.connector';
+import { GmailConnector } from './gmail.connector';
 import { GoogleCalendarConnector } from './google-calendar.connector';
+import { LinearConnector } from './linear.connector';
 import { NotionConnector } from './notion.connector';
+import { ObsidianConnector } from './obsidian.connector';
 import { OpenAIConnector } from './openai.connector';
+import { OutlookConnector } from './outlook.connector';
 import { PiecesConnector } from './pieces.connector';
+import { TodoistConnector } from './todoist.connector';
 import { ZoteroConnector } from './zotero.connector';
 
 @Injectable()
@@ -25,14 +32,32 @@ export class ConnectorRegistry {
     openai: OpenAIConnector,
     anthropic: AnthropicConnector,
     pieces: PiecesConnector,
+    gmail: GmailConnector,
+    outlook: OutlookConnector,
+    todoist: TodoistConnector,
+    linear: LinearConnector,
+    gitlab: GitLabConnector,
+    obsidian: ObsidianConnector,
+    bookmarks: BookmarksConnector,
   ) {
-    this.byId.set(github.id, github);
-    this.byId.set(googleCalendar.id, googleCalendar);
-    this.byId.set(notion.id, notion);
-    this.byId.set(zotero.id, zotero);
-    this.byId.set(openai.id, openai);
-    this.byId.set(anthropic.id, anthropic);
-    this.byId.set(pieces.id, pieces);
+    for (const c of [
+      github,
+      googleCalendar,
+      notion,
+      zotero,
+      openai,
+      anthropic,
+      pieces,
+      gmail,
+      outlook,
+      todoist,
+      linear,
+      gitlab,
+      obsidian,
+      bookmarks,
+    ]) {
+      this.byId.set(c.id, c);
+    }
   }
 
   get(id: ConnectorId): BaseConnector {
