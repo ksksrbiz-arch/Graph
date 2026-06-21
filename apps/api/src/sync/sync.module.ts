@@ -2,8 +2,9 @@
 // scheduled) and reports progress via SyncGateway. SyncScheduler reads enabled
 // ConnectorConfigs and ticks each one at its configured interval.
 //
-// ADR-005 (BullMQ) is the production target — see sync.orchestrator.ts and
-// sync.scheduler.ts for the swap surface.
+// ADR-005 (BullMQ): SyncScheduler drives repeatable jobs over the shared Redis
+// instance so multiple API instances coordinate, falling back to in-process
+// timers when Redis is unreachable. See sync.scheduler.ts.
 
 import { Module, forwardRef } from '@nestjs/common';
 import { BrainModule } from '../brain/brain.module';
