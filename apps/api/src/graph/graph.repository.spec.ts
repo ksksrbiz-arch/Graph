@@ -146,6 +146,37 @@ function makeFakeNodeNeo4j(partial: Partial<KGNode> = {}): {
   };
 }
 
+// Mimics a neo4j-driver Node: carries an elementId plus stored properties.
+function makeFakeNeo4jNode(
+  elementId: string,
+  partial: Partial<KGNode> = {},
+): { elementId: string; properties: Record<string, unknown> } {
+  return { elementId, ...makeFakeNodeNeo4j(partial) };
+}
+
+// Mimics a neo4j-driver Relationship: start/end element ids + stored props
+// (matching what `edgeProps` persists — note source/target are NOT in props).
+function makeFakeNeo4jRelationship(
+  startNodeElementId: string,
+  endNodeElementId: string,
+  props: Record<string, unknown>,
+): {
+  startNodeElementId: string;
+  endNodeElementId: string;
+  properties: Record<string, unknown>;
+} {
+  return {
+    startNodeElementId,
+    endNodeElementId,
+    properties: {
+      ...props,
+      metadataJson: JSON.stringify(
+        (props.metadata as Record<string, unknown> | undefined) ?? {},
+      ),
+    },
+  };
+}
+
 // ── subgraph ─────────────────────────────────────────────────────────────────
 
 describe('GraphRepository.subgraph', () => {
@@ -175,6 +206,116 @@ describe('GraphRepository.subgraph', () => {
     const cypher: string = sessions[0]!.run.mock.calls[0][0];
     // The safe depth 4 should appear in the query but 10 should not.
     expect(cypher).toContain('1..4');
+  });
+
+  it('maps well-formed Neo4j nodes and relationships into validated entities', async () => {
+    const nodeA = makeFakeNeo4jNode('elem-a', {
+      id: '00000000-0000-4000-8000-00000000000a',
+      label: 'Node A',
+    });
+    const nodeB = makeFakeNeo4jNode('elem-b', {
+      id: '00000000-0000-4000-8000-00000000000b',
+      label: 'Node B',
+    });
+    const rel = makeFakeNeo4jRelationship('elem-a', 'elem-b', {
+      id: '00000000-0000-4000-8000-00000000000c',
+      relation: 'MENTIONS',
+      weight: 0.7,
+      inferred: false,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+    const record = makeFakeNeo4jRecord({ nodes: [nodeA, nodeB], edges: [rel] });
+    const { driver } = makeDriver([record as never]);
+    const repo = new GraphRepository(driver as never);
+
+    const result = await repo.subgraph('user-1', 'root-1', 2);
+
+    expect(result.nodes).toHaveLength(2);
+    expect(result.edges).toHaveLength(1);
+    // source/target recovered from start/end elementId → KG id.
+    expect(result.edges[0]!.source).toBe('00000000-0000-4000-8000-00000000000a');
+    expect(result.edges[0]!.target).toBe('00000000-0000-4000-8000-00000000000b');
+    expect(result.edges[0]!.relation).toBe('MENTIONS');
+    expect(result.edges[0]!.weight).toBe(0.7);
+  });
+
+  it('drops malformed nodes and edges without throwing', async () => {
+    const goodNode = makeFakeNeo4jNode('elem-a', {
+      id: '00000000-0000-4000-8000-00000000000a',
+    });
+    const badNode = makeFakeNeo4jNode('elem-bad', {
+      // non-UUID id → fails KGNodeSchema.
+      id: 'not-a-uuid',
+    });
+    // Relationship pointing at an unknown node → no resolvable source/target
+    // so it fails KGEdgeSchema (empty source) and is dropped.
+    const danglingRel = makeFakeNeo4jRelationship('elem-a', 'elem-unknown', {
+      id: '00000000-0000-4000-8000-00000000000c',
+      relation: 'MENTIONS',
+      weight: 0.5,
+      inferred: false,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+    // Relationship with an out-of-range weight → fails KGEdgeSchema.
+    const badRel = makeFakeNeo4jRelationship('elem-a', 'elem-a', {
+      id: '00000000-0000-4000-8000-00000000000d',
+      relation: 'MENTIONS',
+      weight: 5,
+      inferred: false,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+    const record = makeFakeNeo4jRecord({
+      nodes: [goodNode, badNode],
+      edges: [danglingRel, badRel],
+    });
+    const { driver } = makeDriver([record as never]);
+    const repo = new GraphRepository(driver as never);
+
+    const result = await repo.subgraph('user-1', 'root-1', 2);
+
+    // Only the well-formed node survives; both edges are dropped, not thrown.
+    expect(result.nodes).toHaveLength(1);
+    expect(result.nodes[0]!.id).toBe('00000000-0000-4000-8000-00000000000a');
+    expect(result.edges).toHaveLength(0);
+  });
+
+  it('deduplicates edges that appear on multiple traversal paths', async () => {
+    const nodeA = makeFakeNeo4jNode('elem-a', {
+      id: '00000000-0000-4000-8000-00000000000a',
+    });
+    const nodeB = makeFakeNeo4jNode('elem-b', {
+      id: '00000000-0000-4000-8000-00000000000b',
+    });
+    // The same relationship (same id) appears twice — apoc.coll.flatten emits a
+    // relationship once per path it lies on.
+    const relProps = {
+      id: '00000000-0000-4000-8000-00000000000c',
+      relation: 'MENTIONS',
+      weight: 0.6,
+      inferred: false,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    };
+    const rel1 = makeFakeNeo4jRelationship('elem-a', 'elem-b', { ...relProps });
+    const rel2 = makeFakeNeo4jRelationship('elem-a', 'elem-b', { ...relProps });
+    const record = makeFakeNeo4jRecord({
+      nodes: [nodeA, nodeB],
+      edges: [rel1, rel2],
+    });
+    const { driver } = makeDriver([record as never]);
+    const repo = new GraphRepository(driver as never);
+
+    const result = await repo.subgraph('user-1', 'root-1', 2);
+
+    expect(result.edges).toHaveLength(1);
+    expect(result.edges[0]!.id).toBe('00000000-0000-4000-8000-00000000000c');
+  });
+
+  it('returns empty collections when record fields are not arrays', async () => {
+    const record = makeFakeNeo4jRecord({ nodes: null, edges: undefined });
+    const { driver } = makeDriver([record as never]);
+    const repo = new GraphRepository(driver as never);
+    const result = await repo.subgraph('user-1', 'root-1', 2);
+    expect(result).toEqual({ nodes: [], edges: [] });
   });
 });
 
