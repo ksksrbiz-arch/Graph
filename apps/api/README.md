@@ -2,17 +2,25 @@
 
 PKG-VS API server — NestJS 10 (REST + GraphQL + WebSocket). Implements the contract in spec §6 and the module structure in §8.1.
 
-## Module status (Phase 1)
+## Module status
+
+See [`docs/IMPLEMENTATION_STATUS.md`](../../docs/IMPLEMENTATION_STATUS.md) for the authoritative, phase-by-phase view.
 
 | Module        | State                                               |
 | ------------- | --------------------------------------------------- |
 | `health`      | ✅ live + ready (Neo4j, Postgres, Redis, Meilisearch checks) |
 | `shared/crypto` | ✅ AES-256-GCM credential cipher (ADR-006)          |
 | `shared/neo4j`  | ✅ driver provider                                  |
+| `shared/meilisearch` | ✅ node indexing + search                      |
 | `auth`        | ✅ register / login / refresh / logout; bcrypt + token rotation |
 | `users`       | ✅ `GET/PATCH/DELETE /users/me`; Postgres-backed    |
 | `audit`       | ✅ `AuditService` + global `AuditInterceptor`       |
-| `graph`       | 🟡 REST subgraph + node delete; GraphQL pending (Phase 2) |
+| `graph`       | ✅ REST (nodes/subgraph/search/delete) + GraphQL (Apollo, code-first) + Socket.IO `graph:delta` gateway |
+| `brain`       | ✅ spiking runtime, checkpoints, sensory perceive, attention, dreams, recall, deterministic cortex pipeline |
+| `motor`       | ✅ safety supervisor (denylist + rate-limit + approval); `POST /motor/evaluate`, `GET /motor/recent` |
+| `reasoning` / `agent` / `arc` | ✅ reasoning + agent permission/execution + arc endpoints |
+| `oauth`       | ✅ OAuth2 scaffold (GitHub, Google Calendar, Notion) with PKCE; in-memory config store |
+| `public`      | ✅ anonymous `POST /api/v1/public/ingest/{text,markdown,url}` + `GET /api/v1/public/graph` (powers the hosted demo) |
 | `connectors`  | ⬜ Phases 4–7 — `BaseConnector` contract frozen      |
 | `sync`        | ⬜ Phase 4 (BullMQ)                                  |
 

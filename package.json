@@ -3,7 +3,7 @@
   "version": "0.2.0-phase0",
   "private": true,
   "type": "module",
-  "description": "Personal Knowledge Graph Visualization System (PKG-VS) — monorepo. Root retains the v1 static MVP; apps/api is the v2 NestJS service.",
+  "description": "Personal Knowledge Graph Visualization System (PKG-VS) — monorepo. Three tracks: the zero-dependency v1 static MVP (web/, scripts/, data/), a Cloudflare Worker for public ingest + cortex reasoning (src/worker/), and the spec-aligned v2 (apps/api NestJS service + apps/web React client) backed by Neo4j/Postgres/Redis/Meilisearch.",
   "workspaces": [
     "apps/*",
     "packages/*"
