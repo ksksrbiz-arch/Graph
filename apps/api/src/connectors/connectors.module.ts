@@ -8,13 +8,20 @@ import { Module, forwardRef } from '@nestjs/common';
 import { OAuthModule } from '../oauth/oauth.module';
 import { SyncModule } from '../sync/sync.module';
 import { AnthropicConnector } from './anthropic.connector';
+import { BookmarksConnector } from './bookmarks.connector';
 import { ConnectorRegistry } from './connector-registry';
 import { ConnectorsController } from './connectors.controller';
 import { GitHubConnector } from './github.connector';
+import { GitLabConnector } from './gitlab.connector';
+import { GmailConnector } from './gmail.connector';
 import { GoogleCalendarConnector } from './google-calendar.connector';
+import { LinearConnector } from './linear.connector';
 import { NotionConnector } from './notion.connector';
+import { ObsidianConnector } from './obsidian.connector';
 import { OpenAIConnector } from './openai.connector';
+import { OutlookConnector } from './outlook.connector';
 import { PiecesConnector } from './pieces.connector';
+import { TodoistConnector } from './todoist.connector';
 import { ZoteroConnector } from './zotero.connector';
 
 @Module({
@@ -28,6 +35,13 @@ import { ZoteroConnector } from './zotero.connector';
     OpenAIConnector,
     AnthropicConnector,
     PiecesConnector,
+    GmailConnector,
+    OutlookConnector,
+    TodoistConnector,
+    LinearConnector,
+    GitLabConnector,
+    ObsidianConnector,
+    BookmarksConnector,
     ConnectorRegistry,
   ],
   exports: [ConnectorRegistry],
