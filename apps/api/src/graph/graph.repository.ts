@@ -9,16 +9,19 @@
 //     arrive in quick succession (e.g. when a connector reruns mid-batch).
 //     The cache is bounded; eviction is FIFO.
 
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import type { Driver, Record as Neo4jRecord } from 'neo4j-driver';
 import type { CursorPage, KGEdge, KGNode, NodeType, Subgraph } from '@pkg/shared';
+import { KGEdgeSchema, KGNodeSchema } from '@pkg/shared';
 import { NEO4J_DRIVER } from '../shared/neo4j/neo4j.module';
 
 const FINGERPRINT_CACHE_MAX = 4_096;
 
 @Injectable()
 export class GraphRepository {
+  private readonly log = new Logger(GraphRepository.name);
+
   /** (userId|kind|id) → sha256 of the last-persisted payload. Matches mean we
    *  can skip the Cypher round-trip; mismatches fall through to MERGE. */
   private readonly fingerprintCache = new Map<string, string>();
@@ -321,13 +324,98 @@ export class GraphRepository {
     };
   }
 
+  /** Map a subgraph record (one row of `nodes` Neo4j nodes + `edges` Neo4j
+   *  relationships) back into validated KGNode/KGEdge collections.
+   *
+   *  Nodes reuse `mapNode`; edges are reshaped from the relationship's stored
+   *  properties. A relationship's `source`/`target` aren't in its properties
+   *  (see `edgeProps`), so they're recovered by resolving the relationship's
+   *  start/end `elementId` against the KG `id` of the nodes returned in the
+   *  same row. Every candidate is run through `KGNodeSchema`/`KGEdgeSchema`;
+   *  malformed entries are dropped with a warning rather than thrown. */
   private mapSubgraph(record: Neo4jRecord): Subgraph {
-    // TODO(phase-2): map Neo4j record fields back into KGNode/KGEdge with full
-    // schema validation. Stubbed to keep Phase 0 lightweight.
-    return {
-      nodes: (record.get('nodes') ?? []) as KGNode[],
-      edges: (record.get('edges') ?? []) as KGEdge[],
-    };
+    const rawNodes = toArray(record.get('nodes'));
+    const rawEdges = toArray(record.get('edges'));
+
+    // elementId → KG node id, so relationship endpoints can be resolved.
+    const elementIdToNodeId = new Map<string, string>();
+    const nodes: KGNode[] = [];
+    for (const raw of rawNodes) {
+      const neo = raw as { elementId?: unknown; properties?: Record<string, unknown> };
+      if (!neo || typeof neo.properties !== 'object' || neo.properties === null) {
+        this.log.warn('mapSubgraph: dropping node record with no properties');
+        continue;
+      }
+      const candidate = this.mapNode({ properties: neo.properties });
+      const parsed = KGNodeSchema.safeParse(candidate);
+      if (!parsed.success) {
+        this.log.warn(
+          `mapSubgraph: dropping malformed node ${String(candidate.id)}: ${parsed.error.message}`,
+        );
+        continue;
+      }
+      if (typeof neo.elementId === 'string') {
+        elementIdToNodeId.set(neo.elementId, parsed.data.id);
+      }
+      nodes.push(parsed.data);
+    }
+
+    // `apoc.coll.flatten(collect(distinct relationships(path)))` deduplicates
+    // whole path-relationship lists, not individual relationships, so an edge
+    // lying on several paths arrives multiple times. Dedup by KG edge id.
+    const edges: KGEdge[] = [];
+    const seenEdgeIds = new Set<string>();
+    for (const raw of rawEdges) {
+      const rel = raw as {
+        startNodeElementId?: unknown;
+        endNodeElementId?: unknown;
+        properties?: Record<string, unknown>;
+      };
+      if (!rel || typeof rel.properties !== 'object' || rel.properties === null) {
+        this.log.warn('mapSubgraph: dropping edge record with no properties');
+        continue;
+      }
+      const p = rel.properties;
+      const edgeId = String(p.id);
+      if (seenEdgeIds.has(edgeId)) continue;
+      const source =
+        typeof rel.startNodeElementId === 'string'
+          ? elementIdToNodeId.get(rel.startNodeElementId)
+          : undefined;
+      const target =
+        typeof rel.endNodeElementId === 'string'
+          ? elementIdToNodeId.get(rel.endNodeElementId)
+          : undefined;
+      // Drop dangling edges: both endpoints must resolve to a node returned in
+      // the same row, otherwise source/target would point at nothing.
+      if (!source || !target) {
+        this.log.warn(
+          `mapSubgraph: dropping edge ${String(p.id)} with unresolvable endpoint(s)`,
+        );
+        continue;
+      }
+      const candidate = {
+        id: edgeId,
+        source,
+        target,
+        relation: p.relation as KGEdge['relation'],
+        weight: Number(p.weight ?? 0.4),
+        inferred: p.inferred === true,
+        createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
+        metadata: parseMetadata(p.metadataJson),
+      };
+      const parsed = KGEdgeSchema.safeParse(candidate);
+      if (!parsed.success) {
+        this.log.warn(
+          `mapSubgraph: dropping malformed edge ${edgeId}: ${parsed.error.message}`,
+        );
+        continue;
+      }
+      seenEdgeIds.add(edgeId);
+      edges.push(parsed.data);
+    }
+
+    return { nodes, edges };
   }
 
   /** Reshape a raw Neo4j node record into a KGNode. The metadata column is
@@ -355,6 +443,13 @@ export class GraphRepository {
       if (oldest !== undefined) this.fingerprintCache.delete(oldest);
     }
   }
+}
+
+/** Coerce a Neo4j record field that should be a collection into an array.
+ *  Null/undefined or non-array values yield an empty array so callers can
+ *  iterate without guarding. */
+function toArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
 }
 
 function parseMetadata(value: unknown): Record<string, unknown> {

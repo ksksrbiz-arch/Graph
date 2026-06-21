@@ -92,12 +92,12 @@ export class ZoteroConnector extends BaseConnector {
     config: ConnectorConfig,
     since: Date,
   ): AsyncGenerator<RawItem> {
-    const creds = this.oauth.decryptCredentials(config);
+    const creds = this.oauth.decryptCredentials(config) as ZoteroCredentialBlob;
     const apiKey = creds.accessToken;
 
-    // Determine the library path from config metadata (userId stored as
-    // the connector's external user id).
-    const libraryPath = this.resolveLibraryPath(config);
+    // The personal library is keyed by the connector's external userId; a
+    // `groupId` in the decrypted credential blob switches to a group library.
+    const libraryPath = this.resolveLibraryPath(config, creds);
     // Zotero supports full version-based incremental sync; for Phase 0 we
     // use date-based filtering instead (since parameter).
 
@@ -159,6 +159,13 @@ export class ZoteroConnector extends BaseConnector {
 
     const sourceUrl = data.url ?? (data.DOI ? `https://doi.org/${data.DOI}` : undefined);
 
+    // Authors and publication year are first-class reference metadata so
+    // downstream consumers (search, cortex) can filter without re-parsing.
+    const authors = (data.creators ?? [])
+      .map((c) => resolveCreatorName(c))
+      .filter((n): n is string => Boolean(n));
+    const year = extractYear(data.date);
+
     const node: KGNode = {
       id: nodeId,
       type: 'document',
@@ -169,6 +176,8 @@ export class ZoteroConnector extends BaseConnector {
       updatedAt: data.dateModified ?? isoNow(),
       metadata: {
         itemType: data.itemType,
+        authors,
+        year,
         abstractNote: data.abstractNote?.slice(0, 500) ?? null,
         doi: data.DOI ?? null,
         url: data.url ?? null,
@@ -230,15 +239,27 @@ export class ZoteroConnector extends BaseConnector {
     return { node, edges };
   }
 
-  /** Derive the Zotero library path.  If the config carries a `groupId`
-   *  metadata field it uses the group library; otherwise the personal library
-   *  for the userId. */
-  private resolveLibraryPath(config: ConnectorConfig): string {
-    const blob = config.credentials as unknown as ZoteroCredentialBlob;
-    const groupId = blob?.groupId?.trim() ?? null;
+  /** Derive the Zotero library path.  If the decrypted credentials carry a
+   *  `groupId` it uses the group library; otherwise the personal library for
+   *  the userId. */
+  private resolveLibraryPath(
+    config: ConnectorConfig,
+    creds: ZoteroCredentialBlob,
+  ): string {
+    const groupId = creds.groupId?.trim() ?? null;
     if (groupId) return `/groups/${groupId}`;
     return `/users/${config.userId}`;
   }
+}
+
+/** Pull a 4-digit year out of a free-form Zotero date string (e.g. "2021-03",
+ *  "March 2021", "2021"). Returns null when no plausible year is present. */
+function extractYear(date: string | undefined): number | null {
+  if (!date) return null;
+  const match = date.match(/\b(1\d{3}|2\d{3})\b/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  return Number.isFinite(year) ? year : null;
 }
 
 function resolveCreatorName(creator: ZoteroCreator): string | null {

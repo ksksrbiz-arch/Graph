@@ -1,47 +1,82 @@
-// Anthropic connector — ingests Anthropic API activity into the knowledge
-// graph.
+// Anthropic connector — ingests a user's exported Claude conversation history
+// into the knowledge graph.
 //
-// Authentication: uses a plain API key (sk-ant-…). No OAuth cycle needed.
+// Why an export, not the live API: the Anthropic API does not expose endpoints
+// for listing a user's Claude.ai conversation history. Users instead request a
+// data export (Settings → Privacy → Export data) which produces a
+// `conversations.json` file. This connector reads that export — it makes NO
+// live LLM/API calls.
 //
-// What Anthropic exposes today (2025): the Anthropic API does not provide
-// endpoints for listing a user's conversation history or stored objects.
-// What IS available and useful for a knowledge graph is the **models** list
-// (GET /v1/models), which surfaces every model the account has access to
-// as `concept` nodes, giving the graph visibility into which Anthropic models
-// are being used alongside the rest of the connectome.
+// Where the export lives: the exported JSON is handed to the connector through
+// the encrypted CredentialPayload, matching the file-based connector pattern.
+// We accept it either as a parsed object/array on `extra.export` /
+// `extra.conversations`, or as a raw JSON string in `accessToken`. This keeps
+// the connector offline and deterministic.
 //
-// The connector also validates the API key on every sync so misconfigured
-// keys surface as a `failed` sync status rather than silently producing no
-// data. When Anthropic ships usage/history APIs this file is the extension
-// point.
+// Mapping:
+//   Conversation → KGNode type `document` (the conversation as a whole).
+//   Message      → KGNode type `note`, linked to its conversation with a
+//                  PART_OF edge. Messages carry sender + text in metadata.
 //
-// Docs: https://docs.anthropic.com/en/api/models-list
+// Idempotency (Rule 12): node ids are derived from the conversation/message
+// uuid via `deterministicUuid`, so re-importing the same export is a MERGE.
+//
+// Docs: https://privacy.anthropic.com/en/articles/9450526-how-can-i-export-my-claude-ai-data
 
 import { Injectable, Logger } from '@nestjs/common';
-import type { ConnectorConfig, KGNode } from '@pkg/shared';
+import type { ConnectorConfig, KGEdge, KGNode } from '@pkg/shared';
 import { BaseConnector, type RawItem, type TransformResult } from './base.connector';
 import {
   deterministicUuid,
   isoNow,
+  newEdgeId,
 } from './connector-utils';
 import { OAuthService } from '../oauth/oauth.service';
 
-interface AnthropicModel {
-  id: string;
-  type: 'model';
-  display_name: string;
-  created_at: string; // ISO-8601
+// ── Claude export shapes ───────────────────────────────────────────────────
+
+interface ClaudeContentBlock {
+  type?: string;
+  text?: string;
 }
 
-interface AnthropicModelsResponse {
-  data: AnthropicModel[];
-  has_more: boolean;
-  first_id: string | null;
-  last_id: string | null;
+interface ClaudeChatMessage {
+  uuid?: string;
+  /** 'human' or 'assistant'. */
+  sender?: string;
+  /** Legacy/flat exports place the message text here. */
+  text?: string;
+  /** Newer exports place text inside a content-block array. */
+  content?: ClaudeContentBlock[];
+  created_at?: string; // ISO-8601
 }
 
-const BASE_URL = 'https://api.anthropic.com/v1';
-const ANTHROPIC_VERSION = '2023-06-01';
+interface ClaudeConversation {
+  uuid?: string;
+  name?: string;
+  created_at?: string; // ISO-8601
+  updated_at?: string; // ISO-8601
+  chat_messages?: ClaudeChatMessage[];
+}
+
+// ── Constants ──────────────────────────────────────────────────────────────
+
+const MAX_LABEL_LENGTH = 200;
+const MAX_TEXT_LENGTH = 2000;
+/** PART_OF edge weight for message→conversation: structural containment. */
+const MESSAGE_PART_OF_WEIGHT = 0.8;
+
+/** Wrapper payloads yielded by fetchIncremental and consumed by transform. */
+interface ConversationItem {
+  kind: 'conversation';
+  conversation: ClaudeConversation;
+}
+interface MessageItem {
+  kind: 'message';
+  conversationUuid: string;
+  message: ClaudeChatMessage;
+}
+type AnthropicRaw = ConversationItem | MessageItem;
 
 @Injectable()
 export class AnthropicConnector extends BaseConnector {
@@ -59,61 +94,187 @@ export class AnthropicConnector extends BaseConnector {
     since: Date,
   ): AsyncGenerator<RawItem> {
     const creds = this.oauth.decryptCredentials(config);
-    const apiKey = creds.accessToken;
+    const conversations = parseExport(creds, this.log);
 
-    // Anthropic models list is small (< 100 items) so one page is enough.
-    const params = new URLSearchParams({ limit: '100' });
-
-    const res = await fetch(`${BASE_URL}/models?${params.toString()}`, {
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-        accept: 'application/json',
-      },
-    });
-
-    if (!res.ok) {
-      // Surface the failure so the sync orchestrator records `failed` instead
-      // of a silent zero-item success — the docstring above promises this and
-      // it's how users notice misconfigured keys / endpoint regressions.
-      const text = await res.text().catch(() => '');
-      const detail = text ? `: ${text.slice(0, 160)}` : '';
-      throw new Error(`anthropic /models failed: HTTP ${res.status}${detail}`);
-    }
-
-    const json = (await res.json()) as AnthropicModelsResponse;
-    for (const model of json.data ?? []) {
-      // Yield only models introduced after the last sync. Anthropic's /models
-      // endpoint does not guarantee sort order, so we filter with `continue`
-      // rather than `break` (unlike connectors with desc-sorted cursors).
-      const createdMs = Date.parse(model.created_at);
-      if (Number.isNaN(createdMs)) {
-        // Skip malformed timestamps so incremental syncs stay deterministic:
-        // without a trustworthy created_at we cannot safely decide whether this
-        // model is new relative to `since`.
-        this.log.warn(`anthropic model ${model.id} has invalid created_at: ${model.created_at}`);
+    for (const conversation of conversations) {
+      const uuid = conversation.uuid;
+      if (!uuid) {
+        this.log.warn('anthropic export: skipping conversation without a uuid');
         continue;
       }
-      if (createdMs <= since.getTime()) continue;
-      yield { externalId: `model:${model.id}`, raw: model };
+
+      // Incremental filter: a conversation's updated_at (falling back to
+      // created_at) is its watermark. Skip anything not touched since `since`.
+      const touchedMs = parseIso(
+        conversation.updated_at ?? conversation.created_at,
+      );
+      if (touchedMs !== undefined && touchedMs <= since.getTime()) continue;
+
+      yield {
+        externalId: uuid,
+        raw: { kind: 'conversation', conversation } satisfies AnthropicRaw,
+      };
+
+      for (const message of conversation.chat_messages ?? []) {
+        if (!message.uuid) continue;
+        if (!messageText(message)) continue;
+        yield {
+          externalId: `message:${uuid}:${message.uuid}`,
+          raw: {
+            kind: 'message',
+            conversationUuid: uuid,
+            message,
+          } satisfies AnthropicRaw,
+        };
+      }
     }
   }
 
   transform(raw: RawItem): TransformResult {
-    const model = raw.raw as AnthropicModel;
+    const item = raw.raw as AnthropicRaw;
+    if (item.kind === 'conversation') {
+      return this.transformConversation(item.conversation);
+    }
+    return this.transformMessage(item);
+  }
+
+  // ── transform helpers ──────────────────────────────────────────────────
+
+  private transformConversation(c: ClaudeConversation): TransformResult {
+    const uuid = c.uuid ?? 'unknown';
+    const createdAt = c.created_at ?? isoNow();
+    const updatedAt = c.updated_at ?? createdAt;
+    const messageCount = (c.chat_messages ?? []).filter(
+      (m) => !!messageText(m),
+    ).length;
+
     const node: KGNode = {
-      id: deterministicUuid('anthropic', `model:${model.id}`),
-      type: 'concept',
-      label: model.display_name.slice(0, 200),
+      id: deterministicUuid('anthropic', uuid),
+      type: 'document',
+      label: (c.name?.trim() || 'Untitled conversation').slice(0, MAX_LABEL_LENGTH),
       sourceId: 'anthropic',
-      sourceUrl: `https://docs.anthropic.com/en/docs/about-claude/models/overview`,
-      createdAt: model.created_at,
-      updatedAt: isoNow(),
+      sourceUrl: `https://claude.ai/chat/${uuid}`,
+      createdAt,
+      updatedAt,
       metadata: {
-        anthropicId: model.id,
-        modelType: model.type,
+        anthropicConversationId: uuid,
+        messageCount,
       },
     };
     return { node, edges: [] };
   }
+
+  private transformMessage(item: MessageItem): TransformResult {
+    const { message, conversationUuid: convId } = item;
+    const messageId = message.uuid ?? 'unknown';
+    const externalId = `message:${convId}:${messageId}`;
+    const text = messageText(message);
+    const sender = message.sender ?? 'unknown';
+    const createdAt = message.created_at ?? isoNow();
+
+    const node: KGNode = {
+      id: deterministicUuid('anthropic', externalId),
+      type: 'note',
+      label: labelFromText(sender, text),
+      sourceId: 'anthropic',
+      createdAt,
+      updatedAt: createdAt,
+      metadata: {
+        anthropicMessageId: messageId,
+        conversationId: convId,
+        sender,
+        text: text.slice(0, MAX_TEXT_LENGTH),
+      },
+    };
+
+    // Message PART_OF its parent conversation. The conversation node id is
+    // derived from the same deterministic scheme, so the edge resolves even
+    // though the conversation node is yielded as a separate item.
+    const conversationNodeId = deterministicUuid('anthropic', convId);
+    const edges: KGEdge[] = [
+      edgeBetween(node.id, conversationNodeId, 'PART_OF', MESSAGE_PART_OF_WEIGHT),
+    ];
+    return { node, edges };
+  }
+}
+
+// ── module-level helpers ────────────────────────────────────────────────────
+
+/** Read and normalize the exported conversations array from the credentials. */
+function parseExport(
+  creds: { accessToken?: string; extra?: Record<string, unknown> },
+  log: Logger,
+): ClaudeConversation[] {
+  // Preferred: a parsed export object/array on `extra`.
+  const fromExtra =
+    creds.extra?.export ?? creds.extra?.conversations ?? undefined;
+  if (fromExtra !== undefined) return coerceConversations(fromExtra);
+
+  // Fallback: a raw JSON string in `accessToken`.
+  const raw = creds.accessToken?.trim();
+  if (raw) {
+    try {
+      return coerceConversations(JSON.parse(raw));
+    } catch {
+      log.warn('anthropic export: accessToken is not valid JSON; nothing to ingest');
+      return [];
+    }
+  }
+
+  log.warn('anthropic export: no export data found in credentials');
+  return [];
+}
+
+/** A Claude export is either a top-level array of conversations or an object
+ *  with a `conversations` array. Normalize both into a flat array. */
+function coerceConversations(value: unknown): ClaudeConversation[] {
+  if (Array.isArray(value)) return value as ClaudeConversation[];
+  if (value && typeof value === 'object') {
+    const inner = (value as { conversations?: unknown }).conversations;
+    if (Array.isArray(inner)) return inner as ClaudeConversation[];
+  }
+  return [];
+}
+
+/** Resolve a message's text from either the flat `text` field or the content
+ *  block array, joining text blocks. */
+function messageText(message: ClaudeChatMessage): string {
+  if (typeof message.text === 'string' && message.text.trim()) {
+    return message.text.trim();
+  }
+  const blocks = message.content ?? [];
+  return blocks
+    .map((b) => (typeof b.text === 'string' ? b.text : ''))
+    .join('\n')
+    .trim();
+}
+
+function labelFromText(sender: string, text: string): string {
+  const firstLine = text.split('\n')[0]?.trim() ?? '';
+  const snippet = firstLine.length > 0 ? firstLine : text;
+  return `${sender}: ${snippet}`.trim().slice(0, MAX_LABEL_LENGTH);
+}
+
+function parseIso(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
+function edgeBetween(
+  source: string,
+  target: string,
+  relation: KGEdge['relation'],
+  weight: number,
+): KGEdge {
+  return {
+    id: newEdgeId(),
+    source,
+    target,
+    relation,
+    weight,
+    inferred: false,
+    createdAt: isoNow(),
+    metadata: {},
+  };
 }

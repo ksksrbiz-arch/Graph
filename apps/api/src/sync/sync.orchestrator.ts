@@ -1,8 +1,9 @@
 // In-process sync orchestrator. Resolves a connector by id, runs
 // fetchIncremental → transform → upsert + perceive, and reports progress
-// over the /sync WebSocket namespace. ADR-005 commits to BullMQ for
-// production; the public method shape (`enqueue` / `runNow`) is identical to
-// the eventual BullMQ Queue, so the swap is a one-file change.
+// over the /sync WebSocket namespace. Scheduling/transport rides on BullMQ
+// (ADR-005, see sync.scheduler.ts); this orchestrator stays the in-process
+// processor, and its public method shape (`enqueue` / `runNow`) is unchanged —
+// the BullMQ worker calls straight into `enqueue`.
 //
 // Concurrency: at most one sync per (userId, connectorId) at a time. A second
 // `enqueue` while one is already in flight is coalesced — we log it but skip.
