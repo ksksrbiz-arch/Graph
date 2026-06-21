@@ -36,6 +36,9 @@ Hard rules:
 - Don't invent observations. The system shows them to you below.
 - Final answers are plain English, not JSON, not markdown fences.
 
+Relevant memories from the knowledge graph:
+{RECALLED}
+
 Working memory (most recent first):
 {ATTENTION}
 
@@ -233,7 +236,7 @@ function truncateAtSecondStep(t) {
 
 
 function renderRecalled(matches) {
-  if (!matches?.length) return '(none)';
+  if (!matches?.length) return '(no relevant memories found)';
   return matches
     .slice(0, 6)
     .map((m, i) => `  ${i+1}. [${m.type}] ${m.label} (id=${m.nodeId?.slice(0,8)}, score=${m.score?.toFixed?.(3) ?? m.score})`)
