@@ -17,10 +17,13 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import {
   PublicIngestService,
+  type GraphIngestResult,
   type PublicIngestResult,
 } from './public-ingest.service';
 
 const TEXT_MAX_LENGTH = 200_000;
+const GRAPH_MAX_NODES = 5_000;
+const GRAPH_MAX_EDGES = 20_000;
 
 class IngestTextDto {
   userId!: string;
@@ -40,6 +43,13 @@ class IngestUrlDto {
   title?: string;
 }
 
+class IngestGraphDto {
+  userId!: string;
+  nodes!: unknown[];
+  edges?: unknown[];
+  sourceId?: string;
+}
+
 @ApiTags('public')
 @Controller('public')
 // Tighter ceiling than the global 100/min — ingest is more expensive than a
@@ -54,7 +64,7 @@ export class PublicController {
     return {
       ok: true,
       enabled: this.ingest.isEnabled(),
-      formats: ['text', 'markdown', 'url'],
+      formats: ['text', 'markdown', 'url', 'graph'],
     };
   }
 
@@ -103,6 +113,28 @@ export class PublicController {
       throw new BadRequestException('url must be a valid http(s) URL');
     }
     return this.ingest.ingestUrl(dto.userId, dto.url, dto.title);
+  }
+
+  @Post('ingest/graph')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Ingest a pre-parsed {nodes, edges} fragment (batch folder upload)',
+  })
+  ingestGraph(@Body() dto: IngestGraphDto): Promise<GraphIngestResult> {
+    requireString(dto as unknown as Record<string, unknown>, 'userId');
+    if (!Array.isArray(dto.nodes) || dto.nodes.length === 0) {
+      throw new BadRequestException('nodes must be a non-empty array');
+    }
+    if (dto.nodes.length > GRAPH_MAX_NODES) {
+      throw new BadRequestException(`nodes exceeds ${GRAPH_MAX_NODES} per request`);
+    }
+    const edges = Array.isArray(dto.edges) ? dto.edges : [];
+    if (edges.length > GRAPH_MAX_EDGES) {
+      throw new BadRequestException(`edges exceeds ${GRAPH_MAX_EDGES} per request`);
+    }
+    // Allowlist gate (size is bounded by the node/edge caps above).
+    this.ingest.assertAllowed(dto.userId, 0);
+    return this.ingest.ingestGraph(dto.userId, dto.nodes, edges, dto.sourceId);
   }
 
   @Get('graph')

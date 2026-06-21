@@ -10,6 +10,10 @@ The spec-grade, API-driven graph canvas (Phase 3) now lives here under
   edges), double-click ego-network focus (`GET /graph/subgraph`).
 - Right-click context menu, Shift+Click multi-select + bulk delete, client-side
   type filter panel, search, fit-to-screen (`F`).
+- **Batch folder upload** (toolbar → *Ingest*): drop or pick a project folder;
+  files are parsed in-browser (markdown/source/json/csv/text) into a graph
+  fragment and posted in chunks to `POST /api/v1/public/ingest/graph`
+  (`src/graph/batch/parse.ts` + `BatchUploadPanel.tsx`).
 
 Data loads from `GET /api/v1/public/graph` using Phase-0 anon mode
 (`?userId=local`), so no login is required in dev. Remaining Phase-3 work

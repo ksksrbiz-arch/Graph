@@ -57,6 +57,33 @@ export function searchNodes(userId: string, q: string, limit = 20): Promise<KGNo
   return getJson<KGNode[]>(withUser('/graph/search', userId, { q, limit: String(limit) }));
 }
 
+export interface GraphIngestResult {
+  userId: string;
+  sourceId: string;
+  nodes: number;
+  edges: number;
+  skippedNodes: number;
+  skippedEdges: number;
+  brainQueuedReload: boolean;
+}
+
+/** Ingest a pre-parsed `{nodes, edges}` fragment (batch folder upload). */
+export async function ingestGraph(
+  userId: string,
+  payload: { nodes: KGNode[]; edges: KGEdge[]; sourceId?: string },
+): Promise<GraphIngestResult> {
+  const res = await fetch(withUser('/public/ingest/graph', userId), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ userId, ...payload }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return (await res.json()) as GraphIngestResult;
+}
+
 /** Delete a node. Returns true on success (204). */
 export async function deleteNode(userId: string, id: string): Promise<void> {
   const res = await fetch(withUser(`/graph/nodes/${encodeURIComponent(id)}`, userId), {
