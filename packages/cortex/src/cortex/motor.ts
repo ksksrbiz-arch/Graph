@@ -10,7 +10,7 @@
 //   3. investigate — tag isolated/low-strength memories that deserve deeper
 //      digging on a future think() call.
 
-import type { LinkPrediction, ReasoningNode } from '@pkg/reasoning';
+import type { LinkPrediction } from '@pkg/reasoning';
 import type {
   Association,
   CortexAction,

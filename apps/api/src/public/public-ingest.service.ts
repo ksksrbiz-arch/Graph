@@ -34,7 +34,7 @@ export interface PublicIngestRequest {
 
 export interface PublicIngestResult {
   userId: string;
-  format: 'text' | 'markdown';
+  format: 'text' | 'markdown' | 'url';
   parentId: string;
   nodes: number;
   edges: number;
@@ -246,9 +246,10 @@ export class PublicIngestService {
 
       const html = await res.text();
       return this.extractReadableText(html, rawUrl);
-    } catch (err: any) {
-      if (err.name === 'AbortError') throw new Error('fetch timed out');
-      throw new Error(`Failed to fetch URL: ${err.message || err}`);
+    } catch (err: unknown) {
+      const e = err as { name?: string; message?: string };
+      if (e.name === 'AbortError') throw new Error('fetch timed out');
+      throw new Error(`Failed to fetch URL: ${e.message || err}`);
     } finally {
       clearTimeout(timeout);
     }

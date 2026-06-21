@@ -1,4 +1,4 @@
-import type { CortexAction, CortexNode, Thought } from '@pkg/cortex';
+import type { CortexAction, CortexNode } from '@pkg/cortex';
 import type { ConnectorConfig, ConnectorId } from '@pkg/shared';
 import type { AuditService } from '../audit/audit.service';
 import type { AttentionService } from '../brain/attention.service';

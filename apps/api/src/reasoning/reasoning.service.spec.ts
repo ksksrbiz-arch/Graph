@@ -85,7 +85,7 @@ describe('ReasoningService', () => {
     );
     const path = await svc.reasoningPath('u', 'a', 'c');
     expect(path).not.toBeNull();
-    expect(path!.nodes.map((n: any) => n.id)).toEqual(['a', 'b', 'c']);
+    expect(path!.nodes.map((n: { id: string }) => n.id)).toEqual(['a', 'b', 'c']);
   });
 
   it('summarise returns a neighbourhood summary', async () => {
