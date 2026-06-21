@@ -256,6 +256,32 @@ External OAuth (Google, GitHub, Microsoft, Notion, Todoist, Linear)
 
 Decisions are logged in [docs/adr/](docs/adr/README.md).
 
+## Autonomous Code Improvement Loop
+---------------------------------
+
+The repository contains a built-in **Autonomous Code Improvement Loop** designed to continuously monitor, optimize, and safely extend the project codebase. It runs fully autonomously or in a hybrid assisted mode.
+
+### Key Capabilities
+* **Automatic Scanning**: Inspects the codebase for optimizations, documentation needs, or fetches open issue tickets (GitHub, Linear).
+* **Test Validation**: Executes the test suite configured in `config.json` (such as `npm test` or local test runners) to verify that any code refactoring does not break functionality.
+* **Pull Request Lifecycle**: Automatically creates descriptive patch branches, commits the updated files, and opens fully documented Pull Requests on GitHub.
+
+### Workflow & Architecture
+1. **Runner (`scheduled_runner.py`)**: Runs on a schedule or interval to initiate the process.
+2. **Coder (`autonomous_coder.py`)**: Checks the configured `improvement_mode`, fetches any open repository issues, and determines candidates for improvement.
+3. **Refactoring Modes**:
+   * **Fully Autonomous**: Queries configured LLM endpoints (e.g., Groq via `llama-3.3-70b-versatile`) to generate safe code patches.
+   * **Hybrid (Assisted) Mode**: When local API keys are not configured, details are saved to `assisted_prompt.json` for manual or agent-assisted execution.
+4. **Applier (`apply_assisted_fix.py`)**: Applies generated solutions, verifies them using the local test suite, and opens the GitHub PR.
+
+### Loop Configuration
+Configuration is maintained in `.workspace/config.json`:
+* `repo_url`: Target repository URL.
+* `improvement_mode`: `"auto"` (scan files), `"issues"` (resolve open issues), or `"both"`.
+* `test_command`: Script or CLI command to run tests (e.g. `"npm test"`). Set to `"true"` if tests are handled externally.
+* `groq_api_key` & `groq_model`: Credentials and target LLM for autonomous runs.
+* `email_notifications`: Toggles email reporting on run completion.
+
 ## Roadmap
 ---------
 
