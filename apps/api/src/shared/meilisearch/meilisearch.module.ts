@@ -5,9 +5,12 @@
 import { Global, Module } from '@nestjs/common';
 import MeiliSearch from 'meilisearch';
 import { loadEnv } from '../../config/env';
+import { MEILI_CLIENT } from './meilisearch.tokens';
 import { SearchService } from './search.service';
 
-export const MEILI_CLIENT = Symbol('MEILI_CLIENT');
+// Re-exported for existing importers; the canonical definition lives in
+// ./meilisearch.tokens to avoid a module ↔ service import cycle.
+export { MEILI_CLIENT };
 
 @Global()
 @Module({

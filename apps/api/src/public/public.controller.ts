@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { IsArray, IsOptional, IsString } from 'class-validator';
 import {
   PublicIngestService,
   type GraphIngestResult,
@@ -25,29 +26,32 @@ const TEXT_MAX_LENGTH = 200_000;
 const GRAPH_MAX_NODES = 5_000;
 const GRAPH_MAX_EDGES = 20_000;
 
+// The global ValidationPipe runs with `whitelist: true`, which strips any
+// property that has no class-validator decorator. These DTOs must therefore
+// decorate every field they expect to receive, or the body arrives empty.
 class IngestTextDto {
-  userId!: string;
-  text!: string;
-  title?: string;
+  @IsString() userId!: string;
+  @IsString() text!: string;
+  @IsOptional() @IsString() title?: string;
 }
 
 class IngestMarkdownDto {
-  userId!: string;
-  markdown!: string;
-  title?: string;
+  @IsString() userId!: string;
+  @IsString() markdown!: string;
+  @IsOptional() @IsString() title?: string;
 }
 
 class IngestUrlDto {
-  userId!: string;
-  url!: string;
-  title?: string;
+  @IsString() userId!: string;
+  @IsString() url!: string;
+  @IsOptional() @IsString() title?: string;
 }
 
 class IngestGraphDto {
-  userId!: string;
-  nodes!: unknown[];
-  edges?: unknown[];
-  sourceId?: string;
+  @IsString() userId!: string;
+  @IsArray() nodes!: unknown[];
+  @IsOptional() @IsArray() edges?: unknown[];
+  @IsOptional() @IsString() sourceId?: string;
 }
 
 @ApiTags('public')

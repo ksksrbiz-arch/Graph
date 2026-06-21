@@ -36,7 +36,9 @@ export class GqlSubgraph {
 @ObjectType()
 export class GqlNodePage {
   @Field(() => [GqlKGNode]) items!: GqlKGNode[];
-  @Field({ nullable: true }) nextCursor?: string | null;
+  // Explicit type: `string | null` reflects as `Object`, which the schema
+  // builder can't resolve on its own.
+  @Field(() => String, { nullable: true }) nextCursor?: string | null;
 }
 
 @ObjectType()
