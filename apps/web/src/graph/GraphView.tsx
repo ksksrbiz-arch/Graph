@@ -17,6 +17,7 @@ import { endpointId, toViewGraph, type GraphLink, type GraphNode } from './types
 import { NodePanel } from './NodePanel';
 import { FilterPanel } from './FilterPanel';
 import { ContextMenu, type ContextMenuState } from './ContextMenu';
+import { BatchUploadPanel } from './BatchUploadPanel';
 
 type FgNode = NodeObject<GraphNode>;
 type FgLink = LinkObject<GraphNode, GraphLink>;
@@ -71,6 +72,7 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<KGNode[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showUpload, setShowUpload] = useState(false);
 
   // ── Data load ────────────────────────────────────────────────
   const reload = useCallback(async () => {
@@ -410,6 +412,9 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
         <button type="button" style={toolBtn} onClick={() => fgRef.current?.zoomToFit(500, 50)} title="Fit to screen (F)">
           Fit
         </button>
+        <button type="button" style={toolBtn} onClick={() => setShowUpload(true)} title="Batch folder upload">
+          Ingest
+        </button>
         <button type="button" style={toolBtn} onClick={() => void reload()} title="Reload graph">
           Reload
         </button>
@@ -475,6 +480,14 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
             selectNode(id);
             centerOn(nodesById.get(id));
           }}
+        />
+      )}
+
+      {showUpload && (
+        <BatchUploadPanel
+          userId={userId}
+          onClose={() => setShowUpload(false)}
+          onIngested={() => void reload()}
         />
       )}
 

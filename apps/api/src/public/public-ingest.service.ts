@@ -13,7 +13,15 @@ import {
   Logger,
   PayloadTooLargeException,
 } from '@nestjs/common';
-import type { KGEdge, KGNode } from '@pkg/shared';
+import {
+  EDGE_RELATIONS,
+  NODE_TYPES,
+  type ConnectorId,
+  type EdgeRelation,
+  type KGEdge,
+  type KGNode,
+  type NodeType,
+} from '@pkg/shared';
 import { loadEnv } from '../config/env';
 import { splitCsvEnv } from '../config/env-utils';
 import { BrainService } from '../brain/brain.service';
@@ -42,6 +50,27 @@ export interface PublicIngestResult {
 }
 
 const RELOAD_DEBOUNCE_MS = 4_000;
+
+// Per-request caps for the pre-parsed graph ingest path (mirrors the Worker's
+// SNAPSHOT_MAX_* ceilings). Keeps a single batch chunk bounded.
+const GRAPH_MAX_NODES = 5_000;
+const GRAPH_MAX_EDGES = 20_000;
+const ID_MAX = 512;
+const LABEL_MAX = 1_000;
+const TYPE_MAX = 64;
+
+const NODE_TYPE_SET = new Set<string>(NODE_TYPES);
+const EDGE_RELATION_SET = new Set<string>(EDGE_RELATIONS);
+
+export interface GraphIngestResult {
+  userId: string;
+  sourceId: string;
+  nodes: number;
+  edges: number;
+  skippedNodes: number;
+  skippedEdges: number;
+  brainQueuedReload: boolean;
+}
 
 @Injectable()
 export class PublicIngestService {
@@ -110,6 +139,59 @@ export class PublicIngestService {
       parentId: parsed.parentId,
       nodes: parsed.nodes.length,
       edges: parsed.edges.length,
+      brainQueuedReload: queued,
+    };
+  }
+
+  /** Ingest a pre-parsed `{nodes, edges}` graph fragment (batch folder upload).
+   *  Untrusted input is sanitised into valid KGNode/KGEdge before persistence,
+   *  mirroring the Worker's `sanitizeGraphNode`/`sanitizeGraphEdge`. */
+  async ingestGraph(
+    userId: string,
+    rawNodes: unknown[],
+    rawEdges: unknown[],
+    sourceIdHint?: string,
+  ): Promise<GraphIngestResult> {
+    const sourceId = trimStr(sourceIdHint, TYPE_MAX) ?? 'client';
+    const now = new Date().toISOString();
+
+    const nodes: KGNode[] = [];
+    let skippedNodes = 0;
+    for (const raw of rawNodes.slice(0, GRAPH_MAX_NODES)) {
+      const node = sanitizeNode(raw, sourceId, now);
+      if (node) nodes.push(node);
+      else skippedNodes += 1;
+    }
+
+    const present = new Set(nodes.map((n) => n.id));
+    const edges: KGEdge[] = [];
+    let skippedEdges = 0;
+    for (const raw of rawEdges.slice(0, GRAPH_MAX_EDGES)) {
+      const edge = sanitizeEdge(raw, now);
+      // Drop dangling edges so Neo4j MERGE doesn't create phantom endpoints.
+      if (edge && present.has(edge.source) && present.has(edge.target)) edges.push(edge);
+      else skippedEdges += 1;
+    }
+
+    await this.persist(userId, { nodes, edges, parentId: '' });
+
+    let queued = false;
+    if (this.brain.isRunning(userId)) {
+      for (const node of nodes) this.sensory.perceive(userId, node);
+      this.scheduleReload(userId);
+      queued = true;
+    }
+
+    this.log.log(
+      `public graph ingest user=${userId} source=${sourceId} +${nodes.length} nodes / ${edges.length} edges (skipped ${skippedNodes}/${skippedEdges})`,
+    );
+    return {
+      userId,
+      sourceId,
+      nodes: nodes.length,
+      edges: edges.length,
+      skippedNodes,
+      skippedEdges,
       brainQueuedReload: queued,
     };
   }
@@ -323,4 +405,77 @@ function defaultTitle(req: PublicIngestRequest): string {
   if (req.format === 'markdown') return `Pasted markdown — ${stamp}`;
   if (req.format === 'url') return `Web page — ${stamp}`;
   return `Pasted text — ${stamp}`;
+}
+
+// ── graph-fragment sanitisers (parity with src/worker.js) ───────────────
+
+function trimStr(value: unknown, max: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function sanitizeMeta(value: unknown): Record<string, unknown> {
+  const rec = asRecord(value);
+  if (!rec) return {};
+  const out: Record<string, unknown> = {};
+  let count = 0;
+  for (const [key, entry] of Object.entries(rec)) {
+    if (count >= 50) break;
+    if (typeof entry === 'string') out[key] = entry.slice(0, 2_000);
+    else if (typeof entry === 'number' && Number.isFinite(entry)) out[key] = entry;
+    else if (typeof entry === 'boolean') out[key] = entry;
+    else continue;
+    count += 1;
+  }
+  return out;
+}
+
+function sanitizeNode(raw: unknown, fallbackSourceId: string, now: string): KGNode | null {
+  const rec = asRecord(raw);
+  if (!rec) return null;
+  const id = trimStr(rec.id, ID_MAX);
+  if (!id) return null;
+  const typeStr = trimStr(rec.type, TYPE_MAX);
+  const type: NodeType = typeStr && NODE_TYPE_SET.has(typeStr) ? (typeStr as NodeType) : 'note';
+  return {
+    id,
+    label: trimStr(rec.label, LABEL_MAX) ?? id,
+    type,
+    sourceId: (trimStr(rec.sourceId, TYPE_MAX) ?? fallbackSourceId) as ConnectorId,
+    createdAt: trimStr(rec.createdAt, 64) ?? now,
+    updatedAt: trimStr(rec.updatedAt, 64) ?? now,
+    metadata: sanitizeMeta(rec.metadata),
+    ...(trimStr(rec.sourceUrl, 2_048) ? { sourceUrl: trimStr(rec.sourceUrl, 2_048) } : {}),
+  };
+}
+
+function sanitizeEdge(raw: unknown, now: string): KGEdge | null {
+  const rec = asRecord(raw);
+  if (!rec) return null;
+  const source = trimStr(rec.source, ID_MAX);
+  const target = trimStr(rec.target, ID_MAX);
+  if (!source || !target || source === target) return null;
+  const relStr = trimStr(rec.relation, TYPE_MAX);
+  const relation: EdgeRelation =
+    relStr && EDGE_RELATION_SET.has(relStr) ? (relStr as EdgeRelation) : 'RELATED_TO';
+  const weight = typeof rec.weight === 'number' && Number.isFinite(rec.weight)
+    ? Math.max(0, Math.min(1, rec.weight))
+    : 0.5;
+  return {
+    id: trimStr(rec.id, ID_MAX) ?? `${source}|${relation}|${target}`,
+    source,
+    target,
+    relation,
+    weight,
+    inferred: typeof rec.inferred === 'boolean' ? rec.inferred : false,
+    createdAt: trimStr(rec.createdAt, 64) ?? now,
+    metadata: sanitizeMeta(rec.metadata),
+  };
 }
