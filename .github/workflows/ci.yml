@@ -139,11 +139,10 @@ jobs:
           MEILI_MASTER_KEY: masterKey
           MEILI_NO_ANALYTICS: "true"
         ports: ["7700:7700"]
-        options: >-
-          --health-cmd "wget -qO- http://localhost:7700/health || exit 1"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
+        # No in-container --health-cmd: the meilisearch image ships no
+        # wget/curl, so a healthcheck there is always unhealthy and the
+        # container "fails to initialize". We wait for it from the runner
+        # (which has curl) in a step below instead.
     env:
       NEO4J_URI: bolt://localhost:7687
       NEO4J_USER: neo4j
@@ -166,6 +165,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter "./packages/*" run build
+      # Wait for Meilisearch from the runner (its container has no healthcheck).
+      - name: Wait for Meilisearch
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:7700/health >/dev/null 2>&1; then
+              echo "meilisearch ready"; exit 0
+            fi
+            echo "waiting for meilisearch ($i)…"; sleep 2
+          done
+          echo "meilisearch did not become ready" >&2; exit 1
       # Load the Postgres bootstrap schema (users, audit, oauth_states,
       # pending_motor_actions, …) so audited/auth paths have their tables.
       - run: |
