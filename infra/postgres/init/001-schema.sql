@@ -93,6 +93,29 @@ CREATE TABLE IF NOT EXISTS agent_permission_grants (
 CREATE INDEX IF NOT EXISTS agent_permission_grants_user_idx
   ON agent_permission_grants (user_id, granted_at DESC);
 
+-- ── pending_motor_actions (human-in-the-loop approval queue) ────────
+-- Motor intents that the safety supervisor routes to 'requires-approval'
+-- land here pending an explicit human approve/reject decision.
+-- user_id / decided_by are TEXT (not a users FK) to match the JwtAuthGuard
+-- Phase-0 anon-mode subject (default 'local'), exactly like
+-- agent_permission_grants above.
+CREATE TABLE IF NOT EXISTS pending_motor_actions (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      TEXT NOT NULL,
+  action       TEXT NOT NULL,
+  payload      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  neuron_id    TEXT,
+  confidence   DOUBLE PRECISION NOT NULL DEFAULT 0,
+  status       TEXT NOT NULL DEFAULT 'pending'
+                 CHECK (status IN ('pending','approved','rejected')),
+  decided_by   TEXT,
+  decision_note TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS pending_motor_actions_pending_idx
+  ON pending_motor_actions (user_id, created_at DESC) WHERE status = 'pending';
+
 -- ── oauth_states (pending OAuth handshakes — PKCE/CSRF) ─────────────
 -- Short-lived, single-use rows: created when an authorize URL is built and
 -- deleted (read-once) on the provider callback. Persisting these means PKCE
