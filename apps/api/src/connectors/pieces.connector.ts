@@ -198,10 +198,10 @@ export class PiecesConnector extends BaseConnector {
     const { asset } = raw.raw as { asset: PiecesAsset; observedAt: string };
 
     const language = detectLanguage(asset);
-    // Code snippets with a detected language land in the `motor` region (commit
-    // type); plain notes / generic text land in `memory` (note type).  The
-    // cortex's regionForNode mapping drives the final categorization.
-    const nodeType: KGNode['type'] = language ? 'commit' : 'note';
+    // Snippets with a detected programming language become `code` nodes; plain
+    // notes / generic text become `note` nodes (memory region). The cortex's
+    // regionForNode mapping drives the final categorization downstream.
+    const nodeType: KGNode['type'] = language ? 'code' : 'note';
 
     const label = resolveLabel(asset, language);
     const description = asset.description?.onboarding?.text ?? null;
