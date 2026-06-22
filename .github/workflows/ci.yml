@@ -204,7 +204,7 @@ jobs:
           # config files arrive with Phases 3 + 8 respectively.
           if [ -f apps/web/playwright.config.ts ]; then echo "e2e=true" >> $GITHUB_OUTPUT; else echo "e2e=false" >> $GITHUB_OUTPUT; fi
           if [ -f apps/web/lighthouserc.json ]; then echo "lighthouse=true" >> $GITHUB_OUTPUT; else echo "lighthouse=false" >> $GITHUB_OUTPUT; fi
-          if [ -f apps/api/stryker.conf.json ] || [ -f apps/api/stryker.conf.mjs ]; then echo "stryker=true" >> $GITHUB_OUTPUT; else echo "stryker=false" >> $GITHUB_OUTPUT; fi
+          if [ -f apps/api/stryker.conf.json ] || [ -f apps/api/stryker.conf.mjs ] || [ -f apps/api/stryker.conf.js ]; then echo "stryker=true" >> $GITHUB_OUTPUT; else echo "stryker=false" >> $GITHUB_OUTPUT; fi
 
   e2e:
     name: E2E (Playwright)

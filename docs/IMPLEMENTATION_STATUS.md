@@ -181,7 +181,7 @@ uses `GET /graph/subgraph` for ego-focus.
 | GDPR delete + export endpoints tested with E2E tests | ⬜ | |
 | k6 load test passes (p95 < 200 ms @ 200 concurrent users) | ⬜ | |
 | Security review: OWASP Top 10 checklist complete | ⬜ | |
-| Mutation score ≥ 70% on domain layer | ⬜ | |
+| Mutation score ≥ 70% on domain layer | 🟡 | Stryker config added; run `pnpm --filter @pkg/api test:mutation` |
 | All 6 E2E user journeys green | 🟡 | `api-e2e` CI job boots the full stack and round-trips public ingest→snapshot; full journey suite pending |
 | `docker compose up --build` produces fully working stack with seed data | ⬜ | |
 | Architecture Decision Records written for all major choices | 🟡 | 10 ADRs already in `docs/adr/` |
