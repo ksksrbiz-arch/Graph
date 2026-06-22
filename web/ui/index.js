@@ -10,7 +10,9 @@
 
 import { GraphView } from './core/GraphView.js';
 import { BrainSystem } from './brain/BrainSystem.js';
+import { AnimationOrchestrator } from './brain/AnimationOrchestrator.js';
 import { createGraph2DRenderer } from './renderers/Graph2DRenderer.js';
+import { createGraph3DRenderer } from './renderers/Graph3DRenderer.js';
 import { InteractionManager } from './interactions/InteractionManager.js';
 
 export function createGraphUI(container, options = {}) {
@@ -20,7 +22,9 @@ export function createGraphUI(container, options = {}) {
 export {
   GraphView,
   BrainSystem,
+  AnimationOrchestrator,
   createGraph2DRenderer,
+  createGraph3DRenderer,
   InteractionManager,
 };
 
