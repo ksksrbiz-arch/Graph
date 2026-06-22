@@ -269,4 +269,5 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter "./packages/*" run build
       - run: pnpm --filter @pkg/api run test:mutation
