@@ -106,6 +106,48 @@ export class UsersService {
     );
   }
 
+  /**
+   * Hard-delete (GDPR Art. 17 erasure). Permanently removes the user row;
+   * FK ON DELETE CASCADE takes care of refresh_tokens automatically.
+   */
+  async hardDelete(id: string): Promise<void> {
+    const result = await this.pool.query(
+      `DELETE FROM users WHERE id = $1`,
+      [id],
+    );
+    if ((result.rowCount ?? 0) === 0) {
+      throw new NotFoundException(`user not found: ${id}`);
+    }
+  }
+
+  /**
+   * Export all personal data for a user (GDPR Art. 20 — data portability).
+   * Queries the row directly (bypasses deleted_at filter) so soft-deleted
+   * users can still exercise their right to receive their data.
+   */
+  async exportData(id: string): Promise<{
+    profile: UserProfile;
+    refreshTokens: Array<{ id: string; createdAt: string; expiresAt: string }>;
+  }> {
+    const userRes = await this.pool.query<UserRow>(
+      `SELECT * FROM users WHERE id = $1`,
+      [id],
+    );
+    if (!userRes.rows[0]) throw new NotFoundException(`user not found: ${id}`);
+    const tokenRes = await this.pool.query<RefreshTokenRow>(
+      `SELECT * FROM refresh_tokens WHERE user_id = $1`,
+      [id],
+    );
+    return {
+      profile: this.toProfile(userRes.rows[0]),
+      refreshTokens: tokenRes.rows.map((r) => ({
+        id: r.id,
+        createdAt: r.created_at.toISOString(),
+        expiresAt: r.expires_at.toISOString(),
+      })),
+    };
+  }
+
   // ── refresh tokens ──
 
   async createRefreshToken(
