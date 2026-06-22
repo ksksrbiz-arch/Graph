@@ -112,7 +112,7 @@ export class GraphRepository {
         cypher += `\n         AND n.type = $type`;
         params.type = type;
       }
-      cypher += `\n         RETURN n ORDER BY n.createdAt ASC, n.id ASC LIMIT $limit`;
+      cypher += `\n         RETURN n ORDER BY n.createdAt ASC, n.id ASC LIMIT toInteger($limit)`;
 
       const result = await session.run(cypher, params);
       const rows = result.records;
@@ -159,7 +159,7 @@ export class GraphRepository {
          WITH collect(distinct neighbour) + collect(distinct root) AS ns,
               collect(distinct relationships(path)) AS rels
          RETURN ns AS nodes, apoc.coll.flatten(rels) AS edges
-         LIMIT $limit`,
+         LIMIT toInteger($limit)`,
         { rootId, userId, limit },
       );
       const record = result.records[0];
@@ -182,12 +182,13 @@ export class GraphRepository {
   ): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
     const session = this.driver.session();
     try {
+      const limitInt = Math.floor(limit);
       const nodesRes = await session.run(
         `MATCH (n:KGNode {userId: $userId})
          WHERE n.deletedAt IS NULL AND n.createdAt > $since
          RETURN n
-         LIMIT $limit`,
-        { userId, since: sinceIso, limit },
+         LIMIT toInteger($limit)`,
+        { userId, since: sinceIso, limit: limitInt },
       );
       const nodes = nodesRes.records.map((r) => this.mapNode(r.get('n')));
 
@@ -199,8 +200,8 @@ export class GraphRepository {
                 r.relation AS relation, r.weight AS weight,
                 r.inferred AS inferred, r.createdAt AS createdAt,
                 r.metadataJson AS metadataJson
-         LIMIT $limit`,
-        { userId, since: sinceIso, limit: limit * 4 },
+         LIMIT toInteger($limit)`,
+        { userId, since: sinceIso, limit: limitInt * 4 },
       );
       const edges = edgesRes.records.map((r) => ({
         id: r.get('id') as string,
