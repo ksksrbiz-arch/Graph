@@ -150,18 +150,27 @@ async function ensureSeedGraph() {
 }
 
 async function waitForNeo4j(driver, attempts = 30, delayMs = 1000) {
+  let dotsPrinted = false;
   for (let i = 0; i < attempts; i++) {
     try {
       await driver.verifyConnectivity();
+      if (dotsPrinted) process.stdout.write('\n'); // terminate the dots line
       return;
     } catch (err) {
+      if (i === 0) {
+        console.warn(`[seed] Cannot reach Neo4j at ${URI} — waiting up to ${Math.round((attempts * delayMs) / 1000)}s.`);
+        console.warn('[seed] Is the stack running? If not, start it first: pnpm stack:up');
+      }
       if (i === attempts - 1) throw err;
+      process.stdout.write('.');
+      dotsPrinted = true;
       await new Promise((r) => setTimeout(r, delayMs));
     }
   }
 }
 
 main().catch((err) => {
-  console.error('[seed] FAILED', err);
+  console.error('\n[seed] FAILED:', err);
+  console.error('[seed] Tip: make sure `pnpm stack:up` has completed before running `pnpm stack:seed`.');
   process.exit(1);
 });
