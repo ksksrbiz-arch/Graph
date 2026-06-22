@@ -3,6 +3,10 @@
 module.exports = {
   packageManager: 'pnpm',
   reporters: ['html', 'clear-text', 'progress'],
+  plugins: [
+    '@stryker-mutator/jest-runner',
+    '@stryker-mutator/typescript-checker',
+  ],
   testRunner: 'jest',
   jest: {
     projectType: 'custom',
