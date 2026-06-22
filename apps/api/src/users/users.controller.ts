@@ -58,4 +58,23 @@ export class UsersController {
   async deleteMe(@Req() req: AuthedRequest): Promise<void> {
     await this.users.softDelete(req.user.sub);
   }
+
+  // GDPR Art. 17 erasure — irreversible. Production deployments should add
+  // re-authentication (password re-prompt) before this endpoint is reachable.
+  @Delete('me/hard')
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Permanently erase own account and all personal data (GDPR Art. 17)',
+  })
+  async hardDeleteMe(@Req() req: AuthedRequest): Promise<void> {
+    await this.users.hardDelete(req.user.sub);
+  }
+
+  @Get('me/export')
+  @ApiOperation({
+    summary: 'Export all personal data (GDPR Art. 20 — data portability)',
+  })
+  exportMe(@Req() req: AuthedRequest) {
+    return this.users.exportData(req.user.sub);
+  }
 }
