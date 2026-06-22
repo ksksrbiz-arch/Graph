@@ -72,27 +72,46 @@ export function createActivityLog(container, brainSystem, options = {}) {
     logContainer.scrollTop = logContainer.scrollHeight;
   }
 
-  if (brainSystem) {
-    // Subscribe to brain events
-    const unsub = brainSystem.subscribe((snap) => {
-      // We can also listen to internal events if we expose them later
-      // For now, we can push some derived activity
-    });
+  let unsub = null;
 
-    // Hook into the event log if available
-    const originalLog = brainSystem._logEvent?.bind(brainSystem);
-    if (originalLog) {
-      brainSystem._logEvent = (msg) => {
-        originalLog(msg);
-        addEntry(msg);
-      };
-    }
+  if (brainSystem) {
+    // The BrainSystem publishes its activity as `snap.eventLog` — an array of
+    // { t, msg } entries, newest first (see BrainSystem._logEvent). Each log
+    // entry is a distinct object, so we dedup by object identity rather than by
+    // timestamp: timestamps are millisecond-granular (Date.now) and two events
+    // emitted in the same millisecond would otherwise collide and get dropped.
+    let lastSeenEntry = null;
+
+    unsub = brainSystem.subscribe((snap) => {
+      const log = snap && Array.isArray(snap.eventLog) ? snap.eventLog : null;
+      if (!log || log.length === 0) return;
+
+      // eventLog is newest-first; collect entries up to (but not including) the
+      // last one we've already rendered, then reverse so they append in
+      // chronological order.
+      const fresh = [];
+      for (const entry of log) {
+        if (entry === lastSeenEntry) break;
+        if (!entry) continue;
+        fresh.unshift(entry);
+      }
+
+      if (fresh.length === 0) return;
+      lastSeenEntry = log[0];
+
+      for (const entry of fresh) {
+        const msg = entry.msg != null ? String(entry.msg) : '';
+        const type = /focus/i.test(msg) ? 'focus' : 'default';
+        addEntry(msg, type);
+      }
+    });
   }
 
   return {
     el,
     addEntry,
     destroy() {
+      if (unsub) unsub();
       el.remove();
     }
   };
