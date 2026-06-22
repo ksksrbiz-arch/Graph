@@ -39,19 +39,10 @@ export class GraphView {
 
     const canvasContainer = this.container.querySelector('#ui-v2-canvas');
 
-    // Initialize core systems
+    // Initialize core systems — mount the renderer for the current dimension
+    // mode (2d → Graph2DRenderer, 3d/4d → Graph3DRenderer).
     this.renderer = null;
-    try {
-      // Dynamically import to keep things clean
-      import('../renderers/Graph2DRenderer.js').then(({ createGraph2DRenderer }) => {
-        this.renderer = createGraph2DRenderer(canvasContainer);
-        if (this.renderer && this.state.get().nodes.size > 0) {
-          this.renderer.setData(this.state.get());
-        }
-      });
-    } catch (e) {
-      console.warn('[GraphView] Could not load 2D renderer yet', e);
-    }
+    void this._mountRenderer(this.state.get().config?.dimensions || '2d');
 
     // === Full Brain + Renderer Integration (Maximum Effort) ===
     import('../brain/BrainSystem.js').then(({ BrainSystem }) => {
@@ -64,6 +55,15 @@ export class GraphView {
         }
       });
     });
+
+    // Animation orchestrator — sequences brain visual effects (spawn pulses,
+    // query traces, inference arcs) on a rAF loop, fed by BrainSystem events.
+    import('../brain/AnimationOrchestrator.js')
+      .then(({ AnimationOrchestrator }) => {
+        this.animator = new AnimationOrchestrator();
+        this.animator.start();
+      })
+      .catch((e) => console.warn('[GraphView] AnimationOrchestrator load failed', e));
 
     // Full Interaction layer (now properly implemented)
     import('../interactions/InteractionManager.js').then(({ InteractionManager }) => {
@@ -118,10 +118,13 @@ export class GraphView {
       this.renderer.setData(this.state.get());
     }
 
-    // Feed new nodes into the brain system
+    // Feed new nodes into the brain system + fire spawn-pulse effects.
     if (this.brainSystem && normalized.nodes?.length) {
       const ids = normalized.nodes.map(n => n.id);
       this.brainSystem.onNodesArrived(ids, 0.65);
+      if (this.animator) {
+        for (const id of ids.slice(0, 40)) this.animator.trigger('spawn-pulse', { nodeId: id });
+      }
     }
   }
 
@@ -130,7 +133,38 @@ export class GraphView {
    */
   setDimensions(dim) {
     this.state.setConfig({ dimensions: dim });
-    // Renderer switching logic will go here
+    void this._mountRenderer(dim);
+  }
+
+  /**
+   * (Re)mount the renderer appropriate for a dimension mode. Tears down any
+   * existing renderer, loads the 2D or 3D implementation, and re-applies the
+   * current data + brain snapshot.
+   * @param {string} mode  '2d' | '3d' | '4d' | 'temporal'
+   */
+  async _mountRenderer(mode = '2d') {
+    const container = this.container.querySelector('#ui-v2-canvas');
+    if (!container) return;
+    if (this.renderer?.destroy) this.renderer.destroy();
+    this.renderer = null;
+    try {
+      const is3d = mode === '3d' || mode === '4d' || mode === 'temporal';
+      if (is3d) {
+        const { createGraph3DRenderer } = await import('../renderers/Graph3DRenderer.js');
+        this.renderer = createGraph3DRenderer(container);
+        this.renderer?.setMode?.(mode === 'temporal' ? '4d' : mode);
+      } else {
+        const { createGraph2DRenderer } = await import('../renderers/Graph2DRenderer.js');
+        this.renderer = createGraph2DRenderer(container);
+      }
+      if (this.renderer && this.state.get().nodes.size > 0) {
+        this.renderer.setData(this.state.get());
+      }
+      const snap = this.brainSystem?.getSnapshot?.();
+      if (snap && this.renderer?.applyBrainState) this.renderer.applyBrainState(snap);
+    } catch (e) {
+      console.warn('[GraphView] renderer mount failed for mode', mode, e);
+    }
   }
 
   /**
@@ -141,6 +175,7 @@ export class GraphView {
     this._isDestroyed = true;
 
     if (this.interactionManager?.destroy) this.interactionManager.destroy();
+    if (this.animator?.stop) this.animator.stop();
     if (this.renderer?.destroy) this.renderer.destroy();
     if (this.brainSystem?.destroy) this.brainSystem.destroy();
 
