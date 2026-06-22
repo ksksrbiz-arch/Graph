@@ -183,7 +183,7 @@ uses `GET /graph/subgraph` for ego-focus.
 | Security review: OWASP Top 10 checklist complete | ⬜ | |
 | Mutation score ≥ 70% on domain layer | ⬜ | |
 | All 6 E2E user journeys green | 🟡 | `api-e2e` CI job boots the full stack and round-trips public ingest→snapshot; full journey suite pending |
-| `docker compose up --build` produces fully working stack with seed data | ⬜ | |
+| `docker compose up --build` produces fully working stack with seed data | 🟡 | Dockerfile + compose wiring added; run `docker compose up --build` then `pnpm stack:seed` |
 | Architecture Decision Records written for all major choices | 🟡 | 10 ADRs already in `docs/adr/` |
 | API documentation auto-generated (Swagger UI + GraphQL Playground) | 🟡 | Swagger wired; GraphQL Playground not yet gated |
 
