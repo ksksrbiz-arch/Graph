@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import ForceGraph2D, {
   type ForceGraphMethods,
@@ -100,6 +101,7 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
     result: ReasoningResult | null;
   } | null>(null);
   const [highlightPath, setHighlightPath] = useState<Set<string>>(new Set());
+  const [focusedNodeIndex, setFocusedNodeIndex] = useState(0);
   const palette = useCommandPalette();
 
   // ── Data load ────────────────────────────────────────────────
@@ -332,6 +334,53 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedIds, focus, handleDelete]);
 
+  // ── Graph canvas keyboard handler (a11y) ────────────────────
+  const handleGraphKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>): void => {
+      const visibleNodes = view.nodes.filter((n) => nodeVisible(n));
+      switch (e.key) {
+        case 'Escape':
+          setPrimaryId(null);
+          setSelectedIds(new Set());
+          break;
+        case 'Enter':
+        case ' ': {
+          e.preventDefault();
+          const focused = visibleNodes[focusedNodeIndex];
+          if (focused) {
+            selectNode(focused.id);
+            centerOn(nodesById.get(focused.id));
+          }
+          break;
+        }
+        case 'ArrowRight':
+        case 'ArrowDown':
+          e.preventDefault();
+          setFocusedNodeIndex((prev) =>
+            visibleNodes.length > 0 ? (prev + 1) % visibleNodes.length : 0,
+          );
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          e.preventDefault();
+          setFocusedNodeIndex((prev) =>
+            visibleNodes.length > 0
+              ? (prev - 1 + visibleNodes.length) % visibleNodes.length
+              : 0,
+          );
+          break;
+        case '?':
+        case '/':
+          e.preventDefault();
+          palette.openPalette();
+          break;
+        default:
+          break;
+      }
+    },
+    [view.nodes, nodeVisible, focusedNodeIndex, selectNode, centerOn, nodesById, palette],
+  );
+
   const primaryNode = primaryId ? nodesById.get(primaryId) : undefined;
 
   const paletteCommands: PaletteCommand[] = [
@@ -354,7 +403,47 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
 
   return (
     <div ref={containerRef} style={shell}>
-      <ForceGraph2D<GraphNode, GraphLink>
+      {/* Skip-to-content link for keyboard users */}
+      <a
+        href="#graph-canvas"
+        className="skip-link"
+        style={{
+          position: 'absolute',
+          left: '-9999px',
+          top: 'auto',
+          width: '1px',
+          height: '1px',
+          overflow: 'hidden',
+        }}
+        onFocus={(e) => {
+          (e.target as HTMLAnchorElement).style.left = '0';
+        }}
+        onBlur={(e) => {
+          (e.target as HTMLAnchorElement).style.left = '-9999px';
+        }}
+      >
+        Skip to graph
+      </a>
+
+      {/* ARIA live region: announces node selection to screen readers */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }}
+      >
+        {primaryId ? `Selected node: ${primaryId}` : ''}
+      </div>
+
+      {/* Accessible graph canvas wrapper */}
+      <div
+        id="graph-canvas"
+        role="application"
+        aria-label="Knowledge graph visualization"
+        tabIndex={0}
+        onKeyDown={handleGraphKeyDown}
+      >
+        <ForceGraph2D<GraphNode, GraphLink>
         ref={fgRef}
         width={dims.width}
         height={dims.height}
@@ -440,6 +529,7 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
           ctx.globalAlpha = 1;
         }}
       />
+      </div>{/* end #graph-canvas */}
 
       <FilterPanel
         typeCounts={typeCounts}
@@ -681,7 +771,6 @@ const searchInput: CSSProperties = {
   background: 'rgba(13,19,36,0.95)',
   color: '#e8edf6',
   padding: '0.6rem 0.8rem',
-  outline: 'none',
 };
 const resultsList: CSSProperties = {
   position: 'absolute',
