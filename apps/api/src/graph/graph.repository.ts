@@ -228,12 +228,13 @@ export class GraphRepository {
   ): Promise<{ nodes: KGNode[]; edges: KGEdge[] }> {
     const session = this.driver.session();
     try {
+      const limitInt = Math.floor(limit);
       const nodesRes = await session.run(
         `MATCH (n:KGNode {userId: $userId})
          WHERE n.deletedAt IS NULL
          RETURN n
-         LIMIT $limit`,
-        { userId, limit },
+         LIMIT toInteger($limit)`,
+        { userId, limit: limitInt },
       );
       const nodes = nodesRes.records.map((r) => this.mapNode(r.get('n')));
 
@@ -244,8 +245,8 @@ export class GraphRepository {
                 r.relation AS relation, r.weight AS weight,
                 r.inferred AS inferred, r.createdAt AS createdAt,
                 r.metadataJson AS metadataJson
-         LIMIT $limit`,
-        { userId, limit: limit * 4 },
+         LIMIT toInteger($limit)`,
+        { userId, limit: limitInt * 4 },
       );
       const edges = edgesRes.records.map((r) => ({
         id: r.get('id') as string,
