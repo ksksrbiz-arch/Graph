@@ -5,7 +5,6 @@ module.exports = {
   reporters: ['html', 'clear-text', 'progress'],
   plugins: [
     '@stryker-mutator/jest-runner',
-    '@stryker-mutator/typescript-checker',
   ],
   testRunner: 'jest',
   jest: {
@@ -13,8 +12,6 @@ module.exports = {
     configFile: 'package.json',
     enableFindRelatedTests: true,
   },
-  checkers: ['typescript'],
-  tsconfigFile: 'tsconfig.json',
   coverageAnalysis: 'perTest',
   mutate: [
     'src/**/*.ts',
