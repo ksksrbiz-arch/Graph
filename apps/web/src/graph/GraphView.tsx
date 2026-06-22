@@ -18,6 +18,11 @@ import { NodePanel } from './NodePanel';
 import { FilterPanel } from './FilterPanel';
 import { ContextMenu, type ContextMenuState } from './ContextMenu';
 import { BatchUploadPanel } from './BatchUploadPanel';
+import { MiniMap, type MiniMapTransform } from './MiniMap';
+import { CommandPalette, useCommandPalette, type PaletteCommand } from './CommandPalette';
+import { TimelineView } from './TimelineView';
+import { ReasoningPanel, requestThink, type ReasoningResult } from './ReasoningPanel';
+import { useGraphLiveUpdates } from './useGraphLiveUpdates';
 
 type FgNode = NodeObject<GraphNode>;
 type FgLink = LinkObject<GraphNode, GraphLink>;
@@ -52,6 +57,19 @@ function tooltipHtml(node: GraphNode): string {
   return `<div style="background:rgba(13,19,36,0.96);border:1px solid #26304d;border-radius:8px;padding:6px 8px;font:12px ui-sans-serif,system-ui,sans-serif;color:#e8edf6;max-width:280px">${rows.join('')}</div>`;
 }
 
+/** Merge a live delta into the current snapshot, upserting nodes/edges by id. */
+function mergeDelta(
+  prev: { nodes: KGNode[]; edges: KGEdge[] },
+  nodes: KGNode[],
+  edges: KGEdge[],
+): { nodes: KGNode[]; edges: KGEdge[] } {
+  const nodeById = new Map(prev.nodes.map((n) => [n.id, n]));
+  for (const n of nodes) nodeById.set(n.id, n);
+  const edgeById = new Map(prev.edges.map((e) => [e.id, e]));
+  for (const e of edges) edgeById.set(e.id, e);
+  return { nodes: [...nodeById.values()], edges: [...edgeById.values()] };
+}
+
 export function GraphView({ userId }: { userId: string }): JSX.Element {
   const fgRef = useRef<FgMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -73,6 +91,16 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
   const [results, setResults] = useState<KGNode[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [live, setLive] = useState(false);
+  const [transform, setTransform] = useState<MiniMapTransform>({ x: 0, y: 0, k: 1 });
+  const [reasoning, setReasoning] = useState<{
+    loading: boolean;
+    error: string | null;
+    result: ReasoningResult | null;
+  } | null>(null);
+  const [highlightPath, setHighlightPath] = useState<Set<string>>(new Set());
+  const palette = useCommandPalette();
 
   // ── Data load ────────────────────────────────────────────────
   const reload = useCallback(async () => {
@@ -91,6 +119,33 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // Live updates: poll the delta endpoint and merge new nodes/edges in place.
+  useGraphLiveUpdates(userId, {
+    enabled: live,
+    onDelta: (nodes, edges) => {
+      if (nodes.length === 0 && edges.length === 0) return;
+      setRaw((prev) => (prev ? mergeDelta(prev, nodes, edges) : { nodes, edges }));
+    },
+  });
+
+  // "Why this node?" — run the deterministic cortex pipeline for a seed node.
+  const whyThisNode = useCallback(
+    async (id: string) => {
+      setReasoning({ loading: true, error: null, result: null });
+      try {
+        const result = await requestThink(userId, id);
+        setReasoning({ loading: false, error: null, result });
+      } catch (err) {
+        setReasoning({
+          loading: false,
+          error: err instanceof Error ? err.message : String(err),
+          result: null,
+        });
+      }
+    },
+    [userId],
+  );
 
   // ── Responsive sizing ────────────────────────────────────────
   useEffect(() => {
@@ -279,6 +334,24 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
 
   const primaryNode = primaryId ? nodesById.get(primaryId) : undefined;
 
+  const paletteCommands: PaletteCommand[] = [
+    { id: 'fit', label: 'Fit to screen', hint: 'F', run: () => fgRef.current?.zoomToFit(500, 50) },
+    { id: 'reload', label: 'Reload graph', run: () => void reload() },
+    { id: 'ingest', label: 'Batch folder upload', run: () => setShowUpload(true) },
+    { id: 'timeline', label: 'Toggle timeline', run: () => setShowTimeline((v) => !v) },
+    { id: 'live', label: live ? 'Disable live updates' : 'Enable live updates', run: () => setLive((v) => !v) },
+    ...(primaryId
+      ? [
+          {
+            id: 'why',
+            label: 'Why this node?',
+            hint: 'reasoning',
+            run: () => void whyThisNode(primaryId),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div ref={containerRef} style={shell}>
       <ForceGraph2D<GraphNode, GraphLink>
@@ -287,6 +360,7 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
         height={dims.height}
         graphData={view}
         backgroundColor="#0b0f1a"
+        onZoom={(t) => setTransform({ x: t.x, y: t.y, k: t.k })}
         nodeId="id"
         nodeRelSize={1}
         nodeLabel={(n) => tooltipHtml(n as FgNode)}
@@ -346,6 +420,13 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
           if (selected || node.id === hoveredId) {
             ctx.lineWidth = 2 / scale;
             ctx.strokeStyle = selected ? '#ffffff' : '#cdd7f5';
+            ctx.stroke();
+          }
+          if (highlightPath.has(node.id)) {
+            ctx.lineWidth = 3 / scale;
+            ctx.strokeStyle = '#c9a7ff';
+            ctx.beginPath();
+            ctx.arc(node.x ?? 0, node.y ?? 0, r + 2, 0, 2 * Math.PI);
             ctx.stroke();
           }
           if (scale > 1.4 || selected || node.id === hoveredId) {
@@ -417,6 +498,21 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
         </button>
         <button type="button" style={toolBtn} onClick={() => void reload()} title="Reload graph">
           Reload
+        </button>
+        <button type="button" style={toolBtn} onClick={() => setShowTimeline((v) => !v)} title="Timeline">
+          Timeline
+        </button>
+        <button
+          type="button"
+          style={{
+            ...toolBtn,
+            color: live ? '#9df1b5' : '#dce5ff',
+            borderColor: live ? '#1e3a2b' : '#26304d',
+          }}
+          onClick={() => setLive((v) => !v)}
+          title="Live updates (poll graph deltas)"
+        >
+          {live ? 'Live ●' : 'Live'}
         </button>
         {selectedIds.size > 1 && (
           <button
@@ -503,6 +599,58 @@ export function GraphView({ userId }: { userId: string }): JSX.Element {
           }}
           onExpand={(node) => void focusEgo(node.id)}
           onDelete={(node) => void handleDelete([node.id])}
+        />
+      )}
+
+      <MiniMap
+        nodes={view.nodes}
+        transform={transform}
+        width={dims.width}
+        height={dims.height}
+        onJump={(x, y) => fgRef.current?.centerAt(x, y, 600)}
+      />
+
+      <CommandPalette
+        open={palette.open}
+        onClose={palette.closePalette}
+        commands={paletteCommands}
+        nodes={view.nodes.map((n) => ({ id: n.id, label: n.label, type: n.type }))}
+        onSelectNode={(id) => {
+          palette.closePalette();
+          selectNode(id);
+          centerOn(nodesById.get(id));
+        }}
+      />
+
+      {showTimeline && (
+        <TimelineView
+          nodes={view.nodes}
+          onSelect={(id) => {
+            selectNode(id);
+            centerOn(nodesById.get(id));
+            setShowTimeline(false);
+          }}
+          onClose={() => setShowTimeline(false)}
+        />
+      )}
+
+      {reasoning && (
+        <ReasoningPanel
+          result={reasoning.result}
+          loading={reasoning.loading}
+          error={reasoning.error}
+          nodesById={nodesById}
+          onHighlightPath={(ids) => {
+            const set = new Set(ids);
+            setHighlightPath(set);
+            if (ids.length > 0) {
+              fgRef.current?.zoomToFit(600, 60, (n) => set.has((n as FgNode).id));
+            }
+          }}
+          onClose={() => {
+            setReasoning(null);
+            setHighlightPath(new Set());
+          }}
         />
       )}
     </div>

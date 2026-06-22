@@ -101,7 +101,7 @@ uses `GET /graph/subgraph` for ego-focus.
 | Filter panel — client-side node/edge masking without re-fetch | AC-F09 | ✅ | `FilterPanel` toggles via `nodeVisibility`/`linkVisibility` (positions preserved) |
 | Zoom (scroll/pinch) + Pan (drag) | AC-F10 | ✅ | force-graph built-in |
 | Fit-to-screen button (shortcut `F`) | AC-F11 | ✅ | toolbar `Fit` + `F` key |
-| Minimap (collapsible, bottom-right) | AC-F12 | ⬜ | not yet implemented |
+| Minimap (collapsible, bottom-right) | AC-F12 | ✅ | `MiniMap.tsx`, wired into `GraphView` (viewport rect from `onZoom`, click-to-jump) |
 | 60 fps @ 5,000 nodes on 2021-era desktop (Chrome 120+) | AC-F13 | ⬜ | not yet benchmarked; bundle code-split also pending |
 | 30 fps @ 5,000 nodes on mid-range mobile (Safari iOS 17+) | AC-F14 | ⬜ | not yet benchmarked |
 
@@ -109,22 +109,24 @@ uses `GET /graph/subgraph` for ego-focus.
 
 | DoD item | Status | Notes |
 |----------|--------|-------|
-| `<CommandPalette />` via `Cmd/Ctrl+K` — fuzzy search over labels, connectors, actions | ⬜ | `localStorage`-persisted recent commands |
+| `<CommandPalette />` via `Cmd/Ctrl+K` — fuzzy search over labels, connectors, actions | ✅ | `CommandPalette.tsx` + `useCommandPalette`, wired into `GraphView` (commands: fit/reload/ingest/timeline/live/why; node jump); `localStorage` recents |
 | Keyboard navigation: Tab/Shift+Tab focus nodes, Enter opens panel, Esc closes, Delete deletes, +/- zoom, Arrow pan | ⬜ | Full map in spec §7.7 |
 
 ### 3c · Timeline view
 
 | DoD item | Status | Notes |
 |----------|--------|-------|
-| `<TimelineView />` — virtualized list, `createdAt` desc, date-range picker | ⬜ | Click item → highlight node in canvas |
+| `<TimelineView />` — virtualized list, `createdAt` desc, date-range picker | ✅ | `TimelineView.tsx`, wired into `GraphView` (toolbar/palette toggle); click → select + centre node |
 
 ### 3d · Reasoning-path overlay (Jarvis explainability)
 
 | DoD item | Status | Notes |
 |----------|--------|-------|
-| Invoke `POST /api/v1/brain/cortex/think` from graph context | ⬜ | Deterministic pipeline in `packages/cortex` |
-| Render reasoning path (seeds → memory → association → conclusion) as highlighted edges on canvas | ⬜ | "Why this node?" trace |
-| Show confidence + proposed motor actions in side panel | ⬜ | Motor proposals: attend / stimulate / propose-edge / investigate |
+| Invoke `POST /api/v1/brain/cortex/think` from graph context | 🟡 | `requestThink()` in `ReasoningPanel.tsx` + "Why this node?" palette command; response shape narrowed defensively pending the API endpoint |
+| Render reasoning path (seeds → memory → association → conclusion) as highlighted edges on canvas | ✅ | `ReasoningPanel` phase trace; `onHighlightPath` rings nodes + `zoomToFit` on the path |
+| Show confidence + proposed motor actions in side panel | ✅ | `ReasoningPanel` confidence bar + proposed motor actions |
+
+> Also wired: **live updates** — `useGraphLiveUpdates` poll hook + a toolbar "Live" toggle merges `GET /public/graph/delta` results into the canvas in place.
 
 ### 3e · Quality gates
 
