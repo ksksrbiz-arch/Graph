@@ -30,13 +30,13 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@faker-js/faker": "^8.4.1",
+    "@faker-js/faker": "^10.5.0",
     "@types/node": "^20.11.30",
     "@typescript-eslint/eslint-plugin": "^7.7.0",
     "@typescript-eslint/parser": "^7.7.0",
     "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^8.57.0",
     "typescript": "^5.4.5",
-    "vitest": "^4.1.9"
+    "vitest": "^5.0.3"
   }
 }
